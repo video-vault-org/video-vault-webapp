@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "target": "ES2020",
+    "strict": true,
+    "preserveConstEnums": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["lib/*"],
+      "#/*": ["tests/*"]
+    },
+    "outDir": "built",
+    "moduleResolution":"NodeNext",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node", "jest"]
+  },
+  "exclude": ["node_modules"]
+}
