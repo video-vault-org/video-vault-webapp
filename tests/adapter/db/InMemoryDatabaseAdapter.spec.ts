@@ -1,0 +1,235 @@
+import { InMemoryDatabaseAdapter } from '@/adapter/db/InMemoryDatabaseAdapter';
+import { DatabaseAdapter } from '@/adapter/db/DatabaseAdapter';
+
+describe('InMemoryDatabaseAdapter', (): void => {
+  const init = async function (): Promise<DatabaseAdapter> {
+    const tableName = 'testTable';
+    const fields = ['testPropStr', 'testPropNo', 'testPropBool'];
+    const key = 'testPropStr';
+    const db = new InMemoryDatabaseAdapter();
+    await db.open();
+    await db.init(tableName, fields, key);
+    return db;
+  };
+
+  const add = async function (count?: number): Promise<DatabaseAdapter> {
+    const db = await init();
+    const suffix = count ? count : '';
+    const addition = count ?? 0;
+    await db.add('testTable', { testPropStr: `test${suffix}`, testPropNo: 42 + addition, testPropBool: true });
+    return db;
+  };
+
+  const addAnother = async function (db: DatabaseAdapter): Promise<void> {
+    await db.add('testTable', { testPropStr: 'testAnother', testPropNo: 23, testPropBool: false });
+  };
+
+  const addMuch = async function (db: DatabaseAdapter): Promise<void> {
+    for (let i = 0; i < 30; i++) {
+      await db.add('testTable', { testPropStr: 'test' + i, testPropNo: 100 + i, testPropBool: !!(i % 2) });
+    }
+    await db.add('testTable', { testPropStr: 'testLast', testPropNo: 1, testPropBool: true });
+    await db.add('testTable', { testPropStr: 'testLast', testPropNo: 2, testPropBool: true });
+    await db.add('testTable', { testPropStr: 'testLast', testPropNo: 3, testPropBool: true });
+  };
+
+  test('InMemoryDatabaseAdapter->open opens db.', async (): Promise<void> => {
+    const db = new InMemoryDatabaseAdapter();
+
+    await db.open();
+
+    expect(db.isOpen()).toBe(true);
+  });
+
+  test('InMemoryDatabaseAdapter->close closes db.', async (): Promise<void> => {
+    const db = new InMemoryDatabaseAdapter();
+    await db.open();
+
+    await db.close();
+
+    expect(db.isOpen()).toBe(false);
+  });
+
+  test('InMemoryDatabaseAdapter->init inits table correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const fields = ['fieldA', 'fieldB'];
+    const key = 'fieldB';
+    const db = new InMemoryDatabaseAdapter();
+    await db.open();
+
+    await db.init(tableName, fields, key);
+
+    const memory = db.getMemory();
+    expect(memory[tableName]?.name).toEqual(tableName);
+    expect(memory[tableName]?.fields).toEqual(fields);
+    expect(memory[tableName]?.key).toEqual(key);
+    expect(memory[tableName]?.items).toEqual([]);
+  });
+
+  test('InMemoryDatabaseAdapter->add adds item correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+
+    await db.add(tableName, { testPropStr: 'test', testPropNo: 42, testPropBool: true });
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('test');
+    expect(memory[tableName]?.items?.at(0)?.testPropNo).toBe(42);
+    expect(memory[tableName]?.items?.at(0)?.testPropBool).toBe(true);
+  });
+
+  test('InMemoryDatabaseAdapter->update updates item correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+
+    await db.update(tableName, 'testPropStr', 'test', { testPropNo: 23, testPropBool: false });
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('test');
+    expect(memory[tableName]?.items?.at(0)?.testPropNo).toBe(23);
+    expect(memory[tableName]?.items?.at(0)?.testPropBool).toBe(false);
+  });
+
+  test('InMemoryDatabaseAdapter->delete deletes item correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+    await addAnother(db);
+
+    await db.delete(tableName, 'testPropStr', 'test');
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.length).toBe(1);
+    expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('testAnother');
+  });
+
+  test('InMemoryDatabaseAdapter->exists checks for existence correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+
+    const exists1 = await db.exists(tableName, 'testPropStr', 'test');
+    const exists2 = await db.exists(tableName, 'testPropStr', 'testAnother');
+
+    expect(exists1).toBe(true);
+    expect(exists2).toBe(false);
+  });
+
+  test('InMemoryDatabaseAdapter->findOne finds one item correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+
+    const item = await db.findOne(tableName, 'testPropStr', 'test');
+
+    expect(item?.testPropStr).toEqual('test');
+    expect(item?.testPropNo).toBe(42);
+    expect(item?.testPropBool).toBe(true);
+  });
+
+  test('InMemoryDatabaseAdapter->findOne finds nothing.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+
+    const item = await db.findOne(tableName, 'testPropStr', 'testAnother');
+
+    expect(item).toBe(null);
+  });
+
+  test('InMemoryDatabaseAdapter->findAll finds all items correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+    await addAnother(db);
+
+    const items = await db.findAll(tableName);
+
+    expect(items?.length).toBe(2);
+    expect(items?.at(0)?.testPropStr).toEqual('test');
+    expect(items?.at(0)?.testPropNo).toBe(42);
+    expect(items?.at(0)?.testPropBool).toBe(true);
+    expect(items?.at(1)?.testPropStr).toEqual('testAnother');
+    expect(items?.at(1)?.testPropNo).toBe(23);
+    expect(items?.at(1)?.testPropBool).toBe(false);
+  });
+
+  test('InMemoryDatabaseAdapter->findAll finds nothing correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+
+    const items = await db.findAll(tableName);
+
+    expect(items?.length).toBe(0);
+  });
+
+  test('InMemoryDatabaseAdapter->findAll finds paged items correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+    await addMuch(db);
+
+    const items = await db.findAll(tableName, { skip: 10, get: 15 });
+
+    expect(items?.length).toBe(15);
+    expect(items?.at(0)?.testPropStr).toEqual('test10');
+    expect(items?.at(14)?.testPropStr).toEqual('test24');
+  });
+
+  test('InMemoryDatabaseAdapter->findMany finds many items correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+    await addMuch(db);
+
+    const items = await db.findMany(tableName, 'testPropStr', 'testLast');
+
+    expect(items?.length).toBe(3);
+    expect(items?.at(0)?.testPropNo).toEqual(1);
+    expect(items?.at(1)?.testPropNo).toEqual(2);
+    expect(items?.at(2)?.testPropNo).toEqual(3);
+  });
+
+  test('InMemoryDatabaseAdapter->findMany finds nothing correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+    await addMuch(db);
+
+    const items = await db.findMany(tableName, 'testPropStr', 'testNoting');
+
+    expect(items?.length).toBe(0);
+  });
+
+  test('InMemoryDatabaseAdapter->findMany finds many paged items correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+    await addMuch(db);
+
+    const items = await db.findMany(tableName, 'testPropStr', 'testLast', { skip: 1, get: 2 });
+
+    expect(items?.length).toBe(2);
+    expect(items?.at(0)?.testPropNo).toEqual(2);
+    expect(items?.at(1)?.testPropNo).toEqual(3);
+  });
+
+  describe('errors', () => {
+    test('InMemoryDatabaseAdapter->delete throws exception correctly.', async (): Promise<void> => {
+      const tableName = 'testTable';
+      const db = await add();
+      let error: Error | null = null;
+
+      await db.delete(tableName, 'testPropStr', 'testAnother').catch((err) => {
+        error = err as Error;
+      });
+
+      expect(error).not.toBe(null);
+      expect((error as unknown as Error).message).toEqual('Item not found in table testTable where testPropStr=testAnother.');
+    });
+
+    test('InMemoryDatabaseAdapter->update throws exception correctly.', async (): Promise<void> => {
+      const tableName = 'testTable';
+      const db = await add();
+      let error: Error | null = null;
+
+      await db.update(tableName, 'testPropStr', 'testAnother', {}).catch((err) => {
+        error = err as Error;
+      });
+
+      expect(error).not.toBe(null);
+      expect((error as unknown as Error).message).toEqual('Item not found in table testTable where testPropStr=testAnother.');
+    });
+  });
+});
