@@ -12,25 +12,30 @@ describe('InMemoryDatabaseAdapter', (): void => {
     return db;
   };
 
+  const addItemManually = function (db: DatabaseAdapter, testPropStr: string, testPropNo: number, testPropBool: boolean): void {
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    memory.testTable?.items.push({ testPropStr, testPropNo, testPropBool });
+  };
+
   const add = async function (count?: number): Promise<DatabaseAdapter> {
     const db = await init();
     const suffix = count ? count : '';
     const addition = count ?? 0;
-    await db.add('testTable', { testPropStr: `test${suffix}`, testPropNo: 42 + addition, testPropBool: true });
+    addItemManually(db, `test${suffix}`, 42 + addition, true);
     return db;
   };
 
-  const addAnother = async function (db: DatabaseAdapter): Promise<void> {
-    await db.add('testTable', { testPropStr: 'testAnother', testPropNo: 23, testPropBool: false });
+  const addAnother = function (db: DatabaseAdapter): void {
+    addItemManually(db, 'testAnother', 23, false);
   };
 
-  const addMuch = async function (db: DatabaseAdapter): Promise<void> {
+  const addMuch = function (db: DatabaseAdapter): void {
     for (let i = 0; i < 30; i++) {
-      await db.add('testTable', { testPropStr: 'test' + i, testPropNo: 100 + i, testPropBool: !!(i % 2) });
+      addItemManually(db, 'test' + i, 100 + i, !!(i % 2));
     }
-    await db.add('testTable', { testPropStr: 'testLast', testPropNo: 1, testPropBool: true });
-    await db.add('testTable', { testPropStr: 'testLast', testPropNo: 2, testPropBool: true });
-    await db.add('testTable', { testPropStr: 'testLast', testPropNo: 3, testPropBool: true });
+    addItemManually(db, 'testLast', 1, true);
+    addItemManually(db, 'testLast', 2, true);
+    addItemManually(db, 'testLast', 3, true);
   };
 
   test('InMemoryDatabaseAdapter->open opens db.', async (): Promise<void> => {
@@ -93,7 +98,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
   test('InMemoryDatabaseAdapter->delete deletes item correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await add();
-    await addAnother(db);
+    addAnother(db);
 
     await db.delete(tableName, 'testPropStr', 'test');
 
@@ -136,7 +141,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
   test('InMemoryDatabaseAdapter->findAll finds all items correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await add();
-    await addAnother(db);
+    addAnother(db);
 
     const items = await db.findAll(tableName);
 
@@ -161,7 +166,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
   test('InMemoryDatabaseAdapter->findAll finds paged items correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await init();
-    await addMuch(db);
+    addMuch(db);
 
     const items = await db.findAll(tableName, { skip: 10, get: 15 });
 
@@ -173,7 +178,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
   test('InMemoryDatabaseAdapter->findMany finds many items correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await init();
-    await addMuch(db);
+    addMuch(db);
 
     const items = await db.findMany(tableName, 'testPropStr', 'testLast');
 
@@ -186,7 +191,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
   test('InMemoryDatabaseAdapter->findMany finds nothing correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await init();
-    await addMuch(db);
+    addMuch(db);
 
     const items = await db.findMany(tableName, 'testPropStr', 'testNoting');
 
@@ -196,7 +201,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
   test('InMemoryDatabaseAdapter->findMany finds many paged items correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await init();
-    await addMuch(db);
+    addMuch(db);
 
     const items = await db.findMany(tableName, 'testPropStr', 'testLast', { skip: 1, get: 2 });
 
