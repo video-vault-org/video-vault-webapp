@@ -9,6 +9,9 @@ interface Table {
 
 type Memory = Record<string, Table>;
 
+/**
+ * In-Memory Database Adapter, mostly for testing, not suitable for production, no data will be persistent
+ */
 class InMemoryDatabaseAdapter implements DatabaseAdapter {
   private dbOpen = false;
   private readonly memory: Memory;
