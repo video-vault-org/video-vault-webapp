@@ -1,0 +1,132 @@
+import mongoose from 'mongoose';
+import { DatabaseAdapter, DbItem, DbValue, DbLimit } from './DatabaseAdapter';
+
+/**
+ * Database Adapter for MongoDB.
+ */
+class MongoDatabaseAdapter implements DatabaseAdapter {
+  private readonly url: string;
+  private readonly user?: string;
+  private readonly pass?: string;
+  private connection: null | mongoose.Connection = null;
+  private session: null | mongoose.mongo.ClientSession = null;
+  private collections: Record<string, mongoose.Collection<DbItem>> = {};
+
+  public constructor(url: string, user?: string, pass?: string) {
+    this.url = url;
+    this.user = user;
+    this.pass = pass;
+  }
+
+  public getConf(): [string, string, string] {
+    return [this.url, this.user ?? '', this.pass ?? ''];
+  }
+
+  public getConnection(): mongoose.Connection | null {
+    return this.connection;
+  }
+
+  public getSession(): mongoose.mongo.ClientSession | null {
+    return this.session;
+  }
+
+  public getCollections(): Record<string, mongoose.Collection<DbItem>> {
+    return this.collections;
+  }
+
+  public async open(): Promise<void> {
+    if (!this.session) {
+      this.connection = mongoose.createConnection(this.url, { directConnection: true, user: this.user, pass: this.pass });
+      this.session = await this.connection.startSession();
+    }
+  }
+
+  public async close(): Promise<void> {
+    if (!!this.session) {
+      await this.session?.endSession();
+      await this.connection?.close();
+      this.session = null;
+      this.connection = null;
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public async init(table: string, _field: string[], _key: string): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Error. Not connected');
+    }
+    if (!!this.collections[table]) {
+      return;
+    }
+    this.collections[table] = this.connection.collection<DbItem>(table);
+  }
+
+  public async add(table: string, item: DbItem): Promise<void> {
+    const collection = this.collections[table];
+    await collection?.insertOne({ ...item });
+  }
+
+  public async update(table: string, filterKey: string, filterValue: string, update: Record<string, DbValue>): Promise<void> {
+    const collection = this.collections[table];
+    await collection?.findOneAndUpdate({ [filterKey]: filterValue }, { $set: update });
+  }
+
+  public async exists(table: string, filterKey: string, filterValue: string): Promise<boolean> {
+    const collection = this.collections[table];
+    const item = await collection?.findOne({ [filterKey]: filterValue });
+    return !!item;
+  }
+
+  public async delete(table: string, filterKey: string, filterValue: string): Promise<void> {
+    const collection = this.collections[table];
+    const item = await collection?.findOneAndDelete({ [filterKey]: filterValue });
+    if (!item) {
+      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
+    }
+  }
+
+  public async findOne(table: string, filterKey: string, filterValue: string): Promise<DbItem | null> {
+    const collection = this.collections[table];
+    const item = await collection?.findOne({ [filterKey]: filterValue });
+    return item ?? null;
+  }
+
+  public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
+    const collection = this.collections[table];
+    const items: DbItem[] = [];
+    const itemsCursor = dbLimit ? collection?.find().skip(dbLimit.skip).limit(dbLimit.get) : collection?.find();
+    while (await itemsCursor?.hasNext()) {
+      const doc = await itemsCursor?.next();
+      if (!doc) {
+        continue;
+      }
+      const item: DbItem = {
+        ...doc
+      };
+      delete item._id;
+      items.push(item);
+    }
+    return items;
+  }
+
+  public async findMany(table: string, filterKey: string, filterValue: string, dbLimit?: DbLimit): Promise<DbItem[]> {
+    const collection = this.collections[table];
+    const items: DbItem[] = [];
+    const find = collection?.find({ [filterKey]: filterValue });
+    const itemsCursor = dbLimit ? find.skip(dbLimit.skip).limit(dbLimit.get) : find;
+    while (await itemsCursor?.hasNext()) {
+      const doc = await itemsCursor?.next();
+      if (!doc) {
+        continue;
+      }
+      const item: DbItem = {
+        ...doc
+      };
+      delete item._id;
+      items.push(item);
+    }
+    return items;
+  }
+}
+
+export { MongoDatabaseAdapter };
