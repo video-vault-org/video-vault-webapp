@@ -68,7 +68,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await collection?.insertOne({ ...item });
   }
 
-  public async update(table: string, filterKey: string, filterValue: string, update: Record<string, DbValue>): Promise<void> {
+  public async update(table: string, filterKey: string, filterValue: DbValue, update: Record<string, DbValue>): Promise<void> {
     const collection = this.collections[table];
     const item = await this.findOne(table, filterKey, filterValue);
     if (!item) {
@@ -77,13 +77,13 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await collection?.findOneAndUpdate({ [filterKey]: filterValue }, { $set: update });
   }
 
-  public async exists(table: string, filterKey: string, filterValue: string): Promise<boolean> {
+  public async exists(table: string, filterKey: string, filterValue: DbValue): Promise<boolean> {
     const collection = this.collections[table];
     const item = await collection?.findOne({ [filterKey]: filterValue });
     return !!item;
   }
 
-  public async delete(table: string, filterKey: string, filterValue: string): Promise<void> {
+  public async delete(table: string, filterKey: string, filterValue: DbValue): Promise<void> {
     const collection = this.collections[table];
     const item = await collection?.findOneAndDelete({ [filterKey]: filterValue });
     if (!item) {
@@ -91,7 +91,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     }
   }
 
-  public async findOne(table: string, filterKey: string, filterValue: string): Promise<DbItem | null> {
+  public async findOne(table: string, filterKey: string, filterValue: DbValue): Promise<DbItem | null> {
     const collection = this.collections[table];
     const item: MongoItem | null = await collection?.findOne({ [filterKey]: filterValue });
     if (!item) {
@@ -101,10 +101,11 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return item as DbItem;
   }
 
-  public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
+  public async findMany(table: string, filterKey: string, filterValue: DbValue, dbLimit?: DbLimit): Promise<DbItem[]> {
     const collection = this.collections[table];
     const items: DbItem[] = [];
-    const itemsCursor = dbLimit ? collection?.find().skip(dbLimit.skip).limit(dbLimit.get) : collection?.find();
+    const find = collection?.find({ [filterKey]: filterValue });
+    const itemsCursor = dbLimit ? find.skip(dbLimit.skip).limit(dbLimit.get) : find;
     while (await itemsCursor?.hasNext()) {
       const doc = await itemsCursor?.next();
       if (!doc) {
@@ -119,11 +120,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return items;
   }
 
-  public async findMany(table: string, filterKey: string, filterValue: string, dbLimit?: DbLimit): Promise<DbItem[]> {
+  public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
     const collection = this.collections[table];
     const items: DbItem[] = [];
-    const find = collection?.find({ [filterKey]: filterValue });
-    const itemsCursor = dbLimit ? find.skip(dbLimit.skip).limit(dbLimit.get) : find;
+    const itemsCursor = dbLimit ? collection?.find().skip(dbLimit.skip).limit(dbLimit.get) : collection?.find();
     while (await itemsCursor?.hasNext()) {
       const doc = await itemsCursor?.next();
       if (!doc) {

@@ -49,7 +49,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.memory[table].items.push(item);
   }
 
-  public async update(table: string, filterKey: string, filterValue: string, update: Record<string, DbValue>): Promise<void> {
+  public async update(table: string, filterKey: string, filterValue: DbValue, update: Record<string, DbValue>): Promise<void> {
     const item = this.memory[table].items.find((item) => item[filterKey] === filterValue);
     if (!item) {
       throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
@@ -59,12 +59,12 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     });
   }
 
-  public async exists(table: string, filterKey: string, filterValue: string): Promise<boolean> {
+  public async exists(table: string, filterKey: string, filterValue: DbValue): Promise<boolean> {
     const item = this.memory[table].items.find((item) => item[filterKey] === filterValue);
     return !!item;
   }
 
-  public async delete(table: string, filterKey: string, filterValue: string): Promise<void> {
+  public async delete(table: string, filterKey: string, filterValue: DbValue): Promise<void> {
     const index = this.memory[table].items.findIndex((item) => item[filterKey] === filterValue);
     if (index < 0) {
       throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
@@ -72,12 +72,12 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.memory[table].items.splice(index, 1);
   }
 
-  public async findOne(table: string, filterKey: string, filterValue: string): Promise<DbItem | null> {
+  public async findOne(table: string, filterKey: string, filterValue: DbValue): Promise<DbItem | null> {
     const item = this.memory[table].items.find((item) => item[filterKey] === filterValue);
     return item ? item : null;
   }
 
-  public async findMany(table: string, filterKey: string, filterValue: string, dbLimit?: DbLimit): Promise<DbItem[]> {
+  public async findMany(table: string, filterKey: string, filterValue: DbValue, dbLimit?: DbLimit): Promise<DbItem[]> {
     const items = this.memory[table].items.filter((item) => item[filterKey] === filterValue);
     return dbLimit ? items.slice(dbLimit.skip, dbLimit.skip + dbLimit.get) : items;
   }
