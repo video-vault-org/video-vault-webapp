@@ -9,6 +9,15 @@ interface Table {
 
 type Memory = Record<string, Table>;
 
+const applyLimit = function (items: DbItem[], limit?: DbLimit): DbItem[] {
+  if (!limit) {
+    return items;
+  }
+  const skip = limit.skip ?? 0;
+  const get = limit.get ?? items.length;
+  return items.slice(skip, skip + get);
+}
+
 /**
  * In-Memory Database Adapter, mostly for testing, not suitable for production, no data will be persistent
  */
@@ -79,12 +88,12 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
 
   public async findMany(table: string, filterKey: string, filterValue: DbValue, dbLimit?: DbLimit): Promise<DbItem[]> {
     const items = this.memory[table].items.filter((item) => item[filterKey] === filterValue);
-    return dbLimit ? items.slice(dbLimit.skip, dbLimit.skip + dbLimit.get) : items;
+    return applyLimit(items, dbLimit);
   }
 
   public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
     const items = this.memory[table].items;
-    return dbLimit ? items.slice(dbLimit.skip, dbLimit.skip + dbLimit.get) : items;
+    return applyLimit(items, dbLimit);
   }
 }
 

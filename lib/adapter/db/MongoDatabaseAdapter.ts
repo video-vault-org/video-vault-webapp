@@ -3,6 +3,16 @@ import { DatabaseAdapter, DbItem, DbValue, DbLimit } from './DatabaseAdapter';
 
 type MongoItem = DbItem & { _id?: unknown };
 
+const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: DbLimit): mongoose.mongo.FindCursor {
+  if (limit?.skip) {
+    itemsCursor = itemsCursor?.skip(limit.skip);
+  }
+  if (limit?.get) {
+    itemsCursor = itemsCursor?.limit(limit.get);
+  }
+  return itemsCursor;
+}
+
 /**
  * Database Adapter for MongoDB.
  */
@@ -104,8 +114,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   public async findMany(table: string, filterKey: string, filterValue: DbValue, dbLimit?: DbLimit): Promise<DbItem[]> {
     const collection = this.collections[table];
     const items: DbItem[] = [];
-    const find = collection?.find({ [filterKey]: filterValue });
-    const itemsCursor = dbLimit ? find.skip(dbLimit.skip).limit(dbLimit.get) : find;
+    const itemsCursor = applyFilter(collection?.find({ [filterKey]: filterValue }), dbLimit);
     while (await itemsCursor?.hasNext()) {
       const doc = await itemsCursor?.next();
       if (!doc) {
@@ -123,7 +132,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
     const collection = this.collections[table];
     const items: DbItem[] = [];
-    const itemsCursor = dbLimit ? collection?.find().skip(dbLimit.skip).limit(dbLimit.get) : collection?.find();
+    const itemsCursor = applyFilter(collection?.find(), dbLimit);
     while (await itemsCursor?.hasNext()) {
       const doc = await itemsCursor?.next();
       if (!doc) {

@@ -1,8 +1,8 @@
 type DbValue = string | number | boolean | Record<string, unknown>;
 type DbItem = Record<string, DbValue>;
 interface DbLimit {
-  skip: number;
-  get: number;
+  skip?: number;
+  get?: number;
 }
 
 /**
