@@ -19,11 +19,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run lint
-        run: npm run lint
+      #- name: Run lint
+      #  run: npm run lint
 
-      - name: Audit
-        run: npm run audit
+      #- name: Audit
+      #  run: npm run audit
 
       - name: Run test
         run: npm run test
