@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { DatabaseAdapter, DbItem, DbValue, DbLimit } from './DatabaseAdapter';
 
+type MongoItem = DbItem & { _id?: unknown };
+
 /**
  * Database Adapter for MongoDB.
  */
@@ -51,7 +53,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public async init(table: string, _field: string[], _key: string): Promise<void> {
+  public async init(table: string, _fields: string[], _key: string): Promise<void> {
     if (!this.connection) {
       throw new Error('Error. Not connected');
     }
@@ -68,6 +70,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
 
   public async update(table: string, filterKey: string, filterValue: string, update: Record<string, DbValue>): Promise<void> {
     const collection = this.collections[table];
+    const item = await this.findOne(table, filterKey, filterValue);
+    if (!item) {
+      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
+    }
     await collection?.findOneAndUpdate({ [filterKey]: filterValue }, { $set: update });
   }
 
@@ -87,8 +93,12 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
 
   public async findOne(table: string, filterKey: string, filterValue: string): Promise<DbItem | null> {
     const collection = this.collections[table];
-    const item = await collection?.findOne({ [filterKey]: filterValue });
-    return item ?? null;
+    const item: MongoItem | null = await collection?.findOne({ [filterKey]: filterValue });
+    if (!item) {
+      return null;
+    }
+    delete item._id;
+    return item as DbItem;
   }
 
   public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
@@ -129,4 +139,4 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   }
 }
 
-export { MongoDatabaseAdapter };
+export { MongoDatabaseAdapter, MongoItem };
