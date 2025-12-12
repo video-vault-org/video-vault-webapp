@@ -1,3 +1,3 @@
-type DbValue = string | number | boolean | Record<string, unknown>;
+type DbValue = string | number | boolean | Date | Record<string, unknown>;
 
 export { DbValue };

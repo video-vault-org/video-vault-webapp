@@ -1,8 +1,6 @@
-import { DbValue } from '@/db/types/DbValue';
-
 interface DbTableDefinition {
   table: string;
-  fields: Record<string, DbValue>;
+  fields: Record<string, string>;
   key: string;
 }
 
