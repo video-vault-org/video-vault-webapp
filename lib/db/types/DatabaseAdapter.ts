@@ -1,6 +1,7 @@
 import { DbItem } from './DbItem';
 import { DbLimit } from './DbLimit';
 import { DbValue } from './DbValue';
+import { DbPrimitiveValue } from './DbPrimitiveValue';
 import { DbTableDefinition } from './DbTableDefinition';
 
 /**
@@ -39,7 +40,7 @@ interface DatabaseAdapter {
    * @param filterValue The value to filter for.
    * @param update All props and values for the update
    */
-  update(table: string, filterKey: string, filterValue: DbValue, update: Record<string, DbValue>): Promise<void>;
+  update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<void>;
 
   /**
    * Checks if an item exists in the database.
@@ -48,7 +49,7 @@ interface DatabaseAdapter {
    * @param filterValue The value to filter for.
    * @returns Promise fulfilling with a boolean, true and only true, if the item exists.
    */
-  exists(table: string, filterKey: string, filterValue: DbValue): Promise<boolean>;
+  exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean>;
 
   /**
    * Deletes an item in the database.
@@ -56,7 +57,7 @@ interface DatabaseAdapter {
    * @param filterKey The name of the key to filter for.
    * @param filterValue The value to filter for.
    */
-  delete(table: string, filterKey: string, filterValue: DbValue): Promise<void>;
+  delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<void>;
 
   /**
    * Finds one item in the database.
@@ -65,7 +66,7 @@ interface DatabaseAdapter {
    * @param filterValue The value to filter for.
    * @returns Promise fulfilling with the item or with null if item does not exist.
    */
-  findOne(table: string, filterKey: string, filterValue: DbValue): Promise<DbItem | null>;
+  findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null>;
 
   /**
    * Finds many items in the database.
@@ -75,7 +76,7 @@ interface DatabaseAdapter {
    * @param dbLimit limit params for paging, no paging if not given
    * @returns Promise fulfilling with the item or with null if item does not exist.
    */
-  findMany(table: string, filterKey: string, filterValue: DbValue, dbLimit?: DbLimit): Promise<DbItem[]>;
+  findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, dbLimit?: DbLimit): Promise<DbItem[]>;
 
   /**
    * Finds all items of the specified table
