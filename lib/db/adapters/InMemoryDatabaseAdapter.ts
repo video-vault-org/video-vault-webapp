@@ -1,4 +1,4 @@
-import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '@/adapter/db/DatabaseAdapter';
+import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '@/db/types/DatabaseAdapter';
 
 interface Table {
   name: string;

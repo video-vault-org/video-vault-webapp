@@ -1,7 +1,7 @@
 import { MongoDBContainer, StartedMongoDBContainer } from '@testcontainers/mongodb';
 import mongoose from 'mongoose';
-import { MongoDatabaseAdapter, MongoItem } from '@/adapter/db/MongoDatabaseAdapter';
-import { DbItem } from '@/adapter/db/DatabaseAdapter';
+import { MongoDatabaseAdapter, MongoItem } from '@/db/adapters/MongoDatabaseAdapter';
+import { DbItem } from '@/db/types/DatabaseAdapter';
 
 const getItem = async function (db: MongoDatabaseAdapter | null, filter: Record<string, any>): Promise<DbItem | null> {
   const collection = db?.getCollections()?.test_;

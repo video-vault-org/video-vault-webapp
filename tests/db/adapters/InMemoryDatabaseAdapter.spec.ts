@@ -1,5 +1,5 @@
-import { InMemoryDatabaseAdapter } from '@/adapter/db/InMemoryDatabaseAdapter';
-import { DatabaseAdapter } from '@/adapter/db/DatabaseAdapter';
+import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
+import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
 
 describe('InMemoryDatabaseAdapter', (): void => {
   const init = async function (): Promise<DatabaseAdapter> {

@@ -1,9 +1,7 @@
-type DbValue = string | number | boolean | Record<string, unknown>;
-type DbItem = Record<string, DbValue>;
-interface DbLimit {
-  skip?: number;
-  get?: number;
-}
+import { DbItem } from './DbItem';
+import { DbLimit } from './DbLimit';
+import { DbValue } from './DbValue';
+
 
 /**
  * DatabaseAdapter is used to abstract database operations away from the business logic.

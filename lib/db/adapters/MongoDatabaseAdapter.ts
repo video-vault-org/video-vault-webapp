@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import { DatabaseAdapter, DbItem, DbValue, DbLimit } from './DatabaseAdapter';
-
-type MongoItem = DbItem & { _id?: unknown };
+import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '../types/DatabaseAdapter';
+import { MongoItem } from '../types/MongoItem';
 
 const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: DbLimit): mongoose.mongo.FindCursor {
   if (limit?.skip) {
