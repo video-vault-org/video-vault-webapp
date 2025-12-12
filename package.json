@@ -40,8 +40,10 @@
     "@eslint/eslintrc": "3.1.0",
     "@eslint/js": "9.13.0",
     "@testcontainers/mongodb": "^11.10.0",
+    "@testcontainers/postgresql": "^11.10.0",
     "@types/jest": "29.5.13",
     "@types/node": "22.7.7",
+    "@types/pg": "^8.16.0",
     "@typescript-eslint/eslint-plugin": "8.10.0",
     "@typescript-eslint/parser": "8.10.0",
     "better-npm-audit": "^3.11.0",
@@ -58,6 +60,7 @@
     "typescript": "5.6.3"
   },
   "dependencies": {
-    "mongoose": "^9.0.0"
+    "mongoose": "^9.0.0",
+    "pg": "^8.16.3"
   }
 }
