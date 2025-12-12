@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '../types/DatabaseAdapter';
 import { MongoItem } from '../types/MongoItem';
+import { DbTableDefinition } from '@/db/types/DbTableDefinition';
 
 const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: DbLimit): mongoose.mongo.FindCursor {
   if (limit?.skip) {
@@ -61,8 +62,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public async init(table: string, _fields: string[], _key: string): Promise<void> {
+  public async init({ table }: DbTableDefinition): Promise<void> {
     if (!this.connection) {
       throw new Error('Error. Not connected');
     }

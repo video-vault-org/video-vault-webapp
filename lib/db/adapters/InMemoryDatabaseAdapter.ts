@@ -1,8 +1,9 @@
 import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '@/db/types/DatabaseAdapter';
+import { DbTableDefinition } from '@/db/types/DbTableDefinition';
 
 interface Table {
   name: string;
-  fields: string[];
+  fields: Record<string, DbValue>;
   key: string;
   items: DbItem[];
 }
@@ -45,7 +46,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.dbOpen = false;
   }
 
-  public async init(table: string, fields: string[], key: string): Promise<void> {
+  public async init({ table, fields, key }: DbTableDefinition): Promise<void> {
     this.memory[table] = {
       name: table,
       fields,

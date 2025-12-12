@@ -1,6 +1,7 @@
 import { DbItem } from './DbItem';
 import { DbLimit } from './DbLimit';
 import { DbValue } from './DbValue';
+import { DbTableDefinition } from './DbTableDefinition';
 
 /**
  * DatabaseAdapter is used to abstract database operations away from the business logic.
@@ -22,7 +23,7 @@ interface DatabaseAdapter {
    * @param fields array of field names
    * @param key key field name
    */
-  init(table: string, fields: string[], key: string): Promise<void>;
+  init({ table, fields, key }: DbTableDefinition): Promise<void>;
 
   /**
    * Adds a new item to the database.

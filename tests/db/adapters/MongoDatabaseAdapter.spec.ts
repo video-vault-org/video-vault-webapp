@@ -71,7 +71,7 @@ describe('MongoDatabaseAdapter', (): void => {
   test('MongoDatabaseAdapter->init initializes test table.', async (): Promise<void> => {
     await db?.open();
 
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
 
     expect('test_' in (db?.getCollections() ?? {})).toBe(true);
     expect(db?.getCollections()?.test_?.collectionName).toBe('test_');
@@ -79,7 +79,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->add adds item.', async (): Promise<void> => {
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
 
     await db?.add('test_', { prop1: 1, prop2: 2 });
 
@@ -89,7 +89,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->update updates item, without key change.', async (): Promise<void> => {
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
     await db?.update('test_', 'testProp1', 'A', { testProp2: 22, testProp3: 3 });
@@ -100,7 +100,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->update updates item, with key change.', async (): Promise<void> => {
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
     await db?.update('test_', 'testProp1', 'A', { testProp1: 'B', testProp3: 3 });
@@ -113,7 +113,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->findOne finds one.', async (): Promise<void> => {
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
     const item = await db?.findOne('test_', 'testProp1', 'A');
@@ -128,7 +128,7 @@ describe('MongoDatabaseAdapter', (): void => {
       { testProp1: 'A3', testProp2: 23 }
     ];
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', testItems[0]);
     await db?.add('test_', testItems[1]);
     await db?.add('test_', testItems[2]);
@@ -146,7 +146,7 @@ describe('MongoDatabaseAdapter', (): void => {
       { testProp1: 'A4', testProp2: 24 }
     ];
     await db?.open();
-    await db?.init('test_', [], 'key');
+    await db?.init({ table: 'test_', fields: {}, key: 'key' });
     await db?.add('test_', testItems[0]);
     await db?.add('test_', testItems[1]);
     await db?.add('test_', testItems[2]);
@@ -164,7 +164,7 @@ describe('MongoDatabaseAdapter', (): void => {
       { testProp1: 'A3', testProp2: 'B' }
     ];
     await db?.open();
-    await db?.init('test_', [], '...');
+    await db?.init({ table: 'test_', fields: {}, key: '...' });
     await db?.add('test_', testItems[0]);
     await db?.add('test_', testItems[1]);
     await db?.add('test_', testItems[2]);
@@ -182,7 +182,7 @@ describe('MongoDatabaseAdapter', (): void => {
       { testProp1: 'A4', testProp2: 'B' }
     ];
     await db?.open();
-    await db?.init('test_', [], '.');
+    await db?.init({ table: 'test_', fields: {}, key: '.' });
     await db?.add('test_', testItems[0]);
     await db?.add('test_', testItems[1]);
     await db?.add('test_', testItems[2]);
@@ -195,7 +195,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->exists checks for existence correctly.', async (): Promise<void> => {
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
     const existsA = await db?.exists('test_', 'testProp1', 'A');
@@ -207,7 +207,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->delete deletes correctly.', async (): Promise<void> => {
     await db?.open();
-    await db?.init('test_', [], '');
+    await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
     await db?.add('test_', { testProp1: 'B', testProp2: 2 });
 
@@ -220,7 +220,7 @@ describe('MongoDatabaseAdapter', (): void => {
   describe('errors', () => {
     test('MongoDatabaseAdapter->delete throws exception correctly.', async (): Promise<void> => {
       await db?.open();
-      await db?.init('test_', [], '');
+      await db?.init({ table: 'test_', fields: {}, key: '' });
       await db?.add('test_', { testProp1: 'A', testProp2: 2 });
       let error: Error | null = null;
 
@@ -234,7 +234,7 @@ describe('MongoDatabaseAdapter', (): void => {
 
     test('MongoDatabaseAdapter->update throws exception correctly.', async (): Promise<void> => {
       await db?.open();
-      await db?.init('test_', [], '..');
+      await db?.init({ table: 'test_', fields: {}, key: '' });
       await db?.add('test_', { testProp1: 'A', testProp2: 3 });
       let error: Error | null = null;
 

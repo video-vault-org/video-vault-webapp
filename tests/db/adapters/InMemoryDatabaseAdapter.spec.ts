@@ -3,12 +3,12 @@ import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
 
 describe('InMemoryDatabaseAdapter', (): void => {
   const init = async function (): Promise<DatabaseAdapter> {
-    const tableName = 'testTable';
-    const fields = ['testPropStr', 'testPropNo', 'testPropBool'];
+    const table = 'testTable';
+    const fields = { testPropStr: '', testPropNo: 0, testPropBool: false };
     const key = 'testPropStr';
     const db = new InMemoryDatabaseAdapter();
     await db.open();
-    await db.init(tableName, fields, key);
+    await db.init({ table, fields, key });
     return db;
   };
 
@@ -56,19 +56,19 @@ describe('InMemoryDatabaseAdapter', (): void => {
   });
 
   test('InMemoryDatabaseAdapter->init inits table correctly.', async (): Promise<void> => {
-    const tableName = 'testTable';
-    const fields = ['fieldA', 'fieldB'];
+    const table = 'testTable';
+    const fields = { fieldA: '', fieldB: '' };
     const key = 'fieldB';
     const db = new InMemoryDatabaseAdapter();
     await db.open();
 
-    await db.init(tableName, fields, key);
+    await db.init({ table, fields, key });
 
     const memory = db.getMemory();
-    expect(memory[tableName]?.name).toEqual(tableName);
-    expect(memory[tableName]?.fields).toEqual(fields);
-    expect(memory[tableName]?.key).toEqual(key);
-    expect(memory[tableName]?.items).toEqual([]);
+    expect(memory[table]?.name).toEqual(table);
+    expect(memory[table]?.fields).toEqual(fields);
+    expect(memory[table]?.key).toEqual(key);
+    expect(memory[table]?.items).toEqual([]);
   });
 
   test('InMemoryDatabaseAdapter->add adds item correctly.', async (): Promise<void> => {
