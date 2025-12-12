@@ -16,7 +16,7 @@ const applyLimit = function (items: DbItem[], limit?: DbLimit): DbItem[] {
   const skip = limit.skip ?? 0;
   const get = limit.get ?? items.length;
   return items.slice(skip, skip + get);
-}
+};
 
 /**
  * In-Memory Database Adapter, mostly for testing, not suitable for production, no data will be persistent

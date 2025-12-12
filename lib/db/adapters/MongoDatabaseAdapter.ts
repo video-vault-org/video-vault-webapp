@@ -10,7 +10,7 @@ const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: Db
     itemsCursor = itemsCursor?.limit(limit.get);
   }
   return itemsCursor;
-}
+};
 
 /**
  * Database Adapter for MongoDB.

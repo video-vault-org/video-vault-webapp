@@ -1,9 +1,9 @@
 import { MongoDBContainer, StartedMongoDBContainer } from '@testcontainers/mongodb';
 import mongoose from 'mongoose';
 import { MongoDatabaseAdapter, MongoItem } from '@/db/adapters/MongoDatabaseAdapter';
-import { DbItem } from '@/db/types/DatabaseAdapter';
+import { DbItem, DbValue } from '@/db/types/DatabaseAdapter';
 
-const getItem = async function (db: MongoDatabaseAdapter | null, filter: Record<string, any>): Promise<DbItem | null> {
+const getItem = async function (db: MongoDatabaseAdapter | null, filter: Record<string, DbValue>): Promise<DbItem | null> {
   const collection = db?.getCollections()?.test_;
   const item = await collection?.findOne<MongoItem>(filter ?? {});
   if (!item) {
@@ -90,42 +90,42 @@ describe('MongoDatabaseAdapter', (): void => {
   test('MongoDatabaseAdapter->update updates item, without key change.', async (): Promise<void> => {
     await db?.open();
     await db?.init('test_', [], '');
-    await db?.add('test_', { testProp1: "A", testProp2: 2 });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
-    await db?.update('test_', 'testProp1', "A", { testProp2: 22, testProp3: 3 });
+    await db?.update('test_', 'testProp1', 'A', { testProp2: 22, testProp3: 3 });
 
-    const item = await getItem(db, { testProp1: "A" });
-    expect(item).toEqual({ testProp1: "A", testProp2: 22, testProp3: 3 });
+    const item = await getItem(db, { testProp1: 'A' });
+    expect(item).toEqual({ testProp1: 'A', testProp2: 22, testProp3: 3 });
   });
 
   test('MongoDatabaseAdapter->update updates item, with key change.', async (): Promise<void> => {
     await db?.open();
     await db?.init('test_', [], '');
-    await db?.add('test_', { testProp1: "A", testProp2: 2 });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
-    await db?.update('test_', 'testProp1', "A", { testProp1: "B", testProp3: 3 });
+    await db?.update('test_', 'testProp1', 'A', { testProp1: 'B', testProp3: 3 });
 
-    const item1 = await getItem(db, { testProp1: "A" });
-    const item2 = await getItem(db, { testProp1: "B" });
-    expect(item2).toEqual({ testProp1: "B", testProp2: 2, testProp3: 3 });
+    const item1 = await getItem(db, { testProp1: 'A' });
+    const item2 = await getItem(db, { testProp1: 'B' });
+    expect(item2).toEqual({ testProp1: 'B', testProp2: 2, testProp3: 3 });
     expect(item1).toBeNull();
   });
 
   test('MongoDatabaseAdapter->findOne finds one.', async (): Promise<void> => {
     await db?.open();
     await db?.init('test_', [], '');
-    await db?.add('test_', { testProp1: "A", testProp2: 2 });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
-    const item = await db?.findOne('test_', 'testProp1', "A");
+    const item = await db?.findOne('test_', 'testProp1', 'A');
 
-    expect(item).toEqual({ testProp1: "A", testProp2: 2 });
+    expect(item).toEqual({ testProp1: 'A', testProp2: 2 });
   });
 
   test('MongoDatabaseAdapter->findAll finds all, no limit', async (): Promise<void> => {
     const testItems = [
-      { testProp1: "A1", testProp2: 21 },
-      { testProp1: "A2", testProp2: 22 },
-      { testProp1: "A3", testProp2: 23 }
+      { testProp1: 'A1', testProp2: 21 },
+      { testProp1: 'A2', testProp2: 22 },
+      { testProp1: 'A3', testProp2: 23 }
     ];
     await db?.open();
     await db?.init('test_', [], '');
@@ -140,10 +140,10 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->findAll finds all, with limit', async (): Promise<void> => {
     const testItems = [
-      { testProp1: "A1", testProp2: 21 },
-      { testProp1: "A2", testProp2: 22 },
-      { testProp1: "A3", testProp2: 23 },
-      { testProp1: "A4", testProp2: 24 },
+      { testProp1: 'A1', testProp2: 21 },
+      { testProp1: 'A2', testProp2: 22 },
+      { testProp1: 'A3', testProp2: 23 },
+      { testProp1: 'A4', testProp2: 24 }
     ];
     await db?.open();
     await db?.init('test_', [], 'key');
@@ -159,9 +159,9 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->findMany finds many, no limit', async (): Promise<void> => {
     const testItems = [
-      { testProp1: "A1", testProp2: "A" },
-      { testProp1: "A2", testProp2: "A" },
-      { testProp1: "A3", testProp2: "B" }
+      { testProp1: 'A1', testProp2: 'A' },
+      { testProp1: 'A2', testProp2: 'A' },
+      { testProp1: 'A3', testProp2: 'B' }
     ];
     await db?.open();
     await db?.init('test_', [], '...');
@@ -176,10 +176,10 @@ describe('MongoDatabaseAdapter', (): void => {
 
   test('MongoDatabaseAdapter->findMany finds many, with limit', async (): Promise<void> => {
     const testItems = [
-      { testProp1: "A1", testProp2: "A" },
-      { testProp1: "A2", testProp2: "B" },
-      { testProp1: "A3", testProp2: "B" },
-      { testProp1: "A4", testProp2: "B" },
+      { testProp1: 'A1', testProp2: 'A' },
+      { testProp1: 'A2', testProp2: 'B' },
+      { testProp1: 'A3', testProp2: 'B' },
+      { testProp1: 'A4', testProp2: 'B' }
     ];
     await db?.open();
     await db?.init('test_', [], '.');
@@ -196,7 +196,7 @@ describe('MongoDatabaseAdapter', (): void => {
   test('MongoDatabaseAdapter->exists checks for existence correctly.', async (): Promise<void> => {
     await db?.open();
     await db?.init('test_', [], '');
-    await db?.add('test_', { testProp1: "A", testProp2: 2 });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
     const existsA = await db?.exists('test_', 'testProp1', 'A');
     const existsB = await db?.exists('test_', 'testProp1', 'B');
@@ -208,8 +208,8 @@ describe('MongoDatabaseAdapter', (): void => {
   test('MongoDatabaseAdapter->delete deletes correctly.', async (): Promise<void> => {
     await db?.open();
     await db?.init('test_', [], '');
-    await db?.add('test_', { testProp1: "A", testProp2: 2 });
-    await db?.add('test_', { testProp1: "B", testProp2: 2 });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
+    await db?.add('test_', { testProp1: 'B', testProp2: 2 });
 
     await db?.delete('test_', 'testProp1', 'A');
 
@@ -221,7 +221,7 @@ describe('MongoDatabaseAdapter', (): void => {
     test('MongoDatabaseAdapter->delete throws exception correctly.', async (): Promise<void> => {
       await db?.open();
       await db?.init('test_', [], '');
-      await db?.add('test_', { testProp1: "A", testProp2: 2 });
+      await db?.add('test_', { testProp1: 'A', testProp2: 2 });
       let error: Error | null = null;
 
       await db?.delete('test_', 'testProp1', 'B').catch((err) => {
@@ -235,7 +235,7 @@ describe('MongoDatabaseAdapter', (): void => {
     test('MongoDatabaseAdapter->update throws exception correctly.', async (): Promise<void> => {
       await db?.open();
       await db?.init('test_', [], '..');
-      await db?.add('test_', { testProp1: "A", testProp2: 3 });
+      await db?.add('test_', { testProp1: 'A', testProp2: 3 });
       let error: Error | null = null;
 
       await db?.update('test_', 'testProp1', 'B', { testProp2: 5 }).catch((err) => {
