@@ -85,4 +85,4 @@ interface DatabaseAdapter {
   findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]>;
 }
 
-export { DatabaseAdapter, DbItem, DbValue, DbLimit };
+export { DatabaseAdapter };

@@ -1,7 +1,10 @@
 import mongoose from 'mongoose';
-import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '../types/DatabaseAdapter';
+import { DatabaseAdapter } from '../types/DatabaseAdapter';
 import { MongoItem } from '../types/MongoItem';
 import { DbTableDefinition } from '@/db/types/DbTableDefinition';
+import { DbLimit } from '@/db/types/DbLimit';
+import { DbItem } from '@/db/types/DbItem';
+import { DbValue } from '@/db/types/DbValue';
 
 const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: DbLimit): mongoose.mongo.FindCursor {
   if (limit?.skip) {

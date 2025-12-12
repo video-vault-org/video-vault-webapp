@@ -1,5 +1,8 @@
-import { DatabaseAdapter, DbItem, DbValue, DbLimit } from '@/db/types/DatabaseAdapter';
+import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
 import { DbTableDefinition } from '@/db/types/DbTableDefinition';
+import { DbValue } from '@/db/types/DbValue';
+import { DbItem } from '@/db/types/DbItem';
+import { DbLimit } from '@/db/types/DbLimit';
 
 interface Table {
   name: string;
