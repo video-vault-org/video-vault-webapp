@@ -28,6 +28,12 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   private session: null | mongoose.mongo.ClientSession = null;
   private collections: Record<string, mongoose.Collection<DbItem>> = {};
 
+  /**
+   * Constructor
+   * @param url the url, MongoDB shall connect to (http://`host`:`port`/`databaseName`)
+   * @param user (optional) username for authorization
+   * @param pass (optional) password for authorization
+   */
   public constructor(url: string, user?: string, pass?: string) {
     this.url = url;
     this.user = user;

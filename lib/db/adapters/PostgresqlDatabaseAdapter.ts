@@ -19,6 +19,14 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   private readonly client: Client;
   private connected = false;
 
+  /**
+   * Constructor
+   * @param host the ip or domain, postgresql shall connect to
+   * @param port the port, postgresql shall connect to
+   * @param database the name of the database, postgresql shall connect to
+   * @param user (optional) username for authorization
+   * @param password (optional) password for authorization
+   */
   public constructor(host: string, port: number, database: string, user?: string, password?: string) {
     this.client = new Client({ host, port, database, user, password });
   }

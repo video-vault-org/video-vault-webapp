@@ -30,6 +30,10 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
   private dbOpen = false;
   private readonly memory: Memory;
 
+  /**
+   * Constructor
+   * no-args
+   */
   public constructor() {
     this.memory = {};
   }
