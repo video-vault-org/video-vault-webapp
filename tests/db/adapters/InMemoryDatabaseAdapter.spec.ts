@@ -1,10 +1,11 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
+import { DbFieldDefinition } from '@/db/types/DbFieldDefinition';
 
 describe('InMemoryDatabaseAdapter', (): void => {
   const init = async function (): Promise<DatabaseAdapter> {
     const table = 'testTable';
-    const fields = { testPropStr: 'string', testPropNo: 'string', testPropBool: 'boolean' };
+    const fields: DbFieldDefinition = { testPropStr: 'string', testPropNo: 'string', testPropBool: 'boolean' };
     const key = 'testPropStr';
     const db = new InMemoryDatabaseAdapter();
     await db.open();
@@ -57,7 +58,7 @@ describe('InMemoryDatabaseAdapter', (): void => {
 
   test('InMemoryDatabaseAdapter->init inits table correctly.', async (): Promise<void> => {
     const table = 'testTable';
-    const fields = { fieldA: 'string', fieldB: 'string' };
+    const fields: DbFieldDefinition = { fieldA: 'string', fieldB: 'string' };
     const key = 'fieldB';
     const db = new InMemoryDatabaseAdapter();
     await db.open();

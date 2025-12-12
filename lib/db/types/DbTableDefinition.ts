@@ -1,6 +1,8 @@
+import { DbFieldDefinition } from './DbFieldDefinition';
+
 interface DbTableDefinition {
   table: string;
-  fields: Record<string, string>;
+  fields: DbFieldDefinition;
   key: string;
 }
 
