@@ -10,6 +10,9 @@ import {
 } from '@aws-sdk/client-s3';
 import { StorageAdapter } from '@/storage/types/StorageAdapter';
 
+/**
+ * Storage Adapter for S3 (and compatible services)
+ */
 class S3StorageAdapter implements StorageAdapter {
   private readonly client: S3Client;
   private readonly bucket: string;

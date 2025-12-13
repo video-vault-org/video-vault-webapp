@@ -3,6 +3,9 @@ import { readdir, readFile, rm, mkdir, writeFile, unlink } from 'fs/promises';
 import { dirname, join } from 'path';
 import { FsError } from '@/storage/types/FsError';
 
+/**
+ * Storage Adapter for local file system
+ */
 class LocalStorageAdapter implements StorageAdapter {
   private readonly basePath: string;
 
