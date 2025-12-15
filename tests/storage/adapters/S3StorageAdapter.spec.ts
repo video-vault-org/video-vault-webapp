@@ -69,7 +69,14 @@ describe('S3StorageAdapter', (): void => {
 
   beforeAll(async (): Promise<void> => {
     container = await new MinioContainer('minio/minio:RELEASE.2025-09-07T16-13-09Z').withAddedCapabilities().start();
-    storage = new S3StorageAdapter('local', container.getUsername(), container.getPassword(), BUCKET_NAME, container.getConnectionUrl(), true);
+    storage = new S3StorageAdapter({
+      region: 'local',
+      accessKeyId: container.getUsername(),
+      secretAccessKey: container.getPassword(),
+      bucket: BUCKET_NAME,
+      endpoint: container.getConnectionUrl(),
+      forcePathStyle: true
+    });
     await createBucket();
   });
 
@@ -78,14 +85,14 @@ describe('S3StorageAdapter', (): void => {
   });
 
   test('S3StorageAdapter->constructor creates client correctly.', async () => {
-    const newStorage = new S3StorageAdapter(
-      'local',
-      container?.getUsername() ?? '',
-      container?.getPassword() ?? '',
-      BUCKET_NAME,
-      container?.getConnectionUrl() ?? '',
-      true
-    );
+    const newStorage = new S3StorageAdapter({
+      region: 'local',
+      accessKeyId: container?.getUsername() ?? '',
+      secretAccessKey: container?.getPassword() ?? '',
+      bucket: BUCKET_NAME,
+      endpoint: container?.getConnectionUrl() ?? '',
+      forcePathStyle: true
+    });
 
     const [client, bucket] = newStorage.getConf();
     expect(bucket).toEqual(BUCKET_NAME);

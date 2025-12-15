@@ -9,6 +9,7 @@ import {
   DeleteObjectCommandInput
 } from '@aws-sdk/client-s3';
 import { StorageAdapter } from '@/storage/types/StorageAdapter';
+import { S3StorageConf } from '@/storage/types/S3StorageConf';
 
 /**
  * Storage Adapter for S3 (and compatible services)
@@ -17,7 +18,7 @@ class S3StorageAdapter implements StorageAdapter {
   private readonly client: S3Client;
   private readonly bucket: string;
 
-  public constructor(region: string, accessKeyId: string, secretAccessKey: string, bucket: string, endpoint?: string, forcePathStyle?: boolean) {
+  public constructor({ region, accessKeyId, secretAccessKey, bucket, endpoint, forcePathStyle }: S3StorageConf) {
     const conf: S3ClientConfig = { region, forcePathStyle, credentials: { accessKeyId, secretAccessKey } };
     if (!!endpoint) {
       conf.endpoint = endpoint;

@@ -2,6 +2,7 @@ import { StorageAdapter } from '@/storage/types/StorageAdapter';
 import { readdir, readFile, rm, mkdir, writeFile, unlink } from 'fs/promises';
 import { dirname, join } from 'path';
 import { FsError } from '@/storage/types/FsError';
+import { LocalStorageConf } from '@/storage/types/LocalStorageConf';
 
 /**
  * Storage Adapter for local file system
@@ -13,7 +14,7 @@ class LocalStorageAdapter implements StorageAdapter {
    * Constructor
    * @param basePath the local file system path where to store the files
    */
-  public constructor(basePath: string) {
+  public constructor({ basePath }: LocalStorageConf) {
     this.basePath = basePath;
   }
 

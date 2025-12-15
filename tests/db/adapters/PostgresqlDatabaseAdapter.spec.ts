@@ -21,7 +21,7 @@ describe('PostgresDatabaseAdapter', (): void => {
   });
 
   beforeEach(async () => {
-    db = new PostgresqlDatabaseAdapter(host, port, 'video-vault', user, password);
+    db = new PostgresqlDatabaseAdapter({ host, port, database: 'video-vault', user, password });
   });
 
   afterEach(async () => {
@@ -34,7 +34,7 @@ describe('PostgresDatabaseAdapter', (): void => {
   });
 
   test('PostgresqlDatabaseAdapter->constructor loads db correctly.', async () => {
-    const newDb = new PostgresqlDatabaseAdapter(host, port, 'video-vault', user, password);
+    const newDb = new PostgresqlDatabaseAdapter({ host, port, database: 'video-vault', user, password });
 
     expect(newDb.getConf()).toEqual([host, port, 'video-vault', user, password]);
     expect(newDb.getClient()?.host).toEqual(host);

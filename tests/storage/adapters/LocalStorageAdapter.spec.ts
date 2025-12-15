@@ -1,25 +1,17 @@
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import mockFS from 'mock-fs';
 import fs from 'fs/promises';
-
-const exists = async function (path: string): Promise<boolean> {
-  try {
-    await fs.stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-};
+import { exists } from '#/util';
 
 describe('LocalStorageAdapter', (): void => {
-  const storage = new LocalStorageAdapter('/opt/video-vault/files');
+  const storage = new LocalStorageAdapter({ basePath: '/opt/video-vault/files' });
 
   afterEach(async (): Promise<void> => {
     mockFS.restore();
   });
 
   test('LocalStorageAdapter->constructor sets basePath correctly.', async (): Promise<void> => {
-    const newStorage = new LocalStorageAdapter('/given');
+    const newStorage = new LocalStorageAdapter({ basePath: '/given' });
 
     expect(newStorage.getBasePath()).toBe('/given');
   });

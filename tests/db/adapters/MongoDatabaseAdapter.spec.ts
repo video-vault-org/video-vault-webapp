@@ -31,7 +31,7 @@ describe('MongoDatabaseAdapter', (): void => {
   });
 
   beforeEach(async (): Promise<void> => {
-    db = new MongoDatabaseAdapter(url);
+    db = new MongoDatabaseAdapter({ url });
   });
 
   afterEach(async (): Promise<void> => {
@@ -42,13 +42,13 @@ describe('MongoDatabaseAdapter', (): void => {
   });
 
   test('MongoDatabaseAdapter->constructor works correctly, no auth.', async (): Promise<void> => {
-    const newDb = new MongoDatabaseAdapter(url);
+    const newDb = new MongoDatabaseAdapter({ url });
 
     expect(newDb.getConf()).toEqual([url, '', '']);
   });
 
   test('MongoDatabaseAdapter->constructor works correctly, with auth.', async (): Promise<void> => {
-    const newDb = new MongoDatabaseAdapter(url, 'user', 'pass');
+    const newDb = new MongoDatabaseAdapter({ url, user: 'user', pass: 'pass' });
 
     expect(newDb.getConf()).toEqual([url, 'user', 'pass']);
   });

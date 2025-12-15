@@ -5,6 +5,7 @@ import { DbValue } from '@/db/types/DbValue';
 import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
 import { DbItem } from '@/db/types/DbItem';
 import { DbLimit } from '@/db/types/DbLimit';
+import { PostgresqlDatabaseConf } from '@/db/types/PostgresqlDatabaseConf';
 
 const buildLimit = function (dbLimit?: DbLimit) {
   const offset = dbLimit?.skip ? `OFFSET ${dbLimit?.skip}` : '';
@@ -27,7 +28,7 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
    * @param user (optional) username for authorization
    * @param password (optional) password for authorization
    */
-  public constructor(host: string, port: number, database: string, user?: string, password?: string) {
+  public constructor({ host, port, database, user, password }: PostgresqlDatabaseConf) {
     this.client = new Client({ host, port, database, user, password });
   }
 

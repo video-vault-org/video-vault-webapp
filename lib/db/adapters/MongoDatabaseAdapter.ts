@@ -6,6 +6,7 @@ import { DbLimit } from '@/db/types/DbLimit';
 import { DbItem } from '@/db/types/DbItem';
 import { DbValue } from '@/db/types/DbValue';
 import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
+import { MongoDatabaseConf } from '@/db/types/MongoDatabaseConf';
 
 const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: DbLimit): mongoose.mongo.FindCursor {
   if (limit?.skip) {
@@ -34,7 +35,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
    * @param user (optional) username for authorization
    * @param pass (optional) password for authorization
    */
-  public constructor(url: string, user?: string, pass?: string) {
+  public constructor({ url, user, pass }: MongoDatabaseConf) {
     this.url = url;
     this.user = user;
     this.pass = pass;
