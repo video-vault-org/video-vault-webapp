@@ -96,11 +96,12 @@ describe('PostgresDatabaseAdapter', (): void => {
       await db?.add('test_', testItem);
       const update = { testPropNo: 23, testPropBool: true };
 
-      await db?.update('test_', 'testPropStr', 'A', update);
+      const count = await db?.update('test_', 'testPropStr', 'A', update);
 
       const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
       expect(res?.rowCount).toBe(1);
       expect(res?.rows?.at(0)).toEqual({ ...testItem, ...update });
+      expect(count).toBe(1);
     });
 
     test('PostgresqlDatabaseAdapter->update updates item, with key change.', async (): Promise<void> => {
@@ -112,6 +113,32 @@ describe('PostgresDatabaseAdapter', (): void => {
       const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
       expect(res?.rowCount).toBe(1);
       expect(res?.rows?.at(0)).toEqual({ ...testItem, ...update });
+    });
+
+    test('PostgresqlDatabaseAdapter->update updates items.', async (): Promise<void> => {
+      await db?.add('test_', testItem);
+      await db?.add('test_', { ...testItem, testPropNo: 0 });
+      const update = { testPropNo: 23 };
+
+      const count = await db?.update('test_', 'testPropStr', 'A', update);
+
+      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
+      expect(res?.rowCount).toBe(2);
+      expect(res?.rows?.at(0)).toEqual({ ...testItem, ...update });
+      expect(res?.rows?.at(1)).toEqual({ ...testItem, ...update });
+      expect(count).toBe(2);
+    });
+
+    test('PostgresqlDatabaseAdapter->update updates no items.', async (): Promise<void> => {
+      await db?.add('test_', testItem);
+      const update = { testPropNo: 23 };
+
+      const count = await db?.update('test_', 'testPropStr', 'nope', update);
+
+      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
+      expect(res?.rowCount).toBe(1);
+      expect(res?.rows?.at(0)).toEqual(testItem);
+      expect(count).toBe(0);
     });
 
     test('PostgresqlDatabaseAdapter->exists returns true if item exists.', async (): Promise<void> => {
@@ -129,11 +156,34 @@ describe('PostgresDatabaseAdapter', (): void => {
       await db?.add('test_', testItem);
       await db?.add('test_', otherItem);
 
-      await db?.delete('test_', 'testPropStr', 'A');
+      const count = await db?.delete('test_', 'testPropStr', 'A');
 
       const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
       expect(res?.rowCount).toBe(1);
       expect(res?.rows?.at(0)).toEqual(otherItem);
+      expect(count).toBe(1);
+    });
+
+    test('PostgresqlDatabaseAdapter->delete deletes items.', async (): Promise<void> => {
+      const otherItem = { ...testItem, testPropNo: 5 };
+      await db?.add('test_', testItem);
+      await db?.add('test_', otherItem);
+
+      const count = await db?.delete('test_', 'testPropStr', 'A');
+
+      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
+      expect(res?.rowCount).toBe(0);
+      expect(count).toBe(2);
+    });
+
+    test('PostgresqlDatabaseAdapter->delete deletes no items.', async (): Promise<void> => {
+      await db?.add('test_', testItem);
+
+      const count = await db?.delete('test_', 'testPropStr', 'nope');
+
+      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
+      expect(res?.rowCount).toBe(1);
+      expect(count).toBe(0);
     });
 
     test('PostgresqlDatabaseAdapter->findOne finds one.', async (): Promise<void> => {
@@ -196,30 +246,27 @@ describe('PostgresDatabaseAdapter', (): void => {
       expect(items?.at(1)).toEqual({ ...testItem, testPropNo: 23 });
     });
 
-    describe('errors', () => {
-      test('PostgresqlDatabaseAdapter->delete throws exception correctly.', async (): Promise<void> => {
-        await db?.add('test_', testItem);
-        let error: Error | null = null;
+    test('PostgresqlDatabaseAdapter->findAllSince finds all, last modified since.', async (): Promise<void> => {
+      await db?.init({ table: 'test__', key: 'testPropStr', fields: { testPropStr: 'string', lastModified: 'Date' } });
+      await db?.add('test__', { testPropStr: 'A', lastModified: new Date(5) });
+      await db?.add('test__', { testPropStr: 'B', lastModified: new Date(9) });
+      await db?.add('test__', { testPropStr: 'C', lastModified: new Date(9) });
 
-        await db?.delete('test_', 'testPropStr', 'B').catch((err) => {
-          error = err as Error;
-        });
+      const items = await db?.findAllSince('test__', new Date(7));
 
-        expect(error).not.toBe(null);
-        expect((error as unknown as Error).message).toEqual('Item not found in table test_ where testPropStr=B.');
-      });
+      expect(items?.length).toBe(2);
+      expect(items?.at(0)).toEqual({ testPropStr: 'B', lastModified: new Date(9) });
+      expect(items?.at(1)).toEqual({ testPropStr: 'C', lastModified: new Date(9) });
+    });
 
-      test('PostgresqlDatabaseAdapter->update throws exception correctly.', async (): Promise<void> => {
-        await db?.add('test_', testItem);
-        let error: Error | null = null;
+    test('PostgresqlDatabaseAdapter->findAllSince finds nothing, if no lastModified column.', async (): Promise<void> => {
+      await db?.init({ table: 'test___', key: 'testPropStr', fields: { testPropStr: 'string' } });
+      await db?.add('test___', { testPropStr: 'A' });
+      await db?.add('test___', { testPropStr: 'B' });
 
-        await db?.update('test_', 'testPropStr', 'B', { testPropNo: 5 }).catch((err) => {
-          error = err as Error;
-        });
+      const items = await db?.findAllSince('test___', new Date(7));
 
-        expect(error).not.toBe(null);
-        expect((error as unknown as Error).message).toEqual('Item not found in table test_ where testPropStr=B.');
-      });
+      expect(items?.length).toBe(0);
     });
   });
 });

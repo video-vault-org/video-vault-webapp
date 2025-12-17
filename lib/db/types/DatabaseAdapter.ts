@@ -92,9 +92,8 @@ interface DatabaseAdapter {
    * Items without lastModified property won't be found.
    * @param table name of the table
    * @param since Date since you want the items from
-   * @param dbLimit limit params for paging, no paging if not given
    */
-  findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]>;
+  findAllSince(table: string, since: Date): Promise<DbItem[]>;
 }
 
 export { DatabaseAdapter };

@@ -152,7 +152,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return items;
   }
 
-  public async findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]> {
+  public async findAllSince(table: string, since: Date): Promise<DbItem[]> {
     const collection = this.collections[table];
     const items: DbItem[] = [];
     const filter = {
@@ -161,7 +161,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
         $gte: since
       }
     };
-    const itemsCursor = applyFilter(collection?.find(filter), dbLimit);
+    const itemsCursor = applyFilter(collection?.find(filter));
     while (await itemsCursor?.hasNext()) {
       const doc = await itemsCursor?.next();
       if (!doc) {

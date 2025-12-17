@@ -120,11 +120,12 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
+    const items = await this.findMany(table, filterKey, filterValue);
     const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1`;
     const values = [filterValue];
     await this.client?.query(query, values);
-    const result = await this.client?.query(query, values);
-    return result.rowCount ?? 0;
+    await this.client?.query(query, values);
+    return items.length;
   }
 
   public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
@@ -153,9 +154,13 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     return result.rows;
   }
 
-  public async findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]> {
-    const limit = buildLimit(dbLimit);
-    const query = `SELECT * FROM ${table} WHERE lastModified AND lastModified >= $1 ${limit}`;
+  public async findAllSince(table: string, since: Date): Promise<DbItem[]> {
+    const columnCheckQuery = `SELECT * FROM information_schema.columns WHERE table_name = '${table}' AND column_name = 'lastModified'`;
+    const checkResult = await this.client?.query(columnCheckQuery);
+    if (checkResult.rowCount === 0) {
+      return [];
+    }
+    const query = `SELECT * FROM ${table} WHERE "lastModified" >= $1`;
     const result = await this.client?.query<DbItem>(query, [since]);
     if (!result || result.rowCount === 0) {
       return [];

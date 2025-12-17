@@ -88,12 +88,43 @@ describe('InMemoryDatabaseAdapter', (): void => {
     const tableName = 'testTable';
     const db = await add();
 
-    await db.update(tableName, 'testPropStr', 'test', { testPropNo: 23, testPropBool: false });
+    const count = await db.update(tableName, 'testPropStr', 'test', { testPropNo: 23, testPropBool: false });
 
     const memory = (db as InMemoryDatabaseAdapter).getMemory();
     expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('test');
     expect(memory[tableName]?.items?.at(0)?.testPropNo).toBe(23);
     expect(memory[tableName]?.items?.at(0)?.testPropBool).toBe(false);
+    expect(count).toBe(1);
+  });
+
+  test('InMemoryDatabaseAdapter->update updates items correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+    addItemManually(db, 'testAnother', 23, true);
+
+    const count = await db.update(tableName, 'testPropBool', true, { testPropBool: false });
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('test');
+    expect(memory[tableName]?.items?.at(0)?.testPropNo).toBe(42);
+    expect(memory[tableName]?.items?.at(0)?.testPropBool).toBe(false);
+    expect(memory[tableName]?.items?.at(1)?.testPropStr).toEqual('testAnother');
+    expect(memory[tableName]?.items?.at(1)?.testPropNo).toBe(23);
+    expect(memory[tableName]?.items?.at(1)?.testPropBool).toBe(false);
+    expect(count).toBe(2);
+  });
+
+  test('InMemoryDatabaseAdapter->update updates no items.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+
+    const count = await db.update(tableName, 'testPropStr', 'nope', { testPropBool: false });
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('test');
+    expect(memory[tableName]?.items?.at(0)?.testPropNo).toBe(42);
+    expect(memory[tableName]?.items?.at(0)?.testPropBool).toBe(true);
+    expect(count).toBe(0);
   });
 
   test('InMemoryDatabaseAdapter->delete deletes item correctly.', async (): Promise<void> => {
@@ -101,11 +132,35 @@ describe('InMemoryDatabaseAdapter', (): void => {
     const db = await add();
     addAnother(db);
 
-    await db.delete(tableName, 'testPropStr', 'test');
+    const count = await db.delete(tableName, 'testPropStr', 'test');
 
     const memory = (db as InMemoryDatabaseAdapter).getMemory();
     expect(memory[tableName]?.items?.length).toBe(1);
     expect(memory[tableName]?.items?.at(0)?.testPropStr).toEqual('testAnother');
+    expect(count).toBe(1);
+  });
+
+  test('InMemoryDatabaseAdapter->delete deletes items correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+    addItemManually(db, 'testAnother', 23, true);
+
+    const count = await db.delete(tableName, 'testPropBool', true);
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.length).toBe(0);
+    expect(count).toBe(2);
+  });
+
+  test('InMemoryDatabaseAdapter->delete deletes no items.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await add();
+
+    const count = await db.delete(tableName, 'testPropStr', 'nope');
+
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    expect(memory[tableName]?.items?.length).toBe(1);
+    expect(count).toBe(0);
   });
 
   test('InMemoryDatabaseAdapter->exists checks for existence correctly.', async (): Promise<void> => {
@@ -176,6 +231,22 @@ describe('InMemoryDatabaseAdapter', (): void => {
     expect(items?.at(14)?.testPropStr).toEqual('test24');
   });
 
+  test('InMemoryDatabaseAdapter->findAllSince finds all items since, correctly.', async (): Promise<void> => {
+    const tableName = 'testTable';
+    const db = await init();
+    const memory = (db as InMemoryDatabaseAdapter).getMemory();
+    memory.testTable?.items.push({ testPropStr: 'test1', testPropNo: 42, testPropBool: false, lastModified: new Date(5) });
+    memory.testTable?.items.push({ testPropStr: 'test2', testPropNo: 42, testPropBool: false, lastModified: new Date(9) });
+    memory.testTable?.items.push({ testPropStr: 'test3', testPropNo: 42, testPropBool: false, lastModified: new Date(9) });
+    memory.testTable?.items.push({ testPropStr: 'test4', testPropNo: 42, testPropBool: false });
+
+    const items = await db.findAllSince(tableName, new Date(7));
+
+    expect(items?.length).toBe(2);
+    expect(items?.at(0)?.testPropStr).toEqual('test2');
+    expect(items?.at(1)?.testPropStr).toEqual('test3');
+  });
+
   test('InMemoryDatabaseAdapter->findMany finds many items correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await init();
@@ -209,33 +280,5 @@ describe('InMemoryDatabaseAdapter', (): void => {
     expect(items?.length).toBe(2);
     expect(items?.at(0)?.testPropNo).toEqual(2);
     expect(items?.at(1)?.testPropNo).toEqual(3);
-  });
-
-  describe('errors', () => {
-    test('InMemoryDatabaseAdapter->delete throws exception correctly.', async (): Promise<void> => {
-      const tableName = 'testTable';
-      const db = await add();
-      let error: Error | null = null;
-
-      await db.delete(tableName, 'testPropStr', 'testAnother').catch((err) => {
-        error = err as Error;
-      });
-
-      expect(error).not.toBe(null);
-      expect((error as unknown as Error).message).toEqual('Item not found in table testTable where testPropStr=testAnother.');
-    });
-
-    test('InMemoryDatabaseAdapter->update throws exception correctly.', async (): Promise<void> => {
-      const tableName = 'testTable';
-      const db = await add();
-      let error: Error | null = null;
-
-      await db.update(tableName, 'testPropStr', 'testAnother', {}).catch((err) => {
-        error = err as Error;
-      });
-
-      expect(error).not.toBe(null);
-      expect((error as unknown as Error).message).toEqual('Item not found in table testTable where testPropStr=testAnother.');
-    });
   });
 });

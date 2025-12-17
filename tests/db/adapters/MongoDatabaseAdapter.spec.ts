@@ -93,10 +93,11 @@ describe('MongoDatabaseAdapter', (): void => {
     await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
-    await db?.update('test_', 'testProp1', 'A', { testProp2: 22, testProp3: 3 });
+    const count = await db?.update('test_', 'testProp1', 'A', { testProp2: 22, testProp3: 3 });
 
     const item = await getItem(db, { testProp1: 'A' });
     expect(item).toEqual({ testProp1: 'A', testProp2: 22, testProp3: 3 });
+    expect(count).toBe(1);
   });
 
   test('MongoDatabaseAdapter->update updates item, with key change.', async (): Promise<void> => {
@@ -110,6 +111,33 @@ describe('MongoDatabaseAdapter', (): void => {
     const item2 = await getItem(db, { testProp1: 'B' });
     expect(item2).toEqual({ testProp1: 'B', testProp2: 2, testProp3: 3 });
     expect(item1).toBeNull();
+  });
+
+  test('MongoDatabaseAdapter->update updates items.', async (): Promise<void> => {
+    await db?.open();
+    await db?.init({ table: 'test_', fields: {}, key: '' });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
+    await db?.add('test_', { testProp1: 'B', testProp2: 2 });
+
+    const count = await db?.update('test_', 'testProp2', 2, { testProp2: 22 });
+
+    const item1 = await getItem(db, { testProp1: 'A' });
+    const item2 = await getItem(db, { testProp1: 'B' });
+    expect(item1).toEqual({ testProp1: 'A', testProp2: 22 });
+    expect(item2).toEqual({ testProp1: 'B', testProp2: 22 });
+    expect(count).toBe(2);
+  });
+
+  test('MongoDatabaseAdapter->update updates no items.', async (): Promise<void> => {
+    await db?.open();
+    await db?.init({ table: 'test_', fields: {}, key: '' });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
+
+    const count = await db?.update('test_', 'testProp1', 'nope', { testProp2: 22 });
+
+    const item = await getItem(db, { testProp1: 'A' });
+    expect(item).toEqual({ testProp1: 'A', testProp2: 2 });
+    expect(count).toBe(0);
   });
 
   test('MongoDatabaseAdapter->findOne finds one.', async (): Promise<void> => {
@@ -154,6 +182,25 @@ describe('MongoDatabaseAdapter', (): void => {
     await db?.add('test_', testItems[3]);
 
     const items = await db?.findAll('test_', { skip: 1, get: 2 });
+
+    expect(items).toEqual([testItems[1], testItems[2]]);
+  });
+
+  test('MongoDatabaseAdapter->findAllSince finds all, last modified since.', async (): Promise<void> => {
+    const testItems: DbItem[] = [
+      { testProp1: 'A1', testProp2: 21, lastModified: new Date(5) },
+      { testProp1: 'A2', testProp2: 22, lastModified: new Date(9) },
+      { testProp1: 'A3', testProp2: 23, lastModified: new Date(9) },
+      { testProp1: 'A4', testProp2: 23 }
+    ];
+    await db?.open();
+    await db?.init({ table: 'test_', fields: {}, key: '' });
+    await db?.add('test_', testItems[0]);
+    await db?.add('test_', testItems[1]);
+    await db?.add('test_', testItems[2]);
+    await db?.add('test_', testItems[3]);
+
+    const items = await db?.findAllSince('test_', new Date(7));
 
     expect(items).toEqual([testItems[1], testItems[2]]);
   });
@@ -206,45 +253,39 @@ describe('MongoDatabaseAdapter', (): void => {
     expect(existsB).toBe(false);
   });
 
-  test('MongoDatabaseAdapter->delete deletes correctly.', async (): Promise<void> => {
+  test('MongoDatabaseAdapter->delete deletes item correctly.', async (): Promise<void> => {
     await db?.open();
     await db?.init({ table: 'test_', fields: {}, key: '' });
     await db?.add('test_', { testProp1: 'A', testProp2: 2 });
     await db?.add('test_', { testProp1: 'B', testProp2: 2 });
 
-    await db?.delete('test_', 'testProp1', 'A');
+    const count = await db?.delete('test_', 'testProp1', 'A');
 
     expect(await getItem(db, { testProp1: 'A' })).toBeNull();
     expect(await getItem(db, { testProp1: 'B' })).not.toBeNull();
+    expect(count).toBe(1);
   });
 
-  describe('errors', () => {
-    test('MongoDatabaseAdapter->delete throws exception correctly.', async (): Promise<void> => {
-      await db?.open();
-      await db?.init({ table: 'test_', fields: {}, key: '' });
-      await db?.add('test_', { testProp1: 'A', testProp2: 2 });
-      let error: Error | null = null;
+  test('MongoDatabaseAdapter->delete deletes items correctly.', async (): Promise<void> => {
+    await db?.open();
+    await db?.init({ table: 'test_', fields: {}, key: '' });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
-      await db?.delete('test_', 'testProp1', 'B').catch((err) => {
-        error = err as Error;
-      });
+    const count = await db?.delete('test_', 'testProp1', 'A');
 
-      expect(error).not.toBe(null);
-      expect((error as unknown as Error).message).toEqual('Item not found in table test_ where testProp1=B.');
-    });
+    expect(await getItem(db, { testProp1: 'A' })).toBeNull();
+    expect(count).toBe(2);
+  });
 
-    test('MongoDatabaseAdapter->update throws exception correctly.', async (): Promise<void> => {
-      await db?.open();
-      await db?.init({ table: 'test_', fields: {}, key: '' });
-      await db?.add('test_', { testProp1: 'A', testProp2: 3 });
-      let error: Error | null = null;
+  test('MongoDatabaseAdapter->delete deletes no items.', async (): Promise<void> => {
+    await db?.open();
+    await db?.init({ table: 'test_', fields: {}, key: '' });
+    await db?.add('test_', { testProp1: 'A', testProp2: 2 });
 
-      await db?.update('test_', 'testProp1', 'B', { testProp2: 5 }).catch((err) => {
-        error = err as Error;
-      });
+    const count = await db?.delete('test_', 'testProp1', 'nope');
 
-      expect(error).not.toBe(null);
-      expect((error as unknown as Error).message).toEqual('Item not found in table test_ where testProp1=B.');
-    });
+    expect(await getItem(db, { testProp1: 'A' })).not.toBeNull();
+    expect(count).toBe(0);
   });
 });
