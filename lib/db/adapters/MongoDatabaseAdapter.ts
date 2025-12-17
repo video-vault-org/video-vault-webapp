@@ -88,13 +88,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await collection?.insertOne({ ...item });
   }
 
-  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<void> {
+  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
     const collection = this.collections[table];
-    const item = await this.findOne(table, filterKey, filterValue);
-    if (!item) {
-      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
-    }
-    await collection?.findOneAndUpdate({ [filterKey]: filterValue }, { $set: update });
+    const result = await collection?.updateMany({ [filterKey]: filterValue }, { $set: update });
+    return result.modifiedCount;
   }
 
   public async exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
@@ -103,12 +100,16 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return !!item;
   }
 
-  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<void> {
+  public async deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
     const collection = this.collections[table];
-    const item = await collection?.findOneAndDelete({ [filterKey]: filterValue });
-    if (!item) {
-      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
-    }
+    const result = await collection?.deleteOne({ [filterKey]: filterValue });
+    return result.deletedCount > 0;
+  }
+
+  public async deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
+    const collection = this.collections[table];
+    const result = await collection?.deleteMany({ [filterKey]: filterValue });
+    return result.deletedCount;
   }
 
   public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
@@ -143,6 +144,30 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     const collection = this.collections[table];
     const items: DbItem[] = [];
     const itemsCursor = applyFilter(collection?.find(), dbLimit);
+    while (await itemsCursor?.hasNext()) {
+      const doc = await itemsCursor?.next();
+      if (!doc) {
+        continue;
+      }
+      const item: DbItem = {
+        ...doc
+      };
+      delete item._id;
+      items.push(item);
+    }
+    return items;
+  }
+
+  public async findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]> {
+    const collection = this.collections[table];
+    const items: DbItem[] = [];
+    const filter = {
+      lastModified: {
+        $exists: true,
+        $gte: since
+      }
+    };
+    const itemsCursor = applyFilter(collection?.find(filter), dbLimit);
     while (await itemsCursor?.hasNext()) {
       const doc = await itemsCursor?.next();
       if (!doc) {

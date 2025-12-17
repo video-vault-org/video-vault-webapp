@@ -34,13 +34,14 @@ interface DatabaseAdapter {
   add(table: string, item: DbItem): Promise<void>;
 
   /**
-   * Updates an item in the database.
+   * Updates one or more items in the database.
    * @param table The name of the table.
    * @param filterKey The name of the key to filter for.
    * @param filterValue The value to filter for.
    * @param update All props and values for the update
+   * @returns Promise of number of updated items
    */
-  update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<void>;
+  update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number>;
 
   /**
    * Checks if an item exists in the database.
@@ -56,8 +57,18 @@ interface DatabaseAdapter {
    * @param table The name of the table.
    * @param filterKey The name of the key to filter for.
    * @param filterValue The value to filter for.
+   * @returns Promise of boolean, true if matched and deleted, false if not matched
    */
-  delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<void>;
+  deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean>;
+
+  /**
+   * Deletes one or more items in the database.
+   * @param table The name of the table.
+   * @param filterKey The name of the key to filter for.
+   * @param filterValue The value to filter for.
+   * @returns Promise of number of deleted items
+   */
+  deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number>;
 
   /**
    * Finds one item in the database.
@@ -84,6 +95,15 @@ interface DatabaseAdapter {
    * @param dbLimit limit params for paging, no paging if not given
    */
   findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]>;
+
+  /**
+   * Finds all items of the specified table, lastModified since specified Date.
+   * Items without lastModified property won't be found.
+   * @param table name of the table
+   * @param since Date since you want the items from
+   * @param dbLimit limit params for paging, no paging if not given
+   */
+  findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]>;
 }
 
 export { DatabaseAdapter };

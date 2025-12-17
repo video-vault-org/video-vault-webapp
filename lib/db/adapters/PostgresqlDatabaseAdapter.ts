@@ -45,7 +45,7 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   }
 
   private async findOneIfExists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | undefined> {
-    const query = `SELECT * FROM ${table} WHERE "${filterKey}"=$1`;
+    const query = `SELECT * FROM ${table} WHERE "${filterKey}"=$1 LIMIT 1`;
     const values = [filterValue];
     const result = await this.client?.query<DbItem>(query, values);
     if (!result || result.rowCount !== 1) {
@@ -99,11 +99,7 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     await this.client?.query(query, values);
   }
 
-  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<void> {
-    const item = await this.findOneIfExists(table, filterKey, filterValue);
-    if (!item) {
-      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
-    }
+  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
     let index = 1;
     const updateParts: string[] = [];
     const updateValues: DbPrimitiveValue[] = [];
@@ -114,7 +110,8 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     const updater = `SET ${updateParts.join(', ')}`;
     const values = [...updateValues, filterValue];
     const query = `UPDATE ${table} ${updater} WHERE "${filterKey}"=$${values.length}`;
-    await this.client?.query(query, values);
+    const result = await this.client?.query(query, values);
+    return result.rowCount ?? 0;
   }
 
   public async exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
@@ -122,14 +119,20 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     return !!item;
   }
 
-  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<void> {
-    const item = await this.findOneIfExists(table, filterKey, filterValue);
-    if (!item) {
-      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
-    }
+  public async deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
+    const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1 LIMIT 1`;
+    const values = [filterValue];
+    await this.client?.query(query, values);
+    const result = await this.client?.query(query, values);
+    return result.rowCount === 1;
+  }
+
+  public async deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
     const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1`;
     const values = [filterValue];
     await this.client?.query(query, values);
+    const result = await this.client?.query(query, values);
+    return result.rowCount ?? 0;
   }
 
   public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
@@ -152,6 +155,16 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     const limit = buildLimit(dbLimit);
     const query = `SELECT * FROM ${table} ${limit}`;
     const result = await this.client?.query<DbItem>(query);
+    if (!result || result.rowCount === 0) {
+      return [];
+    }
+    return result.rows;
+  }
+
+  public async findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]> {
+    const limit = buildLimit(dbLimit);
+    const query = `SELECT * FROM ${table} WHERE lastModified AND lastModified >= $1 ${limit}`;
+    const result = await this.client?.query<DbItem>(query, [since]);
     if (!result || result.rowCount === 0) {
       return [];
     }

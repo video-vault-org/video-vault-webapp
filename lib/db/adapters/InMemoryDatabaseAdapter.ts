@@ -67,14 +67,14 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.memory[table].items.push(item);
   }
 
-  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<void> {
-    const item = this.memory[table].items.find((item) => item[filterKey] === filterValue);
-    if (!item) {
-      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
-    }
-    Object.keys(update).forEach((key) => {
-      item[key] = update[key];
+  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
+    const items = this.memory[table].items.filter((item) => item[filterKey] === filterValue);
+    items.forEach((item) => {
+      Object.keys(update).forEach((key) => {
+        item[key] = update[key];
+      });
     });
+    return items.length;
   }
 
   public async exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
@@ -82,12 +82,23 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     return !!item;
   }
 
-  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<void> {
+  public async deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
     const index = this.memory[table].items.findIndex((item) => item[filterKey] === filterValue);
     if (index < 0) {
-      throw new Error(`Item not found in table ${table} where ${filterKey}=${filterValue}.`);
+      return false;
     }
     this.memory[table].items.splice(index, 1);
+    return true;
+  }
+
+  public async deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
+    let count = 0;
+    let index;
+    while ((index = this.memory[table].items.findIndex((item) => item[filterKey] === filterValue)) >= 0) {
+      this.memory[table].items.splice(index, 1);
+      count++;
+    }
+    return count;
   }
 
   public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
@@ -103,6 +114,17 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
   public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
     const items = this.memory[table].items;
     return applyLimit(items, dbLimit);
+  }
+
+  public async findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]> {
+    const itemsAll = this.memory[table].items;
+    const itemsSince: DbItem[] = [];
+    itemsAll.forEach((item) => {
+      if (item.lastModified && item.lastModified.getTime() >= since.getTime()) {
+        itemsSince.push(item);
+      }
+    });
+    return applyLimit(itemsSince, dbLimit);
   }
 }
 
