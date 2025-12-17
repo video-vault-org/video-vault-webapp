@@ -53,22 +53,13 @@ interface DatabaseAdapter {
   exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean>;
 
   /**
-   * Deletes an item in the database.
-   * @param table The name of the table.
-   * @param filterKey The name of the key to filter for.
-   * @param filterValue The value to filter for.
-   * @returns Promise of boolean, true if matched and deleted, false if not matched
-   */
-  deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean>;
-
-  /**
    * Deletes one or more items in the database.
    * @param table The name of the table.
    * @param filterKey The name of the key to filter for.
    * @param filterValue The value to filter for.
    * @returns Promise of number of deleted items
    */
-  deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number>;
+  delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number>;
 
   /**
    * Finds one item in the database.
@@ -97,7 +88,7 @@ interface DatabaseAdapter {
   findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]>;
 
   /**
-   * Finds all items of the specified table, lastModified since specified Date.
+   * Finds all items of the specified table, last modified since specified Date.
    * Items without lastModified property won't be found.
    * @param table name of the table
    * @param since Date since you want the items from

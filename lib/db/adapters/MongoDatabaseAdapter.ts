@@ -100,13 +100,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return !!item;
   }
 
-  public async deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
-    const collection = this.collections[table];
-    const result = await collection?.deleteOne({ [filterKey]: filterValue });
-    return result.deletedCount > 0;
-  }
-
-  public async deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
+  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
     const collection = this.collections[table];
     const result = await collection?.deleteMany({ [filterKey]: filterValue });
     return result.deletedCount;

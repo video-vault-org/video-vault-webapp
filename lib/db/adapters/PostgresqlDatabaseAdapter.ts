@@ -119,15 +119,7 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     return !!item;
   }
 
-  public async deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
-    const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1 LIMIT 1`;
-    const values = [filterValue];
-    await this.client?.query(query, values);
-    const result = await this.client?.query(query, values);
-    return result.rowCount === 1;
-  }
-
-  public async deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
+  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
     const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1`;
     const values = [filterValue];
     await this.client?.query(query, values);

@@ -82,16 +82,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     return !!item;
   }
 
-  public async deleteOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
-    const index = this.memory[table].items.findIndex((item) => item[filterKey] === filterValue);
-    if (index < 0) {
-      return false;
-    }
-    this.memory[table].items.splice(index, 1);
-    return true;
-  }
-
-  public async deleteMany(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
+  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
     let count = 0;
     let index;
     while ((index = this.memory[table].items.findIndex((item) => item[filterKey] === filterValue)) >= 0) {
