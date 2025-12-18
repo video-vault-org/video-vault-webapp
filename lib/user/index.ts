@@ -18,14 +18,14 @@ const addUser = async function ({ userId, username, ...rest }: User): Promise<vo
   await db.add('user_', { ...rest, userId, username });
 };
 
-const updateUser = async function (userId: string, update: Record<string, DbValue>): Promise<void> {
+const updateUser = async function (userId: string, update: Record<string, DbValue>): Promise<number> {
   const db = await loadDb();
-  await db.update('user_', 'userId', userId, update);
+  return await db.update('user_', 'userId', userId, update);
 };
 
-const deleteUser = async function (userId: string): Promise<void> {
+const deleteUser = async function (userId: string): Promise<number> {
   const db = await loadDb();
-  await db.delete('user_', 'userId', userId);
+  return await db.delete('user_', 'userId', userId);
 };
 
 const getAllUsers = async function (): Promise<User[]> {
@@ -33,14 +33,16 @@ const getAllUsers = async function (): Promise<User[]> {
   return (await db.findAll('user_')) as unknown as User[];
 };
 
-const getUserByUserId = async function (userId: string): Promise<User> {
+const getUserByUserId = async function (userId: string): Promise<User | null> {
   const db = await loadDb();
-  return (await db.findOne('user_', 'userId', userId)) as unknown as User;
+  const user = await db.findOne('user_', 'userId', userId);
+  return user ? (user as unknown as User) : null;
 };
 
-const getUserByUsername = async function (username: string): Promise<User> {
+const getUserByUsername = async function (username: string): Promise<User | null> {
   const db = await loadDb();
-  return (await db.findOne('user_', 'username', username)) as unknown as User;
+  const user = await db.findOne('user_', 'username', username);
+  return user ? (user as unknown as User) : null;
 };
 
 export { addUser, updateUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername };
