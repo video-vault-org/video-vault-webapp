@@ -94,20 +94,8 @@ class S3StorageAdapter implements StorageAdapter {
   }
 
   public async deleteDir(descriptor: string): Promise<number> {
-    const listCommandInput: ListObjectsV2CommandInput = {
-      Bucket: this.bucket,
-      Prefix: descriptor.replace(/\\$/, '') + '/'
-    };
-    const listCommand = new ListObjectsV2Command(listCommandInput);
-    const result = await this.client.send(listCommand);
-    const keys: string[] = [];
-    if (result.Contents) {
-      result.Contents.forEach((Content) => {
-        if (Content.Key) {
-          keys.push(Content.Key);
-        }
-      });
-    }
+    const keys = await this.getAllCommonPrefixKeys(descriptor.replace(/\\$/, '') + '/');
+    const count = keys.length;
 
     const chunks = chunkKeys(keys);
     for (const chunk of chunks) {
@@ -122,7 +110,35 @@ class S3StorageAdapter implements StorageAdapter {
       await this.client.send(deleteCommand);
     }
 
-    return keys.length;
+    return count;
+  }
+
+  private async getAllCommonPrefixKeys(Prefix: string): Promise<string[]> {
+    const keys: string[] = [];
+    let continuationToken: string | undefined = undefined;
+
+    do {
+      const commandInput: ListObjectsV2CommandInput = {
+        Bucket: this.bucket,
+        Prefix,
+        ContinuationToken: continuationToken,
+        MaxKeys: 1000
+      };
+      const command = new ListObjectsV2Command(commandInput);
+      const response = await this.client.send(command);
+
+      if (response.Contents) {
+        for (const obj of response.Contents) {
+          if (obj.Key) {
+            keys.push(obj.Key);
+          }
+        }
+      }
+
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return keys;
   }
 }
 

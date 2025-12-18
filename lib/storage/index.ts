@@ -17,12 +17,12 @@ const loadStorage = async function (): Promise<StorageAdapter> {
   }
 
   const configBuffer = await new LocalStorageAdapter({ basePath: './conf' }).read('storage.json');
-  const config: StorageConfig = JSON.parse(configBuffer.toString('utf8'));
+  const config: StorageConfig = JSON.parse(configBuffer?.toString('utf8') ?? '{}');
 
-  if (config.type === 'local') {
-    storage = new LocalStorageAdapter(config.conf);
-  } else {
+  if (config.type === 's3') {
     storage = new S3StorageAdapter(config.conf);
+  } else {
+    storage = new LocalStorageAdapter(config.conf);
   }
 
   return storage;

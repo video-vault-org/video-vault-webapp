@@ -159,17 +159,6 @@ describe('S3StorageAdapter', (): void => {
     expect(count).toBe(2);
   });
 
-  test('S3StorageAdapter->deleteDir returns 0 if no object key has this prefix.', async () => {
-    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
-    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
-
-    const count = await storage?.deleteDir('nope');
-
-    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj')).toBe(true);
-    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2')).toBe(true);
-    expect(count).toBe(0);
-  });
-
   test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly, 1234 objects, so two chunks.', async () => {
     for (let i = 0; i < 1234; i++) {
       await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj' + i, content);
@@ -180,5 +169,16 @@ describe('S3StorageAdapter', (): void => {
     expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj0')).toBe(false);
     expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj1')).toBe(false);
     expect(count).toBe(1234);
+  });
+
+  test('S3StorageAdapter->deleteDir returns 0 if no object key has this prefix.', async () => {
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
+
+    const count = await storage?.deleteDir('nope');
+
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj')).toBe(true);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2')).toBe(true);
+    expect(count).toBe(0);
   });
 });

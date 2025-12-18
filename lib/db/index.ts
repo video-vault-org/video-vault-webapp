@@ -27,14 +27,14 @@ const loadDb = async function (): Promise<DatabaseAdapter> {
   }
 
   const configBuffer = await new LocalStorageAdapter({ basePath: './conf' }).read('db.json');
-  const config: DatabaseConfig = JSON.parse(configBuffer.toString('utf8'));
+  const config: DatabaseConfig = JSON.parse(configBuffer?.toString('utf8') ?? '{}');
 
-  if (config.type === 'in-memory') {
-    db = new InMemoryDatabaseAdapter();
-  } else if (config.type === 'mongo') {
+  if (config.type === 'mongo') {
     db = new MongoDatabaseAdapter(config.conf);
-  } else {
+  } else if (config.type === 'postgresql') {
     db = new PostgresqlDatabaseAdapter(config.conf);
+  } else {
+    db = new InMemoryDatabaseAdapter();
   }
 
   await init();
