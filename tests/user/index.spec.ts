@@ -43,20 +43,22 @@ describe('user', () => {
   test('updateUser updates user.', async () => {
     mocked_db.getMemory().user_.items.push(testUser);
 
-    await updateUser(testUser.userId, { userKey: 'key2' });
+    const updated = await updateUser(testUser.userId, { userKey: 'key2' });
 
     const users = mocked_db.getMemory().user_.items;
     expect(users.length).toBe(1);
     expect(users.at(0)).toEqual({ ...testUser, userKey: 'key2' });
+    expect(updated).toBe(1);
   });
 
   test('deleteUser deletes user.', async () => {
     mocked_db.getMemory().user_.items.push(testUser);
 
-    await deleteUser(testUser.userId);
+    const deleted = await deleteUser(testUser.userId);
 
     const users = mocked_db.getMemory().user_.items;
     expect(users.length).toBe(0);
+    expect(deleted).toBe(1);
   });
 
   test('getAllUsers gets all users.', async () => {
@@ -83,6 +85,17 @@ describe('user', () => {
     expect(user).toEqual(user1);
   });
 
+  test('getUserByUserId gets null if user does not exist.', async () => {
+    const user1 = { ...testUser, userId: 'Id1', username: 'name1' };
+    const user2 = { ...testUser, userId: 'Id2', username: 'name2' };
+    mocked_db.getMemory().user_.items.push(user1);
+    mocked_db.getMemory().user_.items.push(user2);
+
+    const user = await getUserByUserId('nope');
+
+    expect(user).toBe(null);
+  });
+
   test('getUserByUsername gets correct user.', async () => {
     const user1 = { ...testUser, userId: 'Id1', username: 'name1' };
     const user2 = { ...testUser, userId: 'Id2', username: 'name2' };
@@ -92,5 +105,16 @@ describe('user', () => {
     const user = await getUserByUsername('name2');
 
     expect(user).toEqual(user2);
+  });
+
+  test('getUserByUsername gets null if user does not exist.', async () => {
+    const user1 = { ...testUser, userId: 'Id1', username: 'name1' };
+    const user2 = { ...testUser, userId: 'Id2', username: 'name2' };
+    mocked_db.getMemory().user_.items.push(user1);
+    mocked_db.getMemory().user_.items.push(user2);
+
+    const user = await getUserByUsername('nope');
+
+    expect(user).toBe(null);
   });
 });
