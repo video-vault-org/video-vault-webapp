@@ -35,7 +35,19 @@ describe('LocalStorageAdapter', (): void => {
 
     const content = await storage.read('sub/file');
 
-    expect(content.toString('utf8')).toEqual('content');
+    expect(content?.toString('utf8')).toEqual('content');
+  });
+
+  test('LocalStorageAdapter->read returns null if file does not exist.', async (): Promise<void> => {
+    mockFS({
+      '/opt/video-vault/files/sub': {
+        file: 'content'
+      }
+    });
+
+    const content = await storage.read('sub/nope');
+
+    expect(content).toBeNull();
   });
 
   test('LocalStorageAdapter->delete deletes file, but keeps non-empty directory.', async (): Promise<void> => {
@@ -48,10 +60,11 @@ describe('LocalStorageAdapter', (): void => {
       }
     });
 
-    await storage.delete('subDir/file');
+    const deleted = await storage.delete('subDir/file');
 
     expect(await exists('/opt/video-vault/files/subDir/file')).toBe(false);
     expect(await exists('/opt/video-vault/files/subDir/file2')).toBe(true);
+    expect(deleted).toBe(true);
   });
 
   test('LocalStorageAdapter->delete deletes file and deletes empty directory.', async (): Promise<void> => {
@@ -61,47 +74,75 @@ describe('LocalStorageAdapter', (): void => {
     await fs.mkdir('/opt/video-vault/files/subDir');
     await fs.writeFile('/opt/video-vault/files/subDir/file', Buffer.from('content', 'utf8'));
 
-    await storage.delete('subDir/file');
+    const deleted = await storage.delete('subDir/file');
 
     expect(await exists('/opt/video-vault/files/subDir')).toBe(false);
     expect(await exists('/opt/video-vault/files')).toBe(true);
+    expect(deleted).toBe(true);
   });
 
-  describe('errors', () => {
-    test('LocalStorageAdapter->read trows error if file does not exist.', async (): Promise<void> => {
-      mockFS({
-        '/opt/video-vault/files/': {
-          subDir: {}
+  test('LocalStorageAdapter->delete returns false if file does not exist.', async (): Promise<void> => {
+    mockFS({
+      '/opt/video-vault/files': {
+        subDir: {
+          file: 'content',
+          file2: 'content2'
         }
-      });
-      let error: Error | null = null;
-
-      try {
-        await storage.read('subDir/file');
-      } catch (err: unknown) {
-        error = err as Error;
       }
-
-      expect(error).not.toBeNull();
-      expect(error?.message).toEqual('Error: file does not exist: subDir/file');
     });
 
-    test('LocalStorageAdapter->delete trows error if file does not exist.', async (): Promise<void> => {
-      mockFS({
-        '/opt/video-vault/files/': {
-          subDir: {}
+    const deleted = await storage.delete('subDir/nope');
+
+    expect(await exists('/opt/video-vault/files/subDir/file')).toBe(true);
+    expect(await exists('/opt/video-vault/files/subDir/file2')).toBe(true);
+    expect(deleted).toBe(false);
+  });
+
+  test('LocalStorageAdapter->deleteDir deletes Dir.', async (): Promise<void> => {
+    mockFS({
+      '/opt/video-vault/files': {
+        subDir: {
+          file: 'content',
+          file2: 'content2'
         }
-      });
-      let error: Error | null = null;
-
-      try {
-        await storage.delete('subDir/file');
-      } catch (err: unknown) {
-        error = err as Error;
       }
-
-      expect(error).not.toBeNull();
-      expect(error?.message).toEqual('Error: file does not exist: subDir/file');
     });
+
+    const count = await storage.deleteDir('subDir');
+
+    expect(await exists('/opt/video-vault/files/subDir')).toBe(false);
+    expect(await exists('/opt/video-vault/files/subDir/file')).toBe(false);
+    expect(await exists('/opt/video-vault/files/subDir/file2')).toBe(false);
+    expect(count).toBe(2);
+  });
+
+  test('LocalStorageAdapter->deleteDir returns 0 if dir does not exist.', async (): Promise<void> => {
+    mockFS({
+      '/opt/video-vault/files': {
+        subDir: {
+          file: 'content',
+          file2: 'content2'
+        }
+      }
+    });
+
+    const count = await storage.deleteDir('nope');
+
+    expect(await exists('/opt/video-vault/files/subDir/file')).toBe(true);
+    expect(await exists('/opt/video-vault/files/subDir/file2')).toBe(true);
+    expect(count).toBe(0);
+  });
+
+  test('LocalStorageAdapter->deleteDir returns 0 if dir is empty.', async (): Promise<void> => {
+    mockFS({
+      '/opt/video-vault/files': {
+        subDir: {}
+      }
+    });
+
+    const count = await storage.deleteDir('subDir');
+
+    expect(await exists('/opt/video-vault/files/subDir')).toBe(false);
+    expect(count).toBe(0);
   });
 });

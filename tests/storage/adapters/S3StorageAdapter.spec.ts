@@ -118,27 +118,67 @@ describe('S3StorageAdapter', (): void => {
     expect(body?.toString('utf8')).toEqual(content.toString('utf8'));
   });
 
-  test('S3StorageAdapter->read throws error if object does not exist.', async () => {
+  test('S3StorageAdapter->read returns null if object does not exist.', async () => {
     await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
-    let error: Error | null = null;
 
-    try {
-      await storage?.read('sub/obj2');
-    } catch (err: unknown) {
-      error = err as Error;
-    }
+    const body = await storage?.read('sub/nope');
 
-    expect(error).not.toBeNull();
-    expect(error?.message).toEqual('Error: object not found: sub/obj2');
+    expect(body).toBeNull();
   });
 
   test('S3StorageAdapter->delete deletes object correctly.', async () => {
     await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
     await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
 
-    await storage?.delete('sub/obj');
+    const deleted = await storage?.delete('sub/obj');
 
     expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj')).toBe(false);
     expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2')).toBe(true);
+    expect(deleted).toBe(true);
+  });
+
+  test('S3StorageAdapter->delete returns false if object does not exist.', async () => {
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
+
+    const deleted = await storage?.delete('sub/nope');
+
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj')).toBe(true);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2')).toBe(true);
+    expect(deleted).toBe(false);
+  });
+
+  test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly.', async () => {
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
+
+    const count = await storage?.deleteDir('sub');
+
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj')).toBe(false);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2')).toBe(false);
+    expect(count).toBe(2);
+  });
+
+  test('S3StorageAdapter->deleteDir returns 0 if no object key has this prefix.', async () => {
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
+
+    const count = await storage?.deleteDir('nope');
+
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj')).toBe(true);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2')).toBe(true);
+    expect(count).toBe(0);
+  });
+
+  test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly, 1234 objects, so two chunks.', async () => {
+    for (let i = 0; i < 1234; i++) {
+      await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj' + i, content);
+    }
+
+    const count = await storage?.deleteDir('sub');
+
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj0')).toBe(false);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj1')).toBe(false);
+    expect(count).toBe(1234);
   });
 });

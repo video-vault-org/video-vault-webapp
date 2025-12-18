@@ -5,11 +5,25 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   GetObjectCommandInput,
+  ListObjectsV2Command,
+  ListObjectsV2CommandInput,
   DeleteObjectCommand,
-  DeleteObjectCommandInput
+  DeleteObjectCommandInput,
+  DeleteObjectsCommand,
+  DeleteObjectsCommandInput
 } from '@aws-sdk/client-s3';
 import { StorageAdapter } from '@/storage/types/StorageAdapter';
 import { S3StorageConf } from '@/storage/types/S3StorageConf';
+
+const chunkKeys = function (keys: string[]): string[][] {
+  const chunks: string[][] = [];
+  while (keys.length > 0) {
+    const chunk = keys.slice(0, 1000);
+    chunks.push(chunk);
+    keys.splice(0, chunk.length);
+  }
+  return chunks;
+};
 
 /**
  * Storage Adapter for S3 (and compatible services)
@@ -41,7 +55,7 @@ class S3StorageAdapter implements StorageAdapter {
     await this.client.send(command);
   }
 
-  public async read(descriptor: string): Promise<Buffer> {
+  public async read(descriptor: string): Promise<Buffer | null> {
     const commandInput: GetObjectCommandInput = {
       Bucket: this.bucket,
       Key: descriptor
@@ -59,19 +73,56 @@ class S3StorageAdapter implements StorageAdapter {
     }
 
     if (!dataArray) {
-      throw new Error(`Error: object not found: ${descriptor}`);
+      return null;
     }
 
     return Buffer.from(dataArray);
   }
 
-  public async delete(descriptor: string): Promise<void> {
+  public async delete(descriptor: string): Promise<boolean> {
+    const buffer = await this.read(descriptor);
+    if (!buffer) {
+      return false;
+    }
     const commandInput: DeleteObjectCommandInput = {
       Bucket: this.bucket,
       Key: descriptor
     };
     const command = new DeleteObjectCommand(commandInput);
     await this.client.send(command);
+    return true;
+  }
+
+  public async deleteDir(descriptor: string): Promise<number> {
+    const listCommandInput: ListObjectsV2CommandInput = {
+      Bucket: this.bucket,
+      Prefix: descriptor.replace(/\\$/, '') + '/'
+    };
+    const listCommand = new ListObjectsV2Command(listCommandInput);
+    const result = await this.client.send(listCommand);
+    const keys: string[] = [];
+    if (result.Contents) {
+      result.Contents.forEach((Content) => {
+        if (Content.Key) {
+          keys.push(Content.Key);
+        }
+      });
+    }
+
+    const chunks = chunkKeys(keys);
+    for (const chunk of chunks) {
+      const deleteCommandInput: DeleteObjectsCommandInput = {
+        Bucket: this.bucket,
+        Delete: {
+          Objects: chunk.map((Key) => ({ Key })),
+          Quiet: true
+        }
+      };
+      const deleteCommand = new DeleteObjectsCommand(deleteCommandInput);
+      await this.client.send(deleteCommand);
+    }
+
+    return keys.length;
   }
 }
 

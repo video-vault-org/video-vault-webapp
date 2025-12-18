@@ -1,7 +1,6 @@
 import { StorageAdapter } from '@/storage/types/StorageAdapter';
-import { readdir, readFile, rm, mkdir, writeFile, unlink } from 'fs/promises';
+import { readdir, readFile, rm, mkdir, stat, writeFile, unlink } from 'fs/promises';
 import { dirname, join } from 'path';
-import { FsError } from '@/storage/types/FsError';
 import { LocalStorageConf } from '@/storage/types/LocalStorageConf';
 
 /**
@@ -22,19 +21,24 @@ class LocalStorageAdapter implements StorageAdapter {
     return this.basePath;
   }
 
+  private async deleteDirectory(path: string) {
+    await rm(path, { recursive: true });
+  }
+
   private async deleteEmptyDirectory(path: string) {
     const files = await readdir(path);
     if (files.length === 0) {
-      await rm(path, { recursive: true });
+      await this.deleteDirectory(path);
     }
   }
 
-  private handleError(descriptor: string, err: unknown): Error {
-    const error = err as FsError;
-    if (error.code === 'ENOENT') {
-      return Error(`Error: file does not exist: ${descriptor}`);
+  private async exists(path: string): Promise<boolean> {
+    try {
+      await stat(path);
+      return true;
+    } catch {
+      return false;
     }
-    return error as Error;
   }
 
   public async save(descriptor: string, data: Buffer): Promise<void> {
@@ -43,23 +47,35 @@ class LocalStorageAdapter implements StorageAdapter {
     await writeFile(path, data);
   }
 
-  public async read(descriptor: string): Promise<Buffer> {
+  public async read(descriptor: string): Promise<Buffer | null> {
     const path = join(this.basePath, descriptor);
-    try {
-      return await readFile(path);
-    } catch (err: unknown) {
-      throw this.handleError(descriptor, err);
+    const exists = await this.exists(path);
+    if (!exists) {
+      return null;
     }
+    return await readFile(path);
   }
 
-  public async delete(descriptor: string): Promise<void> {
+  public async delete(descriptor: string): Promise<boolean> {
     const path = join(this.basePath, descriptor);
-    try {
-      await unlink(path);
-      await this.deleteEmptyDirectory(dirname(path));
-    } catch (err: unknown) {
-      throw this.handleError(descriptor, err);
+    const exists = await this.exists(path);
+    if (!exists) {
+      return false;
     }
+    await unlink(path);
+    await this.deleteEmptyDirectory(dirname(path));
+    return true;
+  }
+
+  public async deleteDir(descriptor: string): Promise<number> {
+    const path = join(this.basePath, descriptor);
+    const exists = await this.exists(path);
+    if (!exists) {
+      return 0;
+    }
+    const count = (await readdir(path)).length;
+    await this.deleteDirectory(path);
+    return count;
   }
 }
 
