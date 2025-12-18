@@ -48,7 +48,7 @@ describe('user', () => {
     const users = mocked_db.getMemory().user_.items;
     expect(users.length).toBe(1);
     expect(users.at(0)).toEqual({ ...testUser, userKey: 'key2' });
-    expect(updated).toBe(1);
+    expect(updated).toBe(true);
   });
 
   test('deleteUser deletes user.', async () => {
@@ -58,7 +58,7 @@ describe('user', () => {
 
     const users = mocked_db.getMemory().user_.items;
     expect(users.length).toBe(0);
-    expect(deleted).toBe(1);
+    expect(deleted).toBe(true);
   });
 
   test('getAllUsers gets all users.', async () => {

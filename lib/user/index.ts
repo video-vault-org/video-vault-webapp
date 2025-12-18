@@ -18,14 +18,14 @@ const addUser = async function ({ userId, username, ...rest }: User): Promise<vo
   await db.add('user_', { ...rest, userId, username });
 };
 
-const updateUser = async function (userId: string, update: Record<string, DbValue>): Promise<number> {
+const updateUser = async function (userId: string, update: Record<string, DbValue>): Promise<boolean> {
   const db = await loadDb();
-  return await db.update('user_', 'userId', userId, update);
+  return (await db.update('user_', 'userId', userId, update)) > 0;
 };
 
-const deleteUser = async function (userId: string): Promise<number> {
+const deleteUser = async function (userId: string): Promise<boolean> {
   const db = await loadDb();
-  return await db.delete('user_', 'userId', userId);
+  return (await db.delete('user_', 'userId', userId)) > 0;
 };
 
 const getAllUsers = async function (): Promise<User[]> {
