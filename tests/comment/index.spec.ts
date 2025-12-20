@@ -1,7 +1,9 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import {
   addComment,
-  deleteVideoComments, getComment, getVideoComments,
+  deleteVideoComments,
+  getComment,
+  getVideoComments,
   markCommentAsDeleted,
   markUserCommentsAsDeleted,
   updateComment

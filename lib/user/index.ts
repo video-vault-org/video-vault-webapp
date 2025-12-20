@@ -45,4 +45,13 @@ const getUserByUsername = async function (username: string): Promise<User | null
   return user ? (user as unknown as User) : null;
 };
 
-export { addUser, updateUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername };
+const getDisplayNames = async function (): Promise<Record<string, string>> {
+  const users = await getAllUsers();
+  const displayNames: Record<string, string> = {};
+  users.forEach((user) => {
+    displayNames[user.userId] = user.displayName;
+  });
+  return displayNames;
+};
+
+export { addUser, updateUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername, getDisplayNames };

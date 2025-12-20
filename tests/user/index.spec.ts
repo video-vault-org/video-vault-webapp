@@ -1,5 +1,13 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import { addUser, updateUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername } from '@/user';
+import {
+  addUser,
+  updateUser,
+  deleteUser,
+  getAllUsers,
+  getUserByUserId,
+  getUserByUsername,
+  getDisplayNames
+} from '@/user';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -16,6 +24,7 @@ describe('user', () => {
   const testUser = {
     userId: 'testId',
     username: 'testName',
+    displayName: 'testDisplayName',
     passwordKeySalt: 'testSalt',
     userKey: 'testKey',
     loginHash: 'testHash',
@@ -116,5 +125,18 @@ describe('user', () => {
     const user = await getUserByUsername('nope');
 
     expect(user).toBe(null);
+  });
+
+  test('getDisplayNames gets display names.', async () => {
+    const user1 = { ...testUser, userId: 'Id1', displayName: 'name1' };
+    const user2 = { ...testUser, userId: 'Id2', displayName: 'name2' };
+    const user3 = { ...testUser, userId: 'Id3', displayName: 'name3' };
+    mocked_db.getMemory().user_.items.push(user1);
+    mocked_db.getMemory().user_.items.push(user2);
+    mocked_db.getMemory().user_.items.push(user3);
+
+    const names = await getDisplayNames();
+
+    expect(names).toEqual({ Id1: 'name1', Id2: 'name2', Id3: 'name3' });
   });
 });
