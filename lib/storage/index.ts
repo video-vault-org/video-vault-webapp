@@ -11,6 +11,14 @@ const saveConfig = async function (config: StorageConfig) {
   resetStorage();
 };
 
+const loadConfig = async function (): Promise<StorageConfig | null> {
+  const configBuffer = await new LocalStorageAdapter({ basePath: './conf' }).read('storage.json');
+  if (!configBuffer) {
+    return null;
+  }
+  return JSON.parse(configBuffer.toString('utf8'));
+};
+
 const loadStorage = async function (): Promise<StorageAdapter> {
   if (storage) {
     return storage;
@@ -32,4 +40,4 @@ const resetStorage = function () {
   storage = null;
 };
 
-export { saveConfig, loadStorage, resetStorage };
+export { saveConfig, loadConfig, loadStorage, resetStorage };

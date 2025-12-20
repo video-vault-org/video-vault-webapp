@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import mockFS from 'mock-fs';
-import { saveConfig, loadStorage, resetStorage } from '@/storage';
+import { saveConfig, loadConfig, loadStorage, resetStorage } from '@/storage';
 import { exists } from '#/util';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import { StorageConfig } from '@/storage/types/StorageConfig';
@@ -20,6 +20,22 @@ describe('storage', () => {
 
     expect(await exists('./conf/storage.json')).toBe(true);
     expect(JSON.parse((await fs.readFile('./conf/storage.json'))?.toString('utf8'))).toEqual({ type: 'local', conf: { basePath: './files' } });
+  });
+
+  test('loadConfig loads config.', async () => {
+    mockFS({ './conf': { 'storage.json': JSON.stringify({ type: 'local' }) } });
+
+    const config = await loadConfig();
+
+    expect(config).toEqual({ type: 'local' });
+  });
+
+  test('loadConfig returns null.', async () => {
+    mockFS();
+
+    const config = await loadConfig();
+
+    expect(config).toBeNull();
   });
 
   test('loadStorage loads local storage correctly', async () => {

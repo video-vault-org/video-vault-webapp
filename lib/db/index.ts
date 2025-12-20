@@ -21,13 +21,21 @@ const saveConfig = async function (config: DatabaseConfig) {
   await resetDb();
 };
 
+const loadConfig = async function (): Promise<DatabaseConfig | null> {
+  const configBuffer = await new LocalStorageAdapter({ basePath: './conf' }).read('db.json');
+  if (!configBuffer) {
+    return null;
+  }
+  return JSON.parse(configBuffer.toString('utf8'));
+};
+
 const loadDb = async function (): Promise<DatabaseAdapter> {
   if (db) {
     return db;
   }
 
   const configBuffer = await new LocalStorageAdapter({ basePath: './conf' }).read('db.json');
-  const config: DatabaseConfig = JSON.parse(configBuffer?.toString('utf8') ?? '{}');
+  const config = JSON.parse(configBuffer?.toString('utf8') ?? '{}');
 
   if (config.type === 'mongo') {
     db = new MongoDatabaseAdapter(config.conf);
@@ -47,4 +55,4 @@ const resetDb = async function () {
   db = null;
 };
 
-export { saveConfig, loadDb, resetDb };
+export { saveConfig, loadConfig, loadDb, resetDb };

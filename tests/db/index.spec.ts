@@ -1,5 +1,5 @@
 import fs from 'fs/promises';
-import { saveConfig, loadDb, resetDb } from '@/db';
+import { saveConfig, loadDb, resetDb, loadConfig } from '@/db';
 import mockFS from 'mock-fs';
 import { exists } from '#/util';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
@@ -48,6 +48,22 @@ describe('db', (): void => {
 
     expect(await exists('./conf/db.json')).toBe(true);
     expect(JSON.parse((await fs.readFile('./conf/db.json'))?.toString('utf8'))).toEqual({ type: 'in-memory' });
+  });
+
+  test('loadConfig loads config.', async () => {
+    mockFS({ './conf': { 'db.json': JSON.stringify({ type: 'in-memory' }) } });
+
+    const config = await loadConfig();
+
+    expect(config).toEqual({ type: 'in-memory' });
+  });
+
+  test('loadConfig returns null.', async () => {
+    mockFS();
+
+    const config = await loadConfig();
+
+    expect(config).toBeNull();
   });
 
   test('loadDb loads in-memory db correctly', async () => {
