@@ -8,9 +8,10 @@ const comment: DbTableDefinition = {
     userId: 'string',
     videoId: 'string',
     content: 'string',
-    dateCreated: 'Date',
+    created: 'Date',
     edited: 'boolean',
-    dateModified: 'Date'
+    lastModified: 'Date',
+    deleted: 'boolean'
   }
 };
 
