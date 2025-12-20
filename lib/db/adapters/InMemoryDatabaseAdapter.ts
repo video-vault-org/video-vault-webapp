@@ -64,7 +64,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async add(table: string, item: DbItem): Promise<void> {
-    this.memory[table].items.push(item);
+    this.memory[table].items.push({ ...item });
   }
 
   public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
