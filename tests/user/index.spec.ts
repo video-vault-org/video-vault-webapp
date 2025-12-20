@@ -1,13 +1,5 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import {
-  addUser,
-  updateUser,
-  deleteUser,
-  getAllUsers,
-  getUserByUserId,
-  getUserByUsername,
-  getDisplayNames
-} from '@/user';
+import { addUser, updateUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername, getDisplayNames } from '@/user';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
