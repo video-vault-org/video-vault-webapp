@@ -35,6 +35,22 @@ jest.mock('pg', () => {
   };
 });
 
+jest.mock('mongoose', () => {
+  return {
+    createConnection() {
+      return {
+        async close() {},
+        collection() {},
+        async startSession() {
+          return {
+            async endSession() {}
+          };
+        }
+      };
+    }
+  };
+});
+
 describe('db', (): void => {
   afterEach(async (): Promise<void> => {
     mockFS.restore();
