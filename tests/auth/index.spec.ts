@@ -1,7 +1,6 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { initJwt, issueToken, resetKeys } from '@/auth/jwt';
 import { authenticate, authorize, hashPassword } from '@/auth';
-import { User } from '@/user/types/User';
 
 const username = 'testUser';
 const password = 'testPwd';

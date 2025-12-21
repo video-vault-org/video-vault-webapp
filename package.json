@@ -16,7 +16,7 @@
   },
   "scripts": {
     "audit": "better-npm-audit audit",
-    "lint": "eslint **/*.ts",
+    "lint": "eslint '**/*.ts'",
     "test": "jest --runInBand --verbose --detectOpenHandles --forceExit",
     "qa": "npm run lint && npm run audit && npm run test",
     "build": "rimraf ./built && tsc && tsc-alias"
