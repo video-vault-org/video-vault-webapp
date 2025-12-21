@@ -19,7 +19,9 @@ describe('user', () => {
     displayName: 'testDisplayName',
     passwordKeySalt: 'testSalt',
     userKey: 'testKey',
-    loginHash: 'testHash',
+    hash: 'testHash',
+    hashSalt: 'testSalt',
+    hashAlgorithm: 'testAlgo',
     userManager: true,
     videoManager: false,
     admin: true

@@ -89,7 +89,7 @@ describe('db', (): void => {
 
     expect(db).toBeInstanceOf(InMemoryDatabaseAdapter);
     expect((db as InMemoryDatabaseAdapter).isOpen()).toBe(true);
-    expect(Object.keys((db as InMemoryDatabaseAdapter).getMemory())).toEqual(['comment', 'user_', 'video']);
+    expect(Object.keys((db as InMemoryDatabaseAdapter).getMemory())).toEqual(['comment', 'user_', 'video', 'jwtkey', 'lock']);
   });
 
   test('loadDb loads mongo db correctly', async () => {

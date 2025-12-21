@@ -42,6 +42,7 @@
     "@testcontainers/mongodb": "^11.10.0",
     "@testcontainers/postgresql": "^11.10.0",
     "@types/jest": "29.5.13",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/mock-fs": "^4.13.4",
     "@types/node": "22.7.7",
     "@types/pg": "^8.16.0",
@@ -63,7 +64,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.948.0",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.0.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "uuid": "^11.0.3"
   }
 }

@@ -41,6 +41,25 @@ const video: DbTableDefinition = {
   }
 };
 
-const tables = [comment, user, video];
+const jwtkey: DbTableDefinition = {
+  table: 'jwtkey',
+  key: 'keyId',
+  fields: {
+    keyId: 'string',
+    key: 'string'
+  }
+};
+
+const lock: DbTableDefinition = {
+  table: 'lock',
+  key: 'username',
+  fields: {
+    username: 'string',
+    attempts: 'number',
+    lastAttempt: 'Date'
+  }
+};
+
+const tables = [comment, user, video, jwtkey, lock];
 
 export { tables };

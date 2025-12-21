@@ -2,7 +2,9 @@ interface User {
   userId: string;
   username: string;
   displayName: string;
-  loginHash: string;
+  hash: string;
+  hashSalt: string;
+  hashAlgorithm: string;
   passwordKeySalt: string;
   userKey: string;
   admin: boolean;
