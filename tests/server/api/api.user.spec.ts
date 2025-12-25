@@ -2,7 +2,7 @@ import request from 'supertest';
 import express from 'express';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { initJwt } from '@/auth/jwt';
-import { buildUserApi } from '@/server/userApi';
+import { buildUserApi } from '@/server/api/userApi';
 import { Lock } from '@/auth/types/Lock';
 import { DbItem } from '@/db/types/DbItem';
 

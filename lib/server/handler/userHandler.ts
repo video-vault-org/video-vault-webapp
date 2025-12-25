@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticate, authorize, hashPassword } from '@/auth';
-import { extractSub, getExpiresAt } from '@/auth/jwt';
+import { getExpiresAt } from '@/auth/jwt';
 import { addUser, deleteUser, getAllUsers, getUserByUsername, updateUser } from '@/user';
 import { User } from '@/user/types/User';
 import { authorizeInit } from '@/init';
