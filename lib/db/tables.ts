@@ -37,7 +37,8 @@ const video: DbTableDefinition = {
     videoId: 'string',
     title: 'string',
     meta: 'object',
-    filesPrefix: 'string'
+    filesPrefix: 'string',
+    lastModified: 'Date'
   }
 };
 
