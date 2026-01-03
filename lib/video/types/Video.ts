@@ -1,7 +1,7 @@
 interface Video {
   videoId: string;
   title: string;
-  meta: object;
+  meta: Record<string, unknown>;
   filesPrefix: string;
   lastModified: Date;
 }
