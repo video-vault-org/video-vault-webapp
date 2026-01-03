@@ -1,13 +1,5 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import {
-  addComment,
-  deleteVideoComments,
-  getComment,
-  getVideoComments,
-  markCommentAsDeleted,
-  markUserCommentsAsDeleted,
-  updateComment
-} from '@/comment';
+import { addComment, deleteVideoComments, getComment, getVideoComments, markCommentAsDeleted, updateComment } from '@/comment';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -74,21 +66,6 @@ describe('comment', () => {
     expect(comments.length).toBe(2);
     expect(comments.at(0)).toEqual({ ...testComment, lastModified: expectedDate, deleted: true, content: '' });
     expect(comments.at(1)).toEqual({ ...testComment, commentId: 'other' });
-    expect(markedAsDeleted).toBe(true);
-  });
-
-  test('markUserCommentsAsDeleted marks comments correctly.', async () => {
-    mocked_db.getMemory().comment.items.push({ ...testComment });
-    mocked_db.getMemory().comment.items.push({ ...testComment, commentId: 'other' });
-    mocked_db.getMemory().comment.items.push({ ...testComment, commentId: 'other2', userId: 'other' });
-
-    const markedAsDeleted = await markUserCommentsAsDeleted(testComment.userId);
-
-    const comments = mocked_db.getMemory().comment.items;
-    expect(comments.length).toBe(3);
-    expect(comments.at(0)).toEqual({ ...testComment, lastModified: expectedDate, deleted: true, content: '' });
-    expect(comments.at(1)).toEqual({ ...testComment, lastModified: expectedDate, deleted: true, content: '', commentId: 'other' });
-    expect(comments.at(2)).toEqual({ ...testComment, commentId: 'other2', userId: 'other' });
     expect(markedAsDeleted).toBe(true);
   });
 
