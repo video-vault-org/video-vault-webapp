@@ -10,5 +10,9 @@
   "1098681": {
     "active": true,
     "notes": "dev only and requires bad purpose"
+  },
+  "1111755": {
+    "active": true,
+    "notes": "query strings not parsed in backend"
   }
 }
