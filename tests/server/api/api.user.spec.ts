@@ -5,6 +5,7 @@ import { initJwt } from '@/auth/jwt';
 import { buildUserApi } from '@/server/api/userApi';
 import { Lock } from '@/auth/types/Lock';
 import { DbItem } from '@/db/types/DbItem';
+import { User } from '@/user/types/User';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -13,17 +14,6 @@ jest.mock('@/db', () => {
   return {
     async loadDb() {
       return mocked_db;
-    }
-  };
-});
-
-jest.mock('@/init', () => {
-  const actual = jest.requireActual('@/init');
-  // noinspection JSUnusedGlobalSymbols used as mock
-  return {
-    ...actual,
-    async authorizeInit(token: string) {
-      return token === 'abc';
     }
   };
 });
@@ -40,7 +30,7 @@ jest.mock('@/auth', () => {
 });
 
 describe('api - user', () => {
-  const testUser = {
+  const testUser: User = {
     userId: 'testId',
     username: 'testName',
     displayName: 'testDisplayName',
@@ -72,6 +62,7 @@ describe('api - user', () => {
   afterEach(() => {
     delete mocked_db.getMemory().user_;
     delete mocked_db.getMemory().jwtkey;
+    delete mocked_db.getMemory().lock;
   });
 
   describe('userManagerHandler', () => {
@@ -89,7 +80,19 @@ describe('api - user', () => {
       expect(response.body?.message).toEqual('ok');
     });
 
-    test('calls next if user is not user manager.', async () => {
+    test('calls next if is init.', async () => {
+      const api = buildApi();
+      api.post('/user/manage/test', (_, res) => {
+        res.status(200).json({ message: 'ok' });
+      });
+
+      const response = await request(api).post('/user/manage/test').send({ authorizedInit: true });
+
+      expect(response.status).toBe(200);
+      expect(response.body?.message).toEqual('ok');
+    });
+
+    test('responses error if user is not user manager.', async () => {
       const api = buildApi();
       api.post('/user/manage/test', (_, res) => {
         res.status(200).json({ message: 'ok' });
