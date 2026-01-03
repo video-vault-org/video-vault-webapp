@@ -43,6 +43,17 @@ const userManagerHandler: express.RequestHandler = async function (req, res, nex
 const addUserHandler: express.RequestHandler = async function (req, res) {
   const user = req.body.user as User;
   const [hashSalt, hash, hashAlgorithm] = await hashPassword(req.body.password ?? '');
+
+  const givenUserById = await getUserByUserId(user.userId);
+  if (givenUserById) {
+    return res.status(400).json({ error: 'user-exists-with-id' });
+  }
+
+  const givenUserByName = await getUserByUsername(user.username);
+  if (givenUserByName) {
+    return res.status(400).json({ error: 'user-exists-with-username' });
+  }
+
   await addUser({ ...user, hashSalt, hash, hashAlgorithm });
 
   res.status(201).json({ message: 'created' });

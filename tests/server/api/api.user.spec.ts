@@ -134,8 +134,8 @@ describe('api - user', () => {
         .post('/user/manage/add')
         .send({ authorizedUser: { ...testUser, userManager: true }, user: { ...testUser }, password: 'pwd' });
 
-      expect(response.status).toBe(500);
-      expect(response.text).toContain('User already exists with id testId');
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('user-exists-with-id');
       expect(mocked_db.getMemory().user_.items.length).toBe(1);
     });
 
@@ -147,8 +147,8 @@ describe('api - user', () => {
         .post('/user/manage/add')
         .send({ authorizedUser: { ...testUser, userManager: true }, user: { ...testUser, userId: 'newId' }, password: 'pwd' });
 
-      expect(response.status).toBe(500);
-      expect(response.text).toContain('User already exists with username testName');
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('user-exists-with-username');
       expect(mocked_db.getMemory().user_.items.length).toBe(1);
     });
   });

@@ -5,6 +5,8 @@ import { getVideo } from '@/video';
 import { User } from '@/user/types/User';
 import { Comment } from '@/comment/types/Comment';
 
+const LENGTH_THRESHOLD = 10_000;
+
 const commentVideoManagerHandler: express.RequestHandler = async function (req, res, next) {
   const user = req.body?.authorizedUser as User | undefined;
 
@@ -18,6 +20,11 @@ const commentVideoManagerHandler: express.RequestHandler = async function (req, 
 const addCommentHandler: express.RequestHandler = async function (req, res) {
   const comment = req.body.comment as Comment;
 
+  const givenComment = await getComment(comment.commentId ?? '-');
+  if (givenComment) {
+    return res.status(400).json({ error: 'comment-exists' });
+  }
+
   const video = await getVideo(comment.videoId ?? '');
   if (!video) {
     return res.status(400).json({ error: 'no-such-video' });
@@ -26,6 +33,10 @@ const addCommentHandler: express.RequestHandler = async function (req, res) {
   const user = await getUserByUserId(comment.userId ?? '');
   if (!user) {
     return res.status(400).json({ error: 'no-such-user' });
+  }
+
+  if (comment.content.length > LENGTH_THRESHOLD) {
+    return res.status(400).json({ error: 'content-too-long' });
   }
 
   await addComment(comment);
@@ -38,6 +49,10 @@ const editCommentHandler: express.RequestHandler = async function (req, res) {
   const comment = await getComment(commentId ?? '');
   if (!comment) {
     return res.status(400).json({ error: 'no-such-comment' });
+  }
+
+  if (content.length > LENGTH_THRESHOLD) {
+    return res.status(400).json({ error: 'content-too-long' });
   }
 
   const updated = await updateComment(commentId ?? '', content ?? comment.content ?? '');
@@ -59,6 +74,10 @@ const editOwnCommentHandler: express.RequestHandler = async function (req, res) 
 
   if ((authorizedUser?.userId ?? '_') !== comment?.userId) {
     return res.status(403).json({ error: 'not-your-comment' });
+  }
+
+  if (content.length > LENGTH_THRESHOLD) {
+    return res.status(400).json({ error: 'content-too-long' });
   }
 
   const updated = await updateComment(commentId ?? '_', content ?? comment?.content ?? '');

@@ -118,8 +118,8 @@ describe('api - comment', () => {
         .post('/comment/add')
         .send({ authorizedUser: { ...testUser, videoManager: false }, comment: testComment });
 
-      expect(response.status).toBe(500);
-      expect(response.text).toContain(`Comment already exists with id ${testComment.commentId}`);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('comment-exists');
       expect(mocked_db.getMemory().comment.items.length).toBe(1);
     });
 
@@ -130,10 +130,10 @@ describe('api - comment', () => {
 
       const response = await request(api)
         .post('/comment/add')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, content: 'a'.repeat(64_001) } });
+        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, content: 'a'.repeat(10_001) } });
 
-      expect(response.status).toBe(500);
-      expect(response.text).toContain('content-too-long');
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('content-too-long');
       expect(mocked_db.getMemory().comment.items.length).toBe(0);
     });
 
@@ -197,10 +197,10 @@ describe('api - comment', () => {
 
       const response = await request(api)
         .post('/comment/manage/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: true }, commentId: testComment.commentId, content: 'a'.repeat(64_001) });
+        .send({ authorizedUser: { ...testUser, videoManager: true }, commentId: testComment.commentId, content: 'a'.repeat(10_001) });
 
-      expect(response.status).toBe(500);
-      expect(response.text).toContain('content-too-long');
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('content-too-long');
       expect(mocked_db.getMemory().comment.items.at(0)?.content).toEqual(testComment.content);
     });
   });
@@ -237,10 +237,10 @@ describe('api - comment', () => {
 
       const response = await request(api)
         .post('/comment/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, commentId: testComment.commentId, content: 'a'.repeat(64_001) });
+        .send({ authorizedUser: { ...testUser, videoManager: false }, commentId: testComment.commentId, content: 'a'.repeat(10_001) });
 
-      expect(response.status).toBe(500);
-      expect(response.text).toContain('content-too-long');
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('content-too-long');
       expect(mocked_db.getMemory().comment.items.at(0)?.content).toEqual(testComment.content);
     });
 
