@@ -1,9 +1,9 @@
 import express from 'express';
 import { addComment, getComment, getVideoComments, markCommentAsDeleted, updateComment } from '@/comment';
+import { getAllUsers, getUserByUserId } from '@/user';
+import { getVideo } from '@/video';
 import { User } from '@/user/types/User';
 import { Comment } from '@/comment/types/Comment';
-import { getAllUsers } from '@/user';
-import { getVideo } from '@/video';
 
 const commentVideoManagerHandler: express.RequestHandler = async function (req, res, next) {
   const user = req.body?.authorizedUser as User | undefined;
@@ -21,6 +21,11 @@ const addCommentHandler: express.RequestHandler = async function (req, res) {
   const video = await getVideo(comment.videoId ?? '');
   if (!video) {
     return res.status(400).json({ error: 'no-such-video' });
+  }
+
+  const user = await getUserByUserId(comment.userId ?? '');
+  if (!user) {
+    return res.status(400).json({ error: 'no-such-user' });
   }
 
   await addComment(comment);
@@ -67,6 +72,12 @@ const editOwnCommentHandler: express.RequestHandler = async function (req, res) 
 
 const removeCommentHandler: express.RequestHandler = async function (req, res) {
   const { commentId } = req.params ?? {};
+
+  const comment = await getComment(commentId ?? '');
+
+  if (!comment) {
+    return res.status(400).json({ error: 'no-such-comment' });
+  }
 
   const marked = await markCommentAsDeleted(commentId ?? '');
 

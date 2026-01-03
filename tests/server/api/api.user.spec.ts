@@ -177,7 +177,7 @@ describe('api - user', () => {
         .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', username: 'newUsername' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toEqual('not-updated');
+      expect(response.body.error).toEqual('no-such-user');
     });
   });
 
@@ -243,7 +243,7 @@ describe('api - user', () => {
         });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toEqual('not-updated');
+      expect(response.body.error).toEqual('no-such-user');
     });
   });
 
@@ -307,7 +307,7 @@ describe('api - user', () => {
         .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', userManager: true, videoManager: false, admin: true });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toEqual('not-updated');
+      expect(response.body.error).toEqual('no-such-user');
     });
   });
 
@@ -335,7 +335,7 @@ describe('api - user', () => {
         .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'nope', displayName: 'newName' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toEqual('not-updated');
+      expect(response.body.error).toEqual('no-such-user');
     });
   });
 
@@ -362,7 +362,7 @@ describe('api - user', () => {
         .send({ authorizedUser: { ...testUser } });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toEqual('not-deleted');
+      expect(response.body.error).toEqual('no-such-user');
       expect(mocked_db.getMemory().user_.items.length).toBe(1);
     });
   });

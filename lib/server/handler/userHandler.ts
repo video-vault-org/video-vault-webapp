@@ -1,9 +1,9 @@
 import express from 'express';
 import { authenticate, authorize, hashPassword } from '@/auth';
 import { getExpiresAt } from '@/auth/jwt';
-import { addUser, deleteUser, getAllUsers, getUserByUsername, updateUser } from '@/user';
-import { User } from '@/user/types/User';
+import { addUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername, updateUser } from '@/user';
 import { authorizeInit } from '@/init';
+import { User } from '@/user/types/User';
 
 const authorizeHandler: express.RequestHandler = async function (req, res, next) {
   req.body = req.body ?? {};
@@ -50,6 +50,12 @@ const addUserHandler: express.RequestHandler = async function (req, res) {
 
 const modifyUsernameHandler: express.RequestHandler = async function (req, res) {
   const { userId, username } = req.body;
+
+  const user = await getUserByUserId(userId);
+  if (!user) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
   const updated = await updateUser(userId, { username });
 
   if (!updated) {
@@ -60,7 +66,13 @@ const modifyUsernameHandler: express.RequestHandler = async function (req, res) 
 
 const modifyOwnUsernameHandler: express.RequestHandler = async function (req, res) {
   const { authorizedUser, username } = req.body ?? {};
-  const { userId } = authorizedUser ?? {};
+
+  if (!authorizedUser) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
+  const { userId } = authorizedUser;
+
   const updated = await updateUser(userId, { username });
 
   if (!updated) {
@@ -72,6 +84,12 @@ const modifyOwnUsernameHandler: express.RequestHandler = async function (req, re
 const modifyCredentialsHandler: express.RequestHandler = async function (req, res) {
   const { userId, username, password, passwordKeySalt, userKey } = req.body;
   const [hashSalt, hash, hashAlgorithm] = await hashPassword(password);
+
+  const user = await getUserByUserId(userId);
+  if (!user) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
   const updated = await updateUser(userId, { username, passwordKeySalt, userKey, hashSalt, hash, hashAlgorithm });
 
   if (!updated) {
@@ -82,7 +100,12 @@ const modifyCredentialsHandler: express.RequestHandler = async function (req, re
 
 const modifyOwnCredentialsHandler: express.RequestHandler = async function (req, res) {
   const { authorizedUser, username, password, passwordKeySalt, userKey } = req.body ?? {};
-  const { userId } = authorizedUser ?? {};
+
+  if (!authorizedUser) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
+  const { userId } = authorizedUser;
   const [hashSalt, hash, hashAlgorithm] = await hashPassword(password);
   const updated = await updateUser(userId, { username, passwordKeySalt, userKey, hashSalt, hash, hashAlgorithm });
 
@@ -94,6 +117,12 @@ const modifyOwnCredentialsHandler: express.RequestHandler = async function (req,
 
 const modifyPermissionsHandler: express.RequestHandler = async function (req, res) {
   const { userId, userManager, videoManager, admin } = req.body;
+
+  const user = await getUserByUserId(userId);
+  if (!user) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
   const updated = await updateUser(userId, { userManager, videoManager, admin });
 
   if (!updated) {
@@ -104,6 +133,12 @@ const modifyPermissionsHandler: express.RequestHandler = async function (req, re
 
 const modifyDisplayNameHandler: express.RequestHandler = async function (req, res) {
   const { userId, displayName } = req.body;
+
+  const user = await getUserByUserId(userId);
+  if (!user) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
   const updated = await updateUser(userId, { displayName });
 
   if (!updated) {
@@ -114,6 +149,12 @@ const modifyDisplayNameHandler: express.RequestHandler = async function (req, re
 
 const deleteUserHandler: express.RequestHandler = async function (req, res) {
   const { userId } = req.params;
+
+  const user = await getUserByUserId(userId);
+  if (!user) {
+    return res.status(400).json({ error: 'no-such-user' });
+  }
+
   const deleted = await deleteUser(userId ?? '_');
 
   if (!deleted) {

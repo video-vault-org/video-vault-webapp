@@ -97,6 +97,7 @@ describe('api - comment', () => {
     test('adds comment.', async () => {
       const api = buildApi();
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
+      mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
 
       const response = await request(api)
         .post('/comment/add')
@@ -111,6 +112,7 @@ describe('api - comment', () => {
       const api = buildApi();
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
       mocked_db.getMemory().comment.items.push({ ...testComment });
+      mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
 
       const response = await request(api)
         .post('/comment/add')
@@ -124,6 +126,7 @@ describe('api - comment', () => {
     test('responses error if comment content is too long.', async () => {
       const api = buildApi();
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
+      mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
 
       const response = await request(api)
         .post('/comment/add')
@@ -135,6 +138,7 @@ describe('api - comment', () => {
     });
 
     test('responses error if video does not exist.', async () => {
+      mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
       const api = buildApi();
 
       const response = await request(api)
@@ -142,7 +146,21 @@ describe('api - comment', () => {
         .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, videoId: 'nope' } });
 
       expect(response.status).toBe(400);
-      expect(response.text).toContain('no-such-video');
+      expect(response.body.error).toContain('no-such-video');
+      expect(mocked_db.getMemory().comment.items.length).toBe(0);
+    });
+
+    test('responses error if user does not exist.', async () => {
+      mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
+      mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
+      const api = buildApi();
+
+      const response = await request(api)
+        .post('/comment/add')
+        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, userId: 'nope' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toEqual('no-such-user');
       expect(mocked_db.getMemory().comment.items.length).toBe(0);
     });
   });
@@ -262,7 +280,7 @@ describe('api - comment', () => {
         .send({ authorizedUser: { ...testUser, videoManager: true } });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toEqual('not-removed');
+      expect(response.body.error).toEqual('no-such-comment');
       expect(mocked_db.getMemory().comment.items.length).toBe(0);
     });
   });
