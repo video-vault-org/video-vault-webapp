@@ -4,22 +4,21 @@ import { getExpiresAt } from '@/auth/jwt';
 import { addUser, deleteUser, getAllUsers, getUserByUserId, getUserByUsername, updateUser } from '@/user';
 import { authorizeInit } from '@/init';
 import { User } from '@/user/types/User';
+import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
+import { AuthorizedInitRequest } from '@/server/types/AuthorizedInitRequest';
 
 const authorizeHandler: express.RequestHandler = async function (req, res, next) {
-  req.body = req.body ?? {};
-  delete req.body.authorizedUser;
-  delete req.body.authorizedInit;
   const token = (req.header('authorize') ?? '').replace(/^bearer /, '');
 
   const user = await authorize(token);
   if (user) {
-    req.body.authorizedUser = user;
+    (req as AuthorizedUserRequest).authorizedUser = user;
     return next();
   }
 
   const authorizedInit = await authorizeInit(token);
   if (authorizedInit) {
-    req.body.authorizedInit = true;
+    (req as AuthorizedInitRequest).authorizedInit = true;
     return next();
   }
 
@@ -27,11 +26,11 @@ const authorizeHandler: express.RequestHandler = async function (req, res, next)
 };
 
 const userManagerHandler: express.RequestHandler = async function (req, res, next) {
-  if (req.body?.authorizedInit) {
+  if ((req as AuthorizedInitRequest).authorizedInit) {
     return next();
   }
 
-  const user = req.body?.authorizedUser as User | undefined;
+  const user = (req as AuthorizedUserRequest).authorizedUser as User | undefined;
 
   if (user?.userManager) {
     return next();
@@ -76,7 +75,8 @@ const modifyUsernameHandler: express.RequestHandler = async function (req, res) 
 };
 
 const modifyOwnUsernameHandler: express.RequestHandler = async function (req, res) {
-  const { authorizedUser, username } = req.body ?? {};
+  const { username } = req.body ?? {};
+  const authorizedUser = (req as AuthorizedUserRequest).authorizedUser as User | undefined;
 
   if (!authorizedUser) {
     return res.status(400).json({ error: 'no-such-user' });
@@ -110,8 +110,9 @@ const modifyCredentialsHandler: express.RequestHandler = async function (req, re
 };
 
 const modifyOwnCredentialsHandler: express.RequestHandler = async function (req, res) {
-  const { authorizedUser, username, password, passwordKeySalt, userKey } = req.body ?? {};
+  const { username, password, passwordKeySalt, userKey } = req.body ?? {};
 
+  const authorizedUser = (req as AuthorizedUserRequest).authorizedUser as User | undefined;
   if (!authorizedUser) {
     return res.status(400).json({ error: 'no-such-user' });
   }

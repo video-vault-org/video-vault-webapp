@@ -2,9 +2,10 @@ import request from 'supertest';
 import express from 'express';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { buildCommentApi } from '@/server/api/commentApi';
+import { PAGE_SIZE } from '@/comment';
+import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 import { User } from '@/user/types/User';
 import { Comment } from '@/comment/types/Comment';
-import { PAGE_SIZE } from '@/comment';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -43,9 +44,13 @@ describe('api - comment', () => {
     admin: true
   };
 
-  const buildApi = function () {
+  const buildApi = function (videoManager: boolean) {
     const commentApi = buildCommentApi();
     const api = express();
+    api.use(async (req, _, next) => {
+      (req as AuthorizedUserRequest).authorizedUser = { ...testUser, videoManager };
+      next();
+    });
     api.use(express.json());
     api.use('/comment', commentApi);
     return api;
@@ -65,28 +70,24 @@ describe('api - comment', () => {
 
   describe('commentVideoManagerHandler', () => {
     test('calls next if user is video manager.', async () => {
-      const api = buildApi();
+      const api = buildApi(true);
       api.post('/comment/manage/test', (_, res) => {
         res.status(200).json({ message: 'ok' });
       });
 
-      const response = await request(api)
-        .post('/comment/manage/test')
-        .send({ authorizedUser: { ...testUser, videoManager: true } });
+      const response = await request(api).post('/comment/manage/test');
 
       expect(response.status).toBe(200);
       expect(response.body?.message).toEqual('ok');
     });
 
     test('responses error if user is not video manager.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
       api.post('/comment/manage/test', (_, res) => {
         res.status(200).json({ message: 'ok' });
       });
 
-      const response = await request(api)
-        .post('/comment/manage/test')
-        .send({ authorizedUser: { ...testUser, videoManager: false } });
+      const response = await request(api).post('/comment/manage/test');
 
       expect(response.status).toBe(403);
       expect(response.body?.error).toEqual('forbidden');
@@ -95,13 +96,11 @@ describe('api - comment', () => {
 
   describe('addCommentHandler', () => {
     test('adds comment.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
       mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
 
-      const response = await request(api)
-        .post('/comment/add')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: testComment });
+      const response = await request(api).post('/comment/add').send({ comment: testComment });
 
       expect(response.status).toBe(201);
       expect(response.body.message).toEqual('created');
@@ -109,14 +108,12 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment already exists.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
       mocked_db.getMemory().comment.items.push({ ...testComment });
       mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
 
-      const response = await request(api)
-        .post('/comment/add')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: testComment });
+      const response = await request(api).post('/comment/add').send({ comment: testComment });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('comment-exists');
@@ -124,13 +121,13 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment content is too long.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
       mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
 
       const response = await request(api)
         .post('/comment/add')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, content: 'a'.repeat(10_001) } });
+        .send({ comment: { ...testComment, content: 'a'.repeat(10_001) } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('content-too-long');
@@ -139,11 +136,11 @@ describe('api - comment', () => {
 
     test('responses error if video does not exist.', async () => {
       mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
-      const api = buildApi();
+      const api = buildApi(false);
 
       const response = await request(api)
         .post('/comment/add')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, videoId: 'nope' } });
+        .send({ comment: { ...testComment, videoId: 'nope' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('no-such-video');
@@ -153,11 +150,11 @@ describe('api - comment', () => {
     test('responses error if user does not exist.', async () => {
       mocked_db.getMemory().video.items.push({ videoId: testComment.videoId });
       mocked_db.getMemory().user_.items.push({ userId: testComment.userId });
-      const api = buildApi();
+      const api = buildApi(false);
 
       const response = await request(api)
         .post('/comment/add')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, comment: { ...testComment, userId: 'nope' } });
+        .send({ comment: { ...testComment, userId: 'nope' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-user');
@@ -168,11 +165,9 @@ describe('api - comment', () => {
   describe('editCommentHandler', () => {
     test('edits comment.', async () => {
       mocked_db.getMemory().comment.items.push({ ...testComment });
-      const api = buildApi();
+      const api = buildApi(true);
 
-      const response = await request(api)
-        .post('/comment/manage/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: true }, commentId: testComment.commentId, content: 'new content' });
+      const response = await request(api).post('/comment/manage/edit').send({ commentId: testComment.commentId, content: 'new content' });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -180,11 +175,9 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true);
 
-      const response = await request(api)
-        .post('/comment/manage/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: true }, commentId: testComment.commentId, content: 'new content' });
+      const response = await request(api).post('/comment/manage/edit').send({ commentId: testComment.commentId, content: 'new content' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-comment');
@@ -192,12 +185,12 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment content is too long.', async () => {
-      const api = buildApi();
+      const api = buildApi(true);
       mocked_db.getMemory().comment.items.push({ ...testComment });
 
       const response = await request(api)
         .post('/comment/manage/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: true }, commentId: testComment.commentId, content: 'a'.repeat(10_001) });
+        .send({ commentId: testComment.commentId, content: 'a'.repeat(10_001) });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('content-too-long');
@@ -208,11 +201,9 @@ describe('api - comment', () => {
   describe('editOwnCommentHandler', () => {
     test('edits comment.', async () => {
       mocked_db.getMemory().comment.items.push({ ...testComment });
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .post('/comment/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, commentId: testComment.commentId, content: 'new content' });
+      const response = await request(api).post('/comment/edit').send({ commentId: testComment.commentId, content: 'new content' });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -220,11 +211,9 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .post('/comment/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, commentId: testComment.commentId, content: 'new content' });
+      const response = await request(api).post('/comment/edit').send({ commentId: testComment.commentId, content: 'new content' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-comment');
@@ -232,12 +221,12 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment content is too long.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
       mocked_db.getMemory().comment.items.push({ ...testComment });
 
       const response = await request(api)
         .post('/comment/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: false }, commentId: testComment.commentId, content: 'a'.repeat(10_001) });
+        .send({ commentId: testComment.commentId, content: 'a'.repeat(10_001) });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('content-too-long');
@@ -245,12 +234,10 @@ describe('api - comment', () => {
     });
 
     test('responses error if it is not the own comment.', async () => {
-      const api = buildApi();
-      mocked_db.getMemory().comment.items.push({ ...testComment });
+      const api = buildApi(false);
+      mocked_db.getMemory().comment.items.push({ ...testComment, userId: 'other' });
 
-      const response = await request(api)
-        .post('/comment/edit')
-        .send({ authorizedUser: { ...testUser, videoManager: false, userId: 'other' }, commentId: testComment.commentId, content: '-' });
+      const response = await request(api).post('/comment/edit').send({ commentId: testComment.commentId, content: '-' });
 
       expect(response.status).toBe(403);
       expect(response.body.error).toEqual('not-your-comment');
@@ -261,11 +248,9 @@ describe('api - comment', () => {
   describe('removeCommentHandler', () => {
     test('marks comment as deleted.', async () => {
       mocked_db.getMemory().comment.items.push({ ...testComment });
-      const api = buildApi();
+      const api = buildApi(true);
 
-      const response = await request(api)
-        .delete('/comment/manage/remove/' + testComment.commentId)
-        .send({ authorizedUser: { ...testUser, videoManager: true } });
+      const response = await request(api).delete('/comment/manage/remove/' + testComment.commentId);
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('removed');
@@ -273,11 +258,9 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true);
 
-      const response = await request(api)
-        .delete('/comment/manage/remove/' + testComment.commentId)
-        .send({ authorizedUser: { ...testUser, videoManager: true } });
+      const response = await request(api).delete('/comment/manage/remove/' + testComment.commentId);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-comment');
@@ -288,11 +271,9 @@ describe('api - comment', () => {
   describe('removeOwnCommentHandler', () => {
     test('marks comment as deleted.', async () => {
       mocked_db.getMemory().comment.items.push({ ...testComment });
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .delete('/comment/remove/' + testComment.commentId)
-        .send({ authorizedUser: { ...testUser, videoManager: false } });
+      const response = await request(api).delete('/comment/remove/' + testComment.commentId);
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('removed');
@@ -300,11 +281,9 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .delete('/comment/remove/' + testComment.commentId)
-        .send({ authorizedUser: { ...testUser, videoManager: false } });
+      const response = await request(api).delete('/comment/remove/' + testComment.commentId);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-comment');
@@ -312,12 +291,10 @@ describe('api - comment', () => {
     });
 
     test('responses error if comment is not own comment.', async () => {
-      mocked_db.getMemory().comment.items.push({ ...testComment });
-      const api = buildApi();
+      mocked_db.getMemory().comment.items.push({ ...testComment, userId: 'other' });
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .delete('/comment/remove/' + testComment.commentId)
-        .send({ authorizedUser: { ...testUser, videoManager: false, userId: 'other' } });
+      const response = await request(api).delete('/comment/remove/' + testComment.commentId);
 
       expect(response.status).toBe(403);
       expect(response.body.error).toEqual('not-your-comment');
@@ -336,11 +313,9 @@ describe('api - comment', () => {
 
     test('gets all comments of video on page 1.', async () => {
       await addSomeComments();
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .get('/comment/testVideoId/1')
-        .send({ authorizedUser: { ...testUser } });
+      const response = await request(api).get('/comment/testVideoId/1');
 
       expect(response.status).toBe(200);
       expect(response.body.comments.length).toBe(100);
@@ -352,11 +327,9 @@ describe('api - comment', () => {
 
     test('gets all comments of video on page 2.', async () => {
       await addSomeComments();
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .get('/comment/testVideoId/2')
-        .send({ authorizedUser: { ...testUser } });
+      const response = await request(api).get('/comment/testVideoId/2');
 
       expect(response.status).toBe(200);
       expect(response.body.comments.length).toBe(11);
@@ -372,11 +345,9 @@ describe('api - comment', () => {
       mocked_db.getMemory().user_.items.push({ userId: 'a', displayName: 'x' });
       mocked_db.getMemory().user_.items.push({ userId: 'b', displayName: 'y' });
       mocked_db.getMemory().user_.items.push({ userId: 'c', displayName: 'z' });
-      const api = buildApi();
+      const api = buildApi(false);
 
-      const response = await request(api)
-        .get('/comment/name-mapping')
-        .send({ authorizedUser: { ...testUser } });
+      const response = await request(api).get('/comment/name-mapping');
 
       expect(response.status).toBe(200);
       expect(response.body.mapping).toEqual({ a: 'x', b: 'y', c: 'z' });

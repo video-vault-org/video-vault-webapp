@@ -4,13 +4,14 @@ import { getAllUsers, getUserByUserId } from '@/user';
 import { getVideo } from '@/video';
 import { User } from '@/user/types/User';
 import { Comment } from '@/comment/types/Comment';
+import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 
 const LENGTH_THRESHOLD = 10_000;
 
 const commentVideoManagerHandler: express.RequestHandler = async function (req, res, next) {
-  const user = req.body?.authorizedUser as User | undefined;
+  const authorizedUser = (req as AuthorizedUserRequest).authorizedUser as User | undefined;
 
-  if (user?.videoManager) {
+  if (authorizedUser?.videoManager) {
     return next();
   }
 
@@ -65,7 +66,8 @@ const editCommentHandler: express.RequestHandler = async function (req, res) {
 };
 
 const editOwnCommentHandler: express.RequestHandler = async function (req, res) {
-  const { commentId, content, authorizedUser } = req.body ?? {};
+  const { commentId, content } = req.body ?? {};
+  const authorizedUser = (req as AuthorizedUserRequest).authorizedUser as User | undefined;
   const comment = await getComment(commentId ?? '');
 
   if (!comment) {
@@ -108,7 +110,7 @@ const removeCommentHandler: express.RequestHandler = async function (req, res) {
 };
 
 const removeOwnCommentHandler: express.RequestHandler = async function (req, res) {
-  const { authorizedUser } = req.body ?? {};
+  const authorizedUser = (req as AuthorizedUserRequest).authorizedUser as User | undefined;
   const { commentId } = req.params ?? {};
   const comment = await getComment(commentId ?? '');
 
@@ -136,7 +138,7 @@ const getVideoCommentsHandler: express.RequestHandler = async function (req, res
   res.status(200).json({ comments });
 };
 
-const getNameMappingHandler: express.RequestHandler = async function (req, res) {
+const getNameMappingHandler: express.RequestHandler = async function (_, res) {
   const users = await getAllUsers();
   const mapping: Record<string, string> = {};
   users.forEach((user) => {

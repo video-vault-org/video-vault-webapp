@@ -6,6 +6,8 @@ import { buildUserApi } from '@/server/api/userApi';
 import { Lock } from '@/auth/types/Lock';
 import { DbItem } from '@/db/types/DbItem';
 import { User } from '@/user/types/User';
+import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
+import { AuthorizedInitRequest } from '@/server/types/AuthorizedInitRequest';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -44,9 +46,16 @@ describe('api - user', () => {
     admin: true
   };
 
-  const buildApi = function () {
+  const buildApi = function (userManager: boolean, init: boolean) {
     const userApi = buildUserApi();
     const api = express();
+    api.use(async (req, _, next) => {
+      if (init) {
+        (req as AuthorizedInitRequest).authorizedInit = true;
+      }
+      (req as AuthorizedUserRequest).authorizedUser = { ...testUser, userManager };
+      next();
+    });
     api.use(express.json());
     api.use('/user', userApi);
     return api;
@@ -67,40 +76,36 @@ describe('api - user', () => {
 
   describe('userManagerHandler', () => {
     test('calls next if user is user manager.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       api.post('/user/manage/test', (_, res) => {
         res.status(200).json({ message: 'ok' });
       });
 
-      const response = await request(api)
-        .post('/user/manage/test')
-        .send({ authorizedUser: { ...testUser, userManager: true } });
+      const response = await request(api).post('/user/manage/test');
 
       expect(response.status).toBe(200);
       expect(response.body?.message).toEqual('ok');
     });
 
     test('calls next if is init.', async () => {
-      const api = buildApi();
+      const api = buildApi(false, true);
       api.post('/user/manage/test', (_, res) => {
         res.status(200).json({ message: 'ok' });
       });
 
-      const response = await request(api).post('/user/manage/test').send({ authorizedInit: true });
+      const response = await request(api).post('/user/manage/test');
 
       expect(response.status).toBe(200);
       expect(response.body?.message).toEqual('ok');
     });
 
     test('responses error if user is not user manager.', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       api.post('/user/manage/test', (_, res) => {
         res.status(200).json({ message: 'ok' });
       });
 
-      const response = await request(api)
-        .post('/user/manage/test')
-        .send({ authorizedUser: { ...testUser, userManager: false } });
+      const response = await request(api).post('/user/manage/test');
 
       expect(response.status).toBe(403);
       expect(response.body?.error).toEqual('forbidden');
@@ -109,11 +114,11 @@ describe('api - user', () => {
 
   describe('addUserHandler', () => {
     test('adds user.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
 
       const response = await request(api)
         .post('/user/manage/add')
-        .send({ authorizedUser: { ...testUser, userManager: true }, user: { ...testUser, userId: 'newId' }, password: 'pwd' });
+        .send({ user: { ...testUser, userId: 'newId' }, password: 'pwd' });
 
       expect(response.status).toBe(201);
       expect(response.body.message).toEqual('created');
@@ -127,12 +132,12 @@ describe('api - user', () => {
     });
 
     test('responses error if user already exists by userId.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
       const response = await request(api)
         .post('/user/manage/add')
-        .send({ authorizedUser: { ...testUser, userManager: true }, user: { ...testUser }, password: 'pwd' });
+        .send({ user: { ...testUser }, password: 'pwd' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('user-exists-with-id');
@@ -140,12 +145,12 @@ describe('api - user', () => {
     });
 
     test('responses error if user already exists by username.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
       const response = await request(api)
         .post('/user/manage/add')
-        .send({ authorizedUser: { ...testUser, userManager: true }, user: { ...testUser, userId: 'newId' }, password: 'pwd' });
+        .send({ user: { ...testUser, userId: 'newId' }, password: 'pwd' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('user-exists-with-username');
@@ -155,13 +160,11 @@ describe('api - user', () => {
 
   describe('modifyUsernameHandler', () => {
     test('modifies username.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
       mocked_db.getMemory().user_.items.push({ ...testUser, userId: 'otherId', username: 'otherUsername' });
 
-      const response = await request(api)
-        .post('/user/manage/modify-username')
-        .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', username: 'newUsername' });
+      const response = await request(api).post('/user/manage/modify-username').send({ userId: 'otherId', username: 'newUsername' });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -169,12 +172,10 @@ describe('api - user', () => {
     });
 
     test('responses error if user does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .post('/user/manage/modify-username')
-        .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', username: 'newUsername' });
+      const response = await request(api).post('/user/manage/modify-username').send({ userId: 'otherId', username: 'newUsername' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-user');
@@ -183,12 +184,10 @@ describe('api - user', () => {
 
   describe('modifyOwnUsernameHandler', () => {
     test('modifies username.', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .post('/user/modify-username')
-        .send({ authorizedUser: { ...testUser, userManager: true }, username: 'newUsername' });
+      const response = await request(api).post('/user/modify-username').send({ username: 'newUsername' });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -198,20 +197,17 @@ describe('api - user', () => {
 
   describe('modifyCredentialsHandler', () => {
     test('modifies credentials.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
       mocked_db.getMemory().user_.items.push({ ...testUser, userId: 'otherId', username: 'otherUsername' });
 
-      const response = await request(api)
-        .post('/user/manage/modify-credentials')
-        .send({
-          authorizedUser: { ...testUser, userManager: true },
-          userId: 'otherId',
-          username: 'un',
-          password: 'pwd',
-          passwordKeySalt: 'keySalt',
-          userKey: 'key'
-        });
+      const response = await request(api).post('/user/manage/modify-credentials').send({
+        userId: 'otherId',
+        username: 'un',
+        password: 'pwd',
+        passwordKeySalt: 'keySalt',
+        userKey: 'key'
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -228,19 +224,16 @@ describe('api - user', () => {
     });
 
     test('responses error if user does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .post('/user/manage/modify-credentials')
-        .send({
-          authorizedUser: { ...testUser, userManager: true },
-          userId: 'nope',
-          username: 'un',
-          password: 'pwd',
-          passwordKeySalt: 'keySalt',
-          userKey: 'key'
-        });
+      const response = await request(api).post('/user/manage/modify-credentials').send({
+        userId: 'nope',
+        username: 'un',
+        password: 'pwd',
+        passwordKeySalt: 'keySalt',
+        userKey: 'key'
+      });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-user');
@@ -249,18 +242,15 @@ describe('api - user', () => {
 
   describe('modifyOwnCredentialsHandler', () => {
     test('modifies credentials.', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .post('/user/modify-credentials')
-        .send({
-          authorizedUser: { ...testUser, userManager: true },
-          username: 'un',
-          password: 'pwd',
-          passwordKeySalt: 'keySalt',
-          userKey: 'key'
-        });
+      const response = await request(api).post('/user/modify-credentials').send({
+        username: 'un',
+        password: 'pwd',
+        passwordKeySalt: 'keySalt',
+        userKey: 'key'
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -278,13 +268,13 @@ describe('api - user', () => {
 
   describe('modifyPermissionsHandler', () => {
     test('modifies permissions.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
       mocked_db.getMemory().user_.items.push({ ...testUser, userId: 'otherId', username: 'otherUsername' });
 
       const response = await request(api)
         .post('/user/manage/modify-permissions')
-        .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', userManager: true, videoManager: false, admin: true });
+        .send({ userId: 'otherId', userManager: true, videoManager: false, admin: true });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -299,12 +289,12 @@ describe('api - user', () => {
     });
 
     test('responses error if user does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
       const response = await request(api)
         .post('/user/manage/modify-permissions')
-        .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', userManager: true, videoManager: false, admin: true });
+        .send({ userId: 'otherId', userManager: true, videoManager: false, admin: true });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-user');
@@ -313,13 +303,11 @@ describe('api - user', () => {
 
   describe('modifyDisplayNameHandler', () => {
     test('modifies displayName.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
       mocked_db.getMemory().user_.items.push({ ...testUser, userId: 'otherId', username: 'otherUsername' });
 
-      const response = await request(api)
-        .post('/user/manage/modify-displayname')
-        .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'otherId', displayName: 'newName' });
+      const response = await request(api).post('/user/manage/modify-displayname').send({ userId: 'otherId', displayName: 'newName' });
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('updated');
@@ -327,12 +315,10 @@ describe('api - user', () => {
     });
 
     test('responses error if user does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .post('/user/manage/modify-displayname')
-        .send({ authorizedUser: { ...testUser, userManager: true }, userId: 'nope', displayName: 'newName' });
+      const response = await request(api).post('/user/manage/modify-displayname').send({ userId: 'nope', displayName: 'newName' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-user');
@@ -341,12 +327,10 @@ describe('api - user', () => {
 
   describe('deleteUserHandler', () => {
     test('deletes user.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .delete('/user/manage/delete/' + testUser.userId)
-        .send({ authorizedUser: { ...testUser } });
+      const response = await request(api).delete('/user/manage/delete/' + testUser.userId);
 
       expect(response.status).toBe(200);
       expect(response.body.message).toEqual('deleted');
@@ -354,12 +338,10 @@ describe('api - user', () => {
     });
 
     test('responses error if user does not exist.', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
 
-      const response = await request(api)
-        .delete('/user/manage/delete/nope')
-        .send({ authorizedUser: { ...testUser } });
+      const response = await request(api).delete('/user/manage/delete/nope');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toEqual('no-such-user');
@@ -369,13 +351,11 @@ describe('api - user', () => {
 
   describe('getUsersHandler', () => {
     test('gets all users', async () => {
-      const api = buildApi();
+      const api = buildApi(true, false);
       mocked_db.getMemory().user_.items.push({ ...testUser });
       mocked_db.getMemory().user_.items.push({ ...testUser, userId: 'otherId', username: 'otherUsername' });
 
-      const response = await request(api)
-        .get('/user/manage/get-users')
-        .send({ authorizedUser: { ...testUser } });
+      const response = await request(api).get('/user/manage/get-users');
 
       expect(response.status).toBe(200);
       expect(response.body?.users).toEqual([{ ...testUser }, { ...testUser, userId: 'otherId', username: 'otherUsername' }]);
@@ -387,7 +367,7 @@ describe('api - user', () => {
     const hash = 'hvMAotfYqXiBQjYItFh2JY5kUIL8zWXZGSJPF6goIi0=';
 
     test('logs user in.', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
 
       const response = await request(api).post('/user/login').send({ username: testUser.username, password: 'abc' });
@@ -400,7 +380,7 @@ describe('api - user', () => {
     });
 
     test('responses error if invalid username', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
 
       const response = await request(api).post('/user/login').send({ username: '-', password: 'abc' });
@@ -410,7 +390,7 @@ describe('api - user', () => {
     });
 
     test('responses error if invalid password', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
 
       const response = await request(api).post('/user/login').send({ username: testUser.username, password: 'xyz' });
@@ -420,7 +400,7 @@ describe('api - user', () => {
     });
 
     test('responses error if login for username is locked', async () => {
-      const api = buildApi();
+      const api = buildApi(false, false);
       const lock: Lock = { username: testUser.username, attempts: 6, lastAttempt: new Date() };
       mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
       mocked_db.getMemory().lock.items.push(lock as unknown as DbItem);
