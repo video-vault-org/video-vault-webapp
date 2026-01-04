@@ -49,10 +49,12 @@ const addFile = async function (videoId: string, name: string, data: Buffer): Pr
 };
 
 const deleteTsFiles = async function (videoId: string): Promise<[Error] | [null, boolean]> {
-  const video = await getVideo(videoId);
+  const db = await loadDb();
+  const video = (await db.findOne('video', 'videoId', videoId)) as unknown as Video;
   if (!video) {
     return [new Error('no-such-video')];
   }
+  await db.update('video', 'videoId', videoId, { lastModified: new Date() });
 
   const descriptor = `${path.basename(video.filesPrefix)}/ts`;
   const storage = await loadStorage();

@@ -176,6 +176,8 @@ describe('video', () => {
     expect(await exists('./base/sub/ts')).toBe(false);
     expect(error).toBeNull();
     expect(deleted).toBe(true);
+    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeGreaterThanOrEqual(new Date().getTime() - 500);
+    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeLessThanOrEqual(new Date().getTime());
   });
 
   test('deleteTsFiles returns error if no such video.', async () => {
