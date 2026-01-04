@@ -1,6 +1,6 @@
 # VideoVault - WebApp
 
-![logo](./logo.png)
+![logo](./logo/logo.png)
 
 Progressive Web App for end-to-end encrypted video collection. \
 Written in TypeScript
