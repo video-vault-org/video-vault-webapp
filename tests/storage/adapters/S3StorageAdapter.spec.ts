@@ -62,7 +62,7 @@ const objectExists = async function (client: S3Client, Key: string): Promise<boo
 };
 
 describe('S3StorageAdapter', (): void => {
-  jest.setTimeout(60000);
+  jest.setTimeout(60_000);
   const content = Buffer.from('content', 'utf8');
 
   let container: null | StartedMinioContainer = null;
@@ -148,7 +148,7 @@ describe('S3StorageAdapter', (): void => {
     expect(deleted).toBe(false);
   });
 
-  test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly.', async () => {
+  test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly, no sub-sub.', async () => {
     await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj', content);
     await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj2', content);
 
@@ -159,7 +159,24 @@ describe('S3StorageAdapter', (): void => {
     expect(count).toBe(2);
   });
 
+  test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly, sub-sub.', async () => {
+    await storage?.deleteDir('sub');
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/a', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/b', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/subSub/obj', content);
+    await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/subSub/obj2', content);
+
+    const count = await storage?.deleteDir('sub/subSub');
+
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/a')).toBe(true);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/b')).toBe(true);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/subSub/obj')).toBe(false);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/subSub/obj2')).toBe(false);
+    expect(count).toBe(2);
+  });
+
   test('S3StorageAdapter->deleteDir deletes all objects with common prefix correctly, 1234 objects, so two chunks.', async () => {
+    await storage?.deleteDir('sub');
     for (let i = 0; i < 1234; i++) {
       await createObject(storage?.getConf()[0] ?? new S3Client(), 'sub/obj' + i, content);
     }
@@ -167,7 +184,7 @@ describe('S3StorageAdapter', (): void => {
     const count = await storage?.deleteDir('sub');
 
     expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj0')).toBe(false);
-    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj1')).toBe(false);
+    expect(await objectExists(storage?.getConf()[0] ?? new S3Client(), 'sub/obj1233')).toBe(false);
     expect(count).toBe(1234);
   });
 

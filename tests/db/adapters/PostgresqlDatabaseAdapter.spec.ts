@@ -3,7 +3,7 @@ import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapt
 import { DbItem } from '@/db/types/DbItem';
 
 describe('PostgresDatabaseAdapter', (): void => {
-  jest.setTimeout(60000);
+  jest.setTimeout(60_000);
 
   let postgresContainer: null | StartedPostgreSqlContainer = null;
   let db: null | PostgresqlDatabaseAdapter = null;

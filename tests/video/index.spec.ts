@@ -1,7 +1,8 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import { addVideo, modifyTitle, modifyMeta, deleteVideo, getVideo, getVideos, addFile, deleteFile, readFile, deleteAllFiles } from '@/video';
+import { addVideo, modifyTitle, modifyMeta, deleteVideo, getVideo, getVideos, addFile, readFile, deleteTsFiles, deleteAllFiles } from '@/video';
 import mockFS from 'mock-fs';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
+import { exists } from '#/util';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 const mocked_storage = new LocalStorageAdapter({ basePath: './base' });
@@ -123,7 +124,7 @@ describe('video', () => {
     expect(videos).toEqual([video2, video3]);
   });
 
-  test('addFile adds file correctly.', async () => {
+  test('addFile adds file correctly, not ts.', async () => {
     mocked_db.getMemory().video.items.push({ ...testVideo });
     jest.useRealTimers();
     mockFS({ './base/sub/test': '' });
@@ -131,6 +132,19 @@ describe('video', () => {
     const error = await addFile(testVideo.videoId, 'test', Buffer.from('content', 'utf8'));
 
     expect(((await mocked_storage.read('sub/test')) ?? Buffer.from('')).toString('utf8')).toEqual('content');
+    expect(error).toBeNull();
+    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeGreaterThanOrEqual(new Date().getTime() - 500);
+    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeLessThanOrEqual(new Date().getTime());
+  });
+
+  test('addFile adds file correctly, ts.', async () => {
+    mocked_db.getMemory().video.items.push({ ...testVideo });
+    jest.useRealTimers();
+    mockFS({ './base/sub/ts/test.ts.enc': '' });
+
+    const error = await addFile(testVideo.videoId, 'test.ts.enc', Buffer.from('content', 'utf8'));
+
+    expect(((await mocked_storage.read('sub/ts/test.ts.enc')) ?? Buffer.from('')).toString('utf8')).toEqual('content');
     expect(error).toBeNull();
     expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeGreaterThanOrEqual(new Date().getTime() - 500);
     expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeLessThanOrEqual(new Date().getTime());
@@ -149,31 +163,36 @@ describe('video', () => {
     expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBe(0);
   });
 
-  test('deleteFile deletes file correctly.', async () => {
+  test('deleteTsFiles deletes ts files correctly.', async () => {
     mocked_db.getMemory().video.items.push({ ...testVideo });
     jest.useRealTimers();
-    mockFS({ './base/sub/test': 'content' });
+    mockFS({ './base/sub': { test1: '', test2: '', test3: '', ts: { file1: '', file2: '', file3: '' } } });
 
-    const [error, deleted] = await deleteFile(testVideo.videoId, 'test');
+    const [error, deleted] = await deleteTsFiles(testVideo.videoId);
 
-    expect(await mocked_storage.read('sub/test')).toBeNull();
+    expect(await mocked_storage.read('sub/test1')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/test2')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/test3')).toBeInstanceOf(Buffer);
+    expect(await exists('./base/sub/ts')).toBe(false);
     expect(error).toBeNull();
     expect(deleted).toBe(true);
-    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeGreaterThanOrEqual(new Date().getTime() - 500);
-    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBeLessThanOrEqual(new Date().getTime());
   });
 
-  test('deleteFile returns error if video does not exist.', async () => {
+  test('deleteTsFiles returns error if no such video.', async () => {
     mocked_db.getMemory().video.items.push({ ...testVideo });
     jest.useRealTimers();
-    mockFS({ './base/sub/test': 'content' });
+    mockFS({ './base/sub': { test1: '', test2: '', test3: '', ts: { file1: '', file2: '', file3: '' } } });
 
-    const [error] = await deleteFile('other', 'test');
+    const [error] = await deleteTsFiles('other');
 
-    expect(((await mocked_storage.read('sub/test')) ?? Buffer.from('')).toString('utf8')).toEqual('content');
+    expect(await mocked_storage.read('sub/test1')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/test2')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/test3')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/ts/file1')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/ts/file2')).toBeInstanceOf(Buffer);
+    expect(await mocked_storage.read('sub/ts/file3')).toBeInstanceOf(Buffer);
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toEqual('no-such-video');
-    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBe(0);
   });
 
   test('deleteAllFiles deletes files correctly.', async () => {
@@ -204,12 +223,24 @@ describe('video', () => {
     expect(error?.message).toEqual('no-such-video');
   });
 
-  test('readFile reads file correctly.', async () => {
+  test('readFile reads file correctly, not ts.', async () => {
     mocked_db.getMemory().video.items.push({ ...testVideo });
     jest.useRealTimers();
     mockFS({ './base/sub/test': 'content' });
 
     const result = await readFile('sub', 'test');
+
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result?.toString('utf8')).toEqual('content');
+    expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBe(0);
+  });
+
+  test('readFile reads file correctly, ts.', async () => {
+    mocked_db.getMemory().video.items.push({ ...testVideo });
+    jest.useRealTimers();
+    mockFS({ './base/sub/ts/test.ts.enc': 'content' });
+
+    const result = await readFile('sub', 'test.ts.enc');
 
     expect(result).toBeInstanceOf(Buffer);
     expect(result?.toString('utf8')).toEqual('content');

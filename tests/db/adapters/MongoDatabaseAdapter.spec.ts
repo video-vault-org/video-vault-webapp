@@ -15,7 +15,7 @@ const getItem = async function (db: MongoDatabaseAdapter | null, filter: Record<
 };
 
 describe('MongoDatabaseAdapter', (): void => {
-  jest.setTimeout(60000);
+  jest.setTimeout(60_000);
 
   let container: StartedMongoDBContainer | null = null;
   let db: null | MongoDatabaseAdapter = null;

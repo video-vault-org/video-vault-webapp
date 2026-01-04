@@ -41,23 +41,22 @@ const addFile = async function (videoId: string, name: string, data: Buffer): Pr
   }
   await db.update('video', 'videoId', videoId, { lastModified: new Date() });
 
-  const descriptor = `${path.basename(video.filesPrefix)}/${path.basename(name)}`;
+  const isTs = name.endsWith('.ts.enc');
+  const descriptor = `${path.basename(video.filesPrefix)}/${isTs ? 'ts/' : ''}${path.basename(name)}`;
   const storage = await loadStorage();
   await storage.save(descriptor, data);
   return null;
 };
 
-const deleteFile = async function (videoId: string, name: string): Promise<[Error] | [null, boolean]> {
-  const db = await loadDb();
-  const video = (await db.findOne('video', 'videoId', videoId)) as unknown as Video;
+const deleteTsFiles = async function (videoId: string): Promise<[Error] | [null, boolean]> {
+  const video = await getVideo(videoId);
   if (!video) {
     return [new Error('no-such-video')];
   }
-  await db.update('video', 'videoId', videoId, { lastModified: new Date() });
 
-  const descriptor = `${path.basename(video.filesPrefix)}/${path.basename(name)}`;
+  const descriptor = `${path.basename(video.filesPrefix)}/ts`;
   const storage = await loadStorage();
-  return [null, await storage.delete(descriptor)];
+  return [null, (await storage.deleteDir(descriptor)) > 0];
 };
 
 const deleteAllFiles = async function (videoId: string): Promise<[Error] | [null, boolean]> {
@@ -72,7 +71,8 @@ const deleteAllFiles = async function (videoId: string): Promise<[Error] | [null
 };
 
 const readFile = async function (prefix: string, name: string): Promise<Buffer | null> {
-  const descriptor = `${path.basename(prefix)}/${path.basename(name)}`;
+  const isTs = name.endsWith('.ts.enc');
+  const descriptor = `${path.basename(prefix)}/${isTs ? 'ts/' : ''}${path.basename(name)}`;
   const storage = await loadStorage();
   return await storage.read(descriptor);
 };
@@ -88,4 +88,4 @@ const getVideos = async function (since: Date): Promise<Video[]> {
   return (await db.findAllSince('video', since)) as unknown as Video[];
 };
 
-export { addVideo, modifyTitle, modifyMeta, deleteVideo, addFile, deleteFile, deleteAllFiles, readFile, getVideo, getVideos };
+export { addVideo, modifyTitle, modifyMeta, deleteVideo, addFile, deleteTsFiles, deleteAllFiles, readFile, getVideo, getVideos };
