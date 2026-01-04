@@ -307,7 +307,8 @@ describe('api - comment', () => {
       for (let i = 0; i <= (PAGE_SIZE + 10) * 2; i++) {
         const videoId = i % 2 ? 'other' : testComment.videoId;
         const commentId = testComment.commentId + i;
-        mocked_db.getMemory().comment.items.push({ ...testComment, commentId, videoId });
+        const lastModified = new Date(i);
+        mocked_db.getMemory().comment.items.push({ ...testComment, commentId, videoId, lastModified });
       }
     };
 
@@ -323,6 +324,8 @@ describe('api - comment', () => {
       expect(response.body.comments.at(99)?.commentId).toEqual(testComment.commentId + 198);
       expect(response.body.comments.at(0)?.videoId).toEqual(testComment.videoId);
       expect(response.body.comments.at(99)?.videoId).toEqual(testComment.videoId);
+      expect(response.body.comments.at(0)?.lastModified).toEqual(new Date(0).toISOString());
+      expect(response.body.comments.at(99)?.lastModified).toEqual(new Date(198).toISOString());
     });
 
     test('gets all comments of video on page 2.', async () => {

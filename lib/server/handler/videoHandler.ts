@@ -107,19 +107,19 @@ const getVideoHandler: express.RequestHandler = async function (req, res) {
     return res.status(400).json({ error: 'no-such-video' });
   }
 
-  res.status(200).json({ video: { ...video, lastModified: video.lastModified.getTime() } });
+  res.status(200).json({ video });
 };
 
 const getVideosHandler: express.RequestHandler = async function (req, res) {
   const sinceStr = req.params.since as string;
 
   let since = new Date(0);
-  const sinceParsed = parseInt(sinceStr);
-  if (!isNaN(sinceParsed) && sinceParsed > 0) {
-    since = new Date(sinceParsed);
+  const sinceDate = new Date(sinceStr);
+  if (sinceDate.toString() !== 'Invalid Date') {
+    since = sinceDate;
   }
   const videos = await getVideos(since);
-  res.status(200).json({ videos: videos.map((video) => ({ ...video, lastModified: video.lastModified.getTime() })) });
+  res.status(200).json({ videos });
 };
 
 const uploadFileHandler: express.RequestHandler = async function (req, res) {

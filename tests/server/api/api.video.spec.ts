@@ -236,10 +236,10 @@ describe('api - video', () => {
       const response = await request(api).get('/video/single-video/' + testVideo.videoId);
 
       expect(response.status).toBe(200);
-      expect(response.body.video).toEqual({ ...testVideo, lastModified: testVideo.lastModified.getTime() });
+      expect(response.body.video).toEqual({ ...testVideo, lastModified: testVideo.lastModified.toISOString() });
     });
 
-    test('gets Video correctly.', async () => {
+    test('responses error if video does not exist.', async () => {
       const api = buildApi(false);
       mocked_db.getMemory().video.items.push({ ...testVideo });
       mocked_db.getMemory().video.items.push({ ...testVideo, videoId: 'other' });
@@ -262,9 +262,9 @@ describe('api - video', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.videos.length).toBe(3);
-      expect(response.body.videos.at(0)).toEqual({ ...testVideo, videoId: 'id1', lastModified: testVideo.lastModified.getTime() });
-      expect(response.body.videos.at(1)).toEqual({ ...testVideo, videoId: 'id2', lastModified: testVideo.lastModified.getTime() });
-      expect(response.body.videos.at(2)).toEqual({ ...testVideo, videoId: 'id3', lastModified: testVideo.lastModified.getTime() });
+      expect(response.body.videos.at(0)).toEqual({ ...testVideo, videoId: 'id1', lastModified: testVideo.lastModified.toISOString() });
+      expect(response.body.videos.at(1)).toEqual({ ...testVideo, videoId: 'id2', lastModified: testVideo.lastModified.toISOString() });
+      expect(response.body.videos.at(2)).toEqual({ ...testVideo, videoId: 'id3', lastModified: testVideo.lastModified.toISOString() });
     });
 
     test('gets Videos correctly, since', async () => {
@@ -273,12 +273,12 @@ describe('api - video', () => {
       mocked_db.getMemory().video.items.push({ ...testVideo, videoId: 'id2', lastModified: new Date(42) });
       mocked_db.getMemory().video.items.push({ ...testVideo, videoId: 'id3', lastModified: new Date(42) });
 
-      const response = await request(api).get('/video/videos/40');
+      const response = await request(api).get('/video/videos/' + new Date(40).toISOString());
 
       expect(response.status).toBe(200);
       expect(response.body.videos.length).toBe(2);
-      expect(response.body.videos.at(0)).toEqual({ ...testVideo, videoId: 'id2', lastModified: 42 });
-      expect(response.body.videos.at(1)).toEqual({ ...testVideo, videoId: 'id3', lastModified: 42 });
+      expect(response.body.videos.at(0)).toEqual({ ...testVideo, videoId: 'id2', lastModified: new Date(42).toISOString() });
+      expect(response.body.videos.at(1)).toEqual({ ...testVideo, videoId: 'id3', lastModified: new Date(42).toISOString() });
     });
   });
 
