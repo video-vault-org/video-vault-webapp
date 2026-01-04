@@ -24,7 +24,7 @@ const buildApi = function (fallbacks: boolean) {
 
   if (fallbacks) {
     api.use((req, res) => {
-      res.status(404).json({ error: `Cannot ${req.method} ${req.path}` });
+      res.status(404).json({ error: `Cannot ${req.method} ${req.originalUrl}` });
     });
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

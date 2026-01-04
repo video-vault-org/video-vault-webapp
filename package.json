@@ -10,9 +10,8 @@
   ],
   "private": false,
   "main": "built/lib/index.js",
-  "types": "built/lib/index.d.ts",
   "bin": {
-    "filescrud": "built/lib/index.js"
+    "videovaultweb": "built/lib/index.js"
   },
   "scripts": {
     "audit": "better-npm-audit audit",
@@ -68,8 +67,10 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.948.0",
+    "commander": "^14.0.2",
     "express": "^5.2.1",
     "express-fileupload": "^1.5.2",
+    "http2-express-bridge": "^1.0.7",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.0.0",
     "pg": "^8.16.3",
