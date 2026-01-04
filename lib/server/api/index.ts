@@ -1,5 +1,5 @@
 import express from 'express';
-import { authorizeHandler } from '@/server/handler/userHandler';
+import { authorizeHandler, loginHandler } from '@/server/handler/userHandler';
 import { buildUserApi } from '@/server/api/userApi';
 import { buildCommentApi } from '@/server/api/commentApi';
 import { buildVideoApi } from '@/server/api/videoApi';
@@ -15,6 +15,7 @@ const buildApi = function (fallbacks: boolean) {
     const init = await isInit();
     res.status(200).json({ init });
   });
+  api.post('/login', loginHandler);
   api.use('/api', authorizeHandler);
   api.use('/api/user', buildUserApi());
   api.use('/api/comment', buildCommentApi());

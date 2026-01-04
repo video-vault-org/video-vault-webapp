@@ -1,13 +1,15 @@
 import { unlink, readFile, mkdir, writeFile } from 'fs/promises';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import { User } from '@/user/types/User';
 import { deleteDirectory, exists } from '#/util';
 import { initJwt, issueToken } from '@/auth/jwt';
 import { buildApi } from '@/server/api';
 import request from 'supertest';
-import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 import { initialize } from '@/init';
+import { User } from '@/user/types/User';
+import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 import { AuthorizedInitRequest } from '@/server/types/AuthorizedInitRequest';
+import { Lock } from '@/auth/types/Lock';
+import { DbItem } from '@/db/types/DbItem';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -55,15 +57,6 @@ describe('api', () => {
   });
 
   describe('authorize', () => {
-    test('ignores /api/user/login.', async () => {
-      const api = buildApi(false);
-
-      const response = await request(api).post('/api/user/login').send({ username: 'a', password: 'b' });
-
-      expect(response.status).toBe(401);
-      expect(response.body.error).toEqual('invalid-login');
-    });
-
     test('authorizes user.', async () => {
       mocked_db.getMemory().user_.items.push({ ...testUser });
       await initJwt();
@@ -156,6 +149,56 @@ describe('api', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.init).toBe(false);
+    });
+  });
+
+  describe('loginHandler', () => {
+    // noinspection SpellCheckingInspection
+    const hash = 'hvMAotfYqXiBQjYItFh2JY5kUIL8zWXZGSJPF6goIi0=';
+
+    test('logs user in.', async () => {
+      const api = buildApi(true);
+      mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
+
+      const response = await request(api).post('/login').send({ username: testUser.username, password: 'abc' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.token).toContain('ey');
+      expect(response.body.token).toContain('.');
+      expect(response.body.expires).toBeGreaterThan(0);
+      expect(response.body.userKey).toEqual('testKey');
+    });
+
+    test('responses error if invalid username', async () => {
+      const api = buildApi(true);
+      mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
+
+      const response = await request(api).post('/login').send({ username: '-', password: 'abc' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toEqual('invalid-login');
+    });
+
+    test('responses error if invalid password', async () => {
+      const api = buildApi(true);
+      mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
+
+      const response = await request(api).post('/login').send({ username: testUser.username, password: 'xyz' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toEqual('invalid-login');
+    });
+
+    test('responses error if login for username is locked', async () => {
+      const api = buildApi(true);
+      const lock: Lock = { username: testUser.username, attempts: 6, lastAttempt: new Date() };
+      mocked_db.getMemory().user_.items.push({ ...testUser, hash, salt: '01'.repeat(16), hashAlgorithm: 'scrypt' });
+      mocked_db.getMemory().lock.items.push(lock as unknown as DbItem);
+
+      const response = await request(api).post('/login').send({ username: testUser.username, password: 'abc' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toEqual('invalid-login');
     });
   });
 

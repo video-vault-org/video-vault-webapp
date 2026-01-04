@@ -8,10 +8,6 @@ import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 import { AuthorizedInitRequest } from '@/server/types/AuthorizedInitRequest';
 
 const authorizeHandler: express.RequestHandler = async function (req, res, next) {
-  if (req.originalUrl === '/api/user/login') {
-    next();
-  }
-
   const token = (req.header('authorize') ?? '').replace(/^[Bb]earer /, '');
 
   const user = await authorize(token);

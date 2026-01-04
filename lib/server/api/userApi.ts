@@ -3,7 +3,6 @@ import {
   addUserHandler,
   deleteUserHandler,
   getUsersHandler,
-  loginHandler,
   modifyCredentialsHandler,
   modifyDisplayNameHandler,
   modifyOwnCredentialsHandler,
@@ -25,7 +24,6 @@ const buildUserApi = function (): Express {
   api.post('/manage/modify-displayname', modifyDisplayNameHandler);
   api.delete('/manage/delete/:userId', deleteUserHandler);
   api.get('/manage/get-users', getUsersHandler);
-  api.post('/login', loginHandler);
   return api;
 };
 
