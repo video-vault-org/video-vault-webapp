@@ -60,6 +60,17 @@ const deleteFile = async function (videoId: string, name: string): Promise<[Erro
   return [null, await storage.delete(descriptor)];
 };
 
+const deleteAllFiles = async function (videoId: string): Promise<[Error] | [null, boolean]> {
+  const video = await getVideo(videoId);
+  if (!video) {
+    return [new Error('no-such-video')];
+  }
+
+  const descriptor = path.basename(video.filesPrefix);
+  const storage = await loadStorage();
+  return [null, (await storage.deleteDir(descriptor)) > 0];
+};
+
 const readFile = async function (prefix: string, name: string): Promise<Buffer | null> {
   const descriptor = `${path.basename(prefix)}/${path.basename(name)}`;
   const storage = await loadStorage();
@@ -72,12 +83,9 @@ const getVideo = async function (videoId: string): Promise<Video | null> {
   return video ? (video as unknown as Video) : null;
 };
 
-const getVideos = async function (since?: Date): Promise<Video[]> {
+const getVideos = async function (since: Date): Promise<Video[]> {
   const db = await loadDb();
-  if (since) {
-    return (await db.findAllSince('video', since)) as unknown as Video[];
-  }
-  return (await db.findAll('video')) as unknown as Video[];
+  return (await db.findAllSince('video', since)) as unknown as Video[];
 };
 
-export { addVideo, modifyTitle, modifyMeta, deleteVideo, addFile, deleteFile, readFile, getVideo, getVideos };
+export { addVideo, modifyTitle, modifyMeta, deleteVideo, addFile, deleteFile, deleteAllFiles, readFile, getVideo, getVideos };

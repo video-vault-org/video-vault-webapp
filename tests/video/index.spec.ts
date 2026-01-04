@@ -1,5 +1,5 @@
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import { addVideo, modifyTitle, modifyMeta, deleteVideo, getVideo, getVideos, addFile, deleteFile, readFile } from '@/video';
+import { addVideo, modifyTitle, modifyMeta, deleteVideo, getVideo, getVideos, addFile, deleteFile, readFile, deleteAllFiles } from '@/video';
 import mockFS from 'mock-fs';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 
@@ -105,7 +105,7 @@ describe('video', () => {
     mocked_db.getMemory().video.items.push(video2);
     mocked_db.getMemory().video.items.push(video3);
 
-    const videos = await getVideos();
+    const videos = await getVideos(new Date(0));
 
     expect(videos).toEqual([video1, video2, video3]);
   });
@@ -174,6 +174,34 @@ describe('video', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toEqual('no-such-video');
     expect(mocked_db.getMemory().video.items.at(0)?.lastModified?.getTime()).toBe(0);
+  });
+
+  test('deleteAllFiles deletes files correctly.', async () => {
+    mocked_db.getMemory().video.items.push({ ...testVideo });
+    jest.useRealTimers();
+    mockFS({ './base/sub': { test1: '', test2: '', test3: '' } });
+
+    const [error, deleted] = await deleteAllFiles(testVideo.videoId);
+
+    expect(await mocked_storage.read('sub/test1')).toBeNull();
+    expect(await mocked_storage.read('sub/test2')).toBeNull();
+    expect(await mocked_storage.read('sub/test3')).toBeNull();
+    expect(error).toBeNull();
+    expect(deleted).toBe(true);
+  });
+
+  test('deleteAllFiles returns error if no such video.', async () => {
+    mocked_db.getMemory().video.items.push({ ...testVideo });
+    jest.useRealTimers();
+    mockFS({ './base/sub': { test1: 'content', test2: 'content', test3: 'content' } });
+
+    const [error] = await deleteAllFiles('other');
+
+    expect(((await mocked_storage.read('sub/test1')) ?? Buffer.from('')).toString('utf8')).toEqual('content');
+    expect(((await mocked_storage.read('sub/test2')) ?? Buffer.from('')).toString('utf8')).toEqual('content');
+    expect(((await mocked_storage.read('sub/test3')) ?? Buffer.from('')).toString('utf8')).toEqual('content');
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).toEqual('no-such-video');
   });
 
   test('readFile reads file correctly.', async () => {
