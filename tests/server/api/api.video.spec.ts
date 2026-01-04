@@ -77,7 +77,7 @@ describe('api - video', () => {
   afterEach(async () => {
     delete mocked_db.getMemory().comment;
     delete mocked_db.getMemory().video;
-    delete mocked_db.getMemory().user;
+    delete mocked_db.getMemory().user_;
     jest.useRealTimers();
     await deleteDirectory('./base');
   });

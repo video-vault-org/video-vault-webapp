@@ -8,7 +8,11 @@ import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 import { AuthorizedInitRequest } from '@/server/types/AuthorizedInitRequest';
 
 const authorizeHandler: express.RequestHandler = async function (req, res, next) {
-  const token = (req.header('authorize') ?? '').replace(/^bearer /, '');
+  if (req.originalUrl === '/api/user/login') {
+    next();
+  }
+
+  const token = (req.header('authorize') ?? '').replace(/^[Bb]earer /, '');
 
   const user = await authorize(token);
   if (user) {
@@ -186,7 +190,7 @@ const loginHandler: express.RequestHandler = async function (req, res) {
   const token = await authenticate(username, password);
 
   if (!token) {
-    return res.status(401).json({ error: 'invalid_login' });
+    return res.status(401).json({ error: 'invalid-login' });
   }
 
   const user = await getUserByUsername(username);

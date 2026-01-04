@@ -1,11 +1,11 @@
 import crypto from 'crypto';
-import { loadConfig as loadDbConfig } from '@/db';
+import { loadConfig as loadDatabaseConfig } from '@/db';
 import { loadConfig as loadStorageConfig } from '@/storage';
 import { loadConfig as loadFrontendConfig } from '@/frontend';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 
 const isInit = async function (): Promise<boolean> {
-  const dbConfig = await loadDbConfig();
+  const dbConfig = await loadDatabaseConfig();
   const storageConfig = await loadStorageConfig();
   const frontendConfig = await loadFrontendConfig();
   return !dbConfig || !storageConfig || !frontendConfig;

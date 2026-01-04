@@ -386,7 +386,7 @@ describe('api - user', () => {
       const response = await request(api).post('/user/login').send({ username: '-', password: 'abc' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toEqual('invalid_login');
+      expect(response.body.error).toEqual('invalid-login');
     });
 
     test('responses error if invalid password', async () => {
@@ -396,7 +396,7 @@ describe('api - user', () => {
       const response = await request(api).post('/user/login').send({ username: testUser.username, password: 'xyz' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toEqual('invalid_login');
+      expect(response.body.error).toEqual('invalid-login');
     });
 
     test('responses error if login for username is locked', async () => {
@@ -408,7 +408,7 @@ describe('api - user', () => {
       const response = await request(api).post('/user/login').send({ username: testUser.username, password: 'abc' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toEqual('invalid_login');
+      expect(response.body.error).toEqual('invalid-login');
     });
   });
 });
