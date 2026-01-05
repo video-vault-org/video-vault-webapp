@@ -14,5 +14,9 @@
   "1111755": {
     "active": true,
     "notes": "query strings not parsed in backend"
+  },
+  "1109556": {
+    "active": true,
+    "notes": "no direct user input send to response"
   }
 }
