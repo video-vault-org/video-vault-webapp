@@ -8,6 +8,7 @@ import { getSourcePath } from '@/logging/getSourcePath';
 const { combine, timestamp, printf, colorize } = format;
 
 let forceConsole = false;
+let fileLogging = true;
 
 const formatNumber = function (value: number, digits: number): string {
   return (value + '').padStart(digits, '0');
@@ -88,6 +89,9 @@ class Logger {
   }
 
   private createErrorFileLogger() {
+    if (!fileLogging) {
+      return;
+    }
     this.errorFileLogger = createLogger({
       exitOnError: false,
       level: 'error',
@@ -102,6 +106,9 @@ class Logger {
   }
 
   private createAccessFileLogger() {
+    if (!fileLogging) {
+      return;
+    }
     this.accessFileLogger = createLogger({
       exitOnError: false,
       level: 'info',
@@ -196,10 +203,12 @@ class Logger {
 
 const setConsoleTest = function () {
   forceConsole = true;
+  fileLogging = false;
 };
 
 const unsetConsoleTest = function () {
   forceConsole = false;
+  fileLogging = true;
 };
 
 export { Logger, setConsoleTest, unsetConsoleTest };
