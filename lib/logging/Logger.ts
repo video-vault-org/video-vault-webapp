@@ -9,6 +9,9 @@ const { combine, timestamp, printf, colorize } = format;
 
 let forceConsole = false;
 let fileLogging = true;
+let rotation = true;
+let rotationDatePattern: string = 'YYYY-MM-DD';
+let rotationMaxFiles: number = 100;
 
 const formatNumber = function (value: number, digits: number): string {
   return (value + '').padStart(digits, '0');
@@ -60,12 +63,12 @@ class Logger {
 
   private createRotationTransportOptions(path: string) {
     return {
-      datePattern: 'YYYY-MM-DD',
+      datePattern: rotationDatePattern,
       zippedArchive: true,
-      maxFiles: 100,
+      maxFiles: rotationMaxFiles,
       createSymlink: true,
       filename: `${path}.%DATE%`,
-      symlinkName: path,
+      symlinkName: paths.basename(path),
       auditFile: paths.join(paths.dirname(path), `.${paths.basename(path)}-audit.json`)
     };
   }
@@ -92,6 +95,8 @@ class Logger {
     if (!fileLogging) {
       return;
     }
+    const path = './logs/error.log';
+    const transport = rotation ? new DailyRotateFile(this.createRotationTransportOptions(path)) : new transports.File({ filename: path });
     this.errorFileLogger = createLogger({
       exitOnError: false,
       level: 'error',
@@ -101,7 +106,7 @@ class Logger {
           return logFormats.json({ level, message: message as string, timestamp, sourcePath, meta });
         })
       ),
-      transports: [new DailyRotateFile(this.createRotationTransportOptions('/logs/error.log'))]
+      transports: [transport]
     });
   }
 
@@ -109,6 +114,8 @@ class Logger {
     if (!fileLogging) {
       return;
     }
+    const path = './logs/access.log';
+    const transport = rotation ? new DailyRotateFile(this.createRotationTransportOptions(path)) : new transports.File({ filename: path });
     this.accessFileLogger = createLogger({
       exitOnError: false,
       level: 'info',
@@ -129,7 +136,7 @@ class Logger {
           });
         })
       ),
-      transports: [new DailyRotateFile(this.createRotationTransportOptions('./logs/access.log'))]
+      transports: [transport]
     });
   }
 
@@ -211,4 +218,24 @@ const unsetConsoleTest = function () {
   fileLogging = true;
 };
 
-export { Logger, setConsoleTest, unsetConsoleTest };
+const setFileTest = function (withRotation: boolean) {
+  forceConsole = true;
+  rotation = withRotation;
+};
+
+const unsetFilTest = function () {
+  forceConsole = false;
+  rotation = true;
+};
+
+const setRotationTest = function () {
+  rotationDatePattern = 'YYYY-MM-DD_HH-mm-ss';
+  rotationMaxFiles = 3;
+};
+
+const unsetRotationTest = function () {
+  rotationDatePattern = 'YYYY-MM-DD';
+  rotationMaxFiles = 100;
+};
+
+export { Logger, setConsoleTest, unsetConsoleTest, setFileTest, unsetFilTest, setRotationTest, unsetRotationTest };
