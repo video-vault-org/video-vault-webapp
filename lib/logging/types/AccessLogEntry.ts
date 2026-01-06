@@ -9,6 +9,7 @@ interface AccessLogEntry {
   referer: unknown;
   userAgent: unknown;
   time: unknown;
+  error?: unknown;
 }
 
 export { AccessLogEntry };

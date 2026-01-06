@@ -31,7 +31,7 @@ describe('Access Logger', (): void => {
     logSpy?.mockRestore();
   });
 
-  test('logs access correctly.', (done): void => {
+  test('logs access correctly, without error.', (done): void => {
     const logger = new Logger();
     const accessLogger = logger.getAccessLogger();
     accessLogger?.on('finish', () => {
@@ -45,6 +45,23 @@ describe('Access Logger', (): void => {
     });
 
     logger.access({ ip, method, path: uri, httpVersion, statusCode, contentLength, referer, userAgent, time });
+    accessLogger?.end();
+  });
+
+  test('logs access correctly, with error.', (done): void => {
+    const logger = new Logger();
+    const accessLogger = logger.getAccessLogger();
+    accessLogger?.on('finish', () => {
+      setTimeout(() => {
+        const message = fs.readFileSync(accessLogFile, 'utf8');
+        const { timestamp, ...rest } = JSON.parse(message.trim());
+        expect(rest).toEqual({ ip, method, path: uri, httpVersion, statusCode, contentLength, referer, userAgent, time, error: 'test error' });
+        expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/u);
+        done();
+      }, 300);
+    });
+
+    logger.access({ ip, method, path: uri, httpVersion, statusCode, contentLength, referer, userAgent, time, error: 'test error' });
     accessLogger?.end();
   });
 });

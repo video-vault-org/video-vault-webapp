@@ -44,8 +44,11 @@ const logFormats = {
     const logObject = { timestamp, level, source: sourcePath, message: messageProperty, meta };
     return JSON.stringify(logObject);
   },
-  access(accessLogEntry: AccessLogEntry): string {
-    return JSON.stringify(accessLogEntry);
+  access({ error, ...rest }: AccessLogEntry): string {
+    if (error) {
+      return JSON.stringify({ error, ...rest });
+    }
+    return JSON.stringify({ ...rest });
   }
 };
 
@@ -121,7 +124,7 @@ class Logger {
       level: 'info',
       format: combine(
         timestamp({ format: dateFormatter }),
-        printf(({ ip, timestamp, method, path, httpVersion, statusCode, contentLength, referer, userAgent, time }) => {
+        printf(({ ip, timestamp, method, path, httpVersion, statusCode, contentLength, referer, userAgent, time, error }) => {
           return logFormats.access({
             ip,
             timestamp,
@@ -132,7 +135,8 @@ class Logger {
             contentLength,
             referer,
             userAgent,
-            time
+            time,
+            error
           });
         })
       ),
