@@ -5,6 +5,6 @@ describe('getSourcePath', (): void => {
     const sourcePath = getSourcePath();
 
     // utils.js calls the jest test functions.
-    expect(sourcePath.endsWith('node_modules/jest-circus/build/utils.js')).toBe(true);
+    expect(sourcePath).toMatch(/^.*node_modules[\/\\]jest-circus[\/\\]build[\/\\]utils.js$/iu);
   });
 });
