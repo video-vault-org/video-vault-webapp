@@ -101,6 +101,19 @@ let mocked_lastPort = -1;
 let mocked_lastScheme = '';
 let mocked_lastApp: Express | null = null;
 let mocked_lastHttpsConf: HttpsConf | null = null;
+let mocked_lastLoggedMessages: string[] = [];
+let mocked_lastLoggedMetas: Record<string, unknown>[] = [];
+let mocked_lastLoggedLevels: string[] = [];
+
+jest.mock('crypto', () => {
+  const actual = jest.requireActual('crypto');
+  return {
+    ...actual,
+    randomBytes(size: number) {
+      return Buffer.from('a'.repeat(size), 'utf8');
+    }
+  };
+});
 
 jest.mock('http', () => {
   const actual = jest.requireActual('http');
@@ -108,10 +121,11 @@ jest.mock('http', () => {
     ...actual,
     createServer(app: Express) {
       const server = actual.createServer(app);
-      server.listen = function ({ port }: { port: number }) {
+      server.listen = function ({ port }: { port: number }, callback: () => void) {
         mocked_lastApp = app;
         mocked_lastPort = port;
         mocked_lastScheme = 'http';
+        callback();
       };
       return server;
     }
@@ -124,20 +138,40 @@ jest.mock('http2', () => {
     ...actual,
     createSecureServer(conf: HttpsConf, app: Express) {
       const server = actual.createSecureServer(conf, app);
-      server.listen = function ({ port }: { port: number }) {
+      server.listen = function ({ port }: { port: number }, callback: () => void) {
         mocked_lastApp = app;
         mocked_lastPort = port;
         mocked_lastScheme = 'https';
         mocked_lastHttpsConf = conf;
+        callback();
       };
       return server;
     }
   };
 });
 
-describe('cli', (): void => {
-  let errorSpy: jest.Spied<typeof console.error>;
+jest.mock('@/logging/Logger', () => {
+  return {
+    Logger: class Logger {
+      // noinspection JSUnusedGlobalSymbols
+      public info(message: string, meta?: Record<string, unknown>): Logger {
+        mocked_lastLoggedMessages.push(message);
+        mocked_lastLoggedMetas.push(meta ?? {});
+        mocked_lastLoggedLevels.push('info');
+        return this;
+      }
+      // noinspection JSUnusedGlobalSymbols
+      public error(message: string, meta?: Record<string, unknown>): Logger {
+        mocked_lastLoggedMessages.push(message);
+        mocked_lastLoggedMetas.push(meta ?? {});
+        mocked_lastLoggedLevels.push('error');
+        return this;
+      }
+    }
+  };
+});
 
+describe('cli', (): void => {
   beforeEach(async (): Promise<void> => {
     mockFS({});
   });
@@ -148,8 +182,22 @@ describe('cli', (): void => {
     mocked_lastApp = null;
     mocked_lastHttpsConf = null;
     mockFS.restore();
-    errorSpy?.mockRestore();
+    mocked_lastLoggedMessages = [];
+    mocked_lastLoggedMetas = [];
+    mocked_lastLoggedLevels = [];
   });
+
+  const assertStartupLogs = function (port: number, scheme: string) {
+    expect(mocked_lastLoggedMessages).toEqual([
+      'First start, you will need init key for initial configuration. Key generated.',
+      'Successfully started server.'
+    ]);
+    expect(mocked_lastLoggedMetas?.at(0)).toEqual({ key: '6161616161616161616161616161616161616161' });
+    expect(mocked_lastLoggedMetas?.at(1)?.port).toBe(port);
+    expect(mocked_lastLoggedMetas?.at(1)?.scheme).toEqual(scheme);
+    expect(mocked_lastLoggedMetas?.at(1)?.startTime).toMatch(/^\d+ms$/iu);
+    expect(mocked_lastLoggedLevels).toEqual(['info', 'info']);
+  };
 
   test('starts http server on port 9000.', async () => {
     await program.parseAsync(['--port', '9000'], { from: 'user' });
@@ -159,6 +207,7 @@ describe('cli', (): void => {
     expect(mocked_lastApp).toBeInstanceOf(Function);
     expect(await exists('./initKey')).toBe(true);
     expect(await exists('./ssl')).toBe(true);
+    assertStartupLogs(9000, 'http');
   });
 
   test('starts https server on port 8000.', async () => {
@@ -172,14 +221,10 @@ describe('cli', (): void => {
     expect(mocked_lastHttpsConf).toEqual({ key: KEY, cert: CERT, allowHTTP1: true });
     expect(await exists('./initKey')).toBe(true);
     expect(await exists('./ssl')).toBe(true);
+    assertStartupLogs(8000, 'https');
   });
 
   test('logs error on forbidden http, port 80.', async () => {
-    let errorMsg: string = '';
-    errorSpy = jest.spyOn(console, 'error').mockImplementation((msg) => {
-      errorMsg = msg as string;
-    });
-
     await program.parseAsync(['--port', '80', '--scheme', 'http'], { from: 'user' });
 
     expect(mocked_lastScheme).toEqual('');
@@ -187,15 +232,12 @@ describe('cli', (): void => {
     expect(mocked_lastApp).toBeNull();
     expect(await exists('./initKey')).toBe(false);
     expect(await exists('./ssl')).toBe(false);
-    expect(errorMsg).toEqual('http is only allowed if your application is behind a tls terminating proxy.');
+    expect(mocked_lastLoggedMessages).toEqual(['http is only allowed if your application is behind a tls terminating proxy.']);
+    expect(mocked_lastLoggedMetas).toEqual([{ port: '80', scheme: 'http' }]);
+    expect(mocked_lastLoggedLevels).toEqual(['error']);
   });
 
   test('logs error on forbidden http, port 443.', async () => {
-    let errorMsg: string = '';
-    errorSpy = jest.spyOn(console, 'error').mockImplementation((msg) => {
-      errorMsg = msg as string;
-    });
-
     await program.parseAsync(['--port', '443', '--scheme', 'http'], { from: 'user' });
 
     expect(mocked_lastScheme).toEqual('');
@@ -203,15 +245,12 @@ describe('cli', (): void => {
     expect(mocked_lastApp).toBeNull();
     expect(await exists('./initKey')).toBe(false);
     expect(await exists('./ssl')).toBe(false);
-    expect(errorMsg).toEqual('http is only allowed if your application is behind a tls terminating proxy.');
+    expect(mocked_lastLoggedMessages).toEqual(['http is only allowed if your application is behind a tls terminating proxy.']);
+    expect(mocked_lastLoggedMetas).toEqual([{ port: '443', scheme: 'http' }]);
+    expect(mocked_lastLoggedLevels).toEqual(['error']);
   });
 
   test('logs error on port 80 and https.', async () => {
-    let errorMsg: string = '';
-    errorSpy = jest.spyOn(console, 'error').mockImplementation((msg) => {
-      errorMsg = msg as string;
-    });
-
     await program.parseAsync(['--port', '80', '--scheme', 'https'], { from: 'user' });
 
     expect(mocked_lastScheme).toEqual('');
@@ -219,15 +258,12 @@ describe('cli', (): void => {
     expect(mocked_lastApp).toBeNull();
     expect(await exists('./initKey')).toBe(false);
     expect(await exists('./ssl')).toBe(false);
-    expect(errorMsg).toEqual('invalid port for https.');
+    expect(mocked_lastLoggedMessages).toEqual(['invalid port for https.']);
+    expect(mocked_lastLoggedMetas).toEqual([{ port: '80', scheme: 'https' }]);
+    expect(mocked_lastLoggedLevels).toEqual(['error']);
   });
 
   test('logs error on invalid scheme.', async () => {
-    let errorMsg: string = '';
-    errorSpy = jest.spyOn(console, 'error').mockImplementation((msg) => {
-      errorMsg = msg as string;
-    });
-
     await program.parseAsync(['--port', '80', '--scheme', 'nope'], { from: 'user' });
 
     expect(mocked_lastScheme).toEqual('');
@@ -235,6 +271,8 @@ describe('cli', (): void => {
     expect(mocked_lastApp).toBeNull();
     expect(await exists('./initKey')).toBe(false);
     expect(await exists('./ssl')).toBe(false);
-    expect(errorMsg).toEqual('invalid scheme. Must be http or https.');
+    expect(mocked_lastLoggedMessages).toEqual(['invalid scheme. Must be http or https.']);
+    expect(mocked_lastLoggedMetas).toEqual([{ scheme: 'nope' }]);
+    expect(mocked_lastLoggedLevels).toEqual(['error']);
   });
 });

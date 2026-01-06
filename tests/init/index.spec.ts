@@ -9,6 +9,8 @@ import fs from 'fs/promises';
 let mocked_dbConfig: DatabaseConfig | null = null;
 let mocked_storageConfig: StorageConfig | null = null;
 let mocked_frontendConfig: FrontendConfig | null = null;
+let mocked_lastLoggedMessage: string = '';
+let mocked_lastLoggedMeta: Record<string, unknown> | null = null;
 
 const keyHex = '6161616161616161616161616161616161616161';
 
@@ -40,6 +42,19 @@ jest.mock('@/frontend', () => ({
   }
 }));
 
+jest.mock('@/logging/Logger', () => {
+  return {
+    Logger: class Logger {
+      // noinspection JSUnusedGlobalSymbols
+      public info(message: string, meta?: Record<string, unknown>): Logger {
+        mocked_lastLoggedMessage = message;
+        mocked_lastLoggedMeta = meta ?? null;
+        return this;
+      }
+    }
+  };
+});
+
 describe('init', () => {
   beforeEach(async () => {
     mockFS({});
@@ -50,6 +65,8 @@ describe('init', () => {
     mocked_dbConfig = null;
     mocked_storageConfig = null;
     mocked_frontendConfig = null;
+    mocked_lastLoggedMessage = '';
+    mocked_lastLoggedMeta = null;
   });
 
   test('isInit returns false if all configs available.', async () => {
@@ -76,6 +93,8 @@ describe('init', () => {
 
     expect(await exists('./initKey')).toBe(true);
     expect((await fs.readFile('./initKey')).toString('utf8')).toEqual(keyHex);
+    expect(mocked_lastLoggedMessage).toEqual('First start, you will need init key for initial configuration. Key generated.');
+    expect(mocked_lastLoggedMeta).toEqual({ key: keyHex });
   });
 
   test('initialize saves no initKey if all configs available.', async () => {

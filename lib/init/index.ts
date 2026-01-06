@@ -3,6 +3,7 @@ import { loadConfig as loadDatabaseConfig } from '@/db';
 import { loadConfig as loadStorageConfig } from '@/storage';
 import { loadConfig as loadFrontendConfig } from '@/frontend';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
+import { loadLogger } from '@/logging';
 
 const isInit = async function (): Promise<boolean> {
   const dbConfig = await loadDatabaseConfig();
@@ -17,7 +18,8 @@ const initialize = async function () {
   if (init) {
     const key = crypto.randomBytes(20).toString('hex');
     await new LocalStorageAdapter({ basePath: './' }).save('initKey', Buffer.from(key, 'utf8'));
-    console.log(`initKey: ${key}`);
+    const logger = loadLogger();
+    logger.info('First start, you will need init key for initial configuration. Key generated.', { key });
   }
 };
 

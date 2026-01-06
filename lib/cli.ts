@@ -8,22 +8,29 @@ import { description, version } from '../package.json';
 import { buildApi } from '@/server/api';
 import { initJwt } from '@/auth/jwt';
 import { initialize } from '@/init';
+import { loadLogger } from '@/logging';
 
-const startHttpServer = async function (port: number): Promise<void> {
+const startHttpServer = async function (port: number, start: number): Promise<void> {
+  const logger = loadLogger();
   const server = http.createServer(buildApi(true));
   server.listen({ port }, () => {
-    console.log(`Server started for http on port ${port}`);
+    const end = Date.now();
+    const time = end - start;
+    logger.info('Successfully started server.', { port, scheme: 'http', startTime: time + 'ms' });
   });
 };
 
-const startHttpsServer = async function (port: number): Promise<void> {
+const startHttpsServer = async function (port: number, start: number): Promise<void> {
+  const logger = loadLogger();
   const key = await readFile('./ssl/key.pem', 'utf8');
   const cert = await readFile('./ssl/cert.pem', 'utf8');
   const app = http2Express(express);
   app.use(buildApi(true));
   const server = http2.createSecureServer({ key, cert, allowHTTP1: true }, app);
   server.listen({ port }, () => {
-    console.log(`Server started for https on port ${port}`);
+    const end = Date.now();
+    const time = end - start;
+    logger.info('Successfully started server.', { port, scheme: 'https', startTime: time + 'ms' });
   });
 };
 
@@ -37,16 +44,21 @@ program
   .option('-p, --port <port>', 'Port on the application shall listen to', '9090')
   .option('-s, --scheme <scheme>', 'Protocol to use. http or https', 'http')
   .action(async ({ port, scheme }: { port?: string; scheme?: string }) => {
+    const logger = loadLogger();
+    const start = Date.now();
     if (scheme === 'http' && (port === '80' || port === '443')) {
-      return console.error('http is only allowed if your application is behind a tls terminating proxy.');
+      logger.error('http is only allowed if your application is behind a tls terminating proxy.', { port, scheme });
+      return;
     }
 
     if (scheme === 'https' && port === '80') {
-      return console.error('invalid port for https.');
+      logger.error('invalid port for https.', { port, scheme });
+      return;
     }
 
     if (scheme !== 'https' && scheme !== 'http') {
-      return console.error('invalid scheme. Must be http or https.');
+      logger.error('invalid scheme. Must be http or https.', { scheme });
+      return;
     }
 
     await initJwt();
@@ -54,9 +66,9 @@ program
     await mkdir('./ssl', { recursive: true });
 
     if (scheme === 'http') {
-      return await startHttpServer(parseInt(port ?? '-1'));
+      return await startHttpServer(parseInt(port ?? '-1'), start);
     }
-    await startHttpsServer(parseInt(port ?? '-1'));
+    await startHttpsServer(parseInt(port ?? '-1'), start);
   });
 
 export { program };
