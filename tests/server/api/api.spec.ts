@@ -24,6 +24,17 @@ jest.mock('@/db', () => {
   };
 });
 
+jest.mock('@/logging/Logger', () => {
+  return {
+    Logger: class Logger {
+      // noinspection JSUnusedGlobalSymbols
+      public info(): Logger {
+        return this;
+      }
+    }
+  };
+});
+
 describe('api', () => {
   const testUser: User = {
     userId: 'testUserId',
