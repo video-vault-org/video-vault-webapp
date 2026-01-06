@@ -31,6 +31,10 @@ jest.mock('@/logging/Logger', () => {
       public info(): Logger {
         return this;
       }
+      // noinspection JSUnusedGlobalSymbols
+      public access(): Logger {
+        return this;
+      }
     }
   };
 });
