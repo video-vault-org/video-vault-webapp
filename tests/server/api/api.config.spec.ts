@@ -109,7 +109,7 @@ describe('api - config', () => {
 
     test('saveFrontendConfigHandlers saves config successfully.', async () => {
       const api = buildApi(true, false);
-      const config: FrontendConfig = { logo: 'l', title: 't', videoMeta: [{ type: 'string', name: 'metaN', encrypted: false }] };
+      const config: FrontendConfig = { logo: 'l', title: 't', description: 'd', videoMeta: [{ type: 'string', name: 'metaN', encrypted: false }] };
 
       const response = await request(api).post('/config/manage/save-frontend').send({ config });
 
@@ -147,7 +147,7 @@ describe('api - config', () => {
 
     test('loadFrontendConfigHandlers saves config successfully.', async () => {
       const api = buildApi(false, false);
-      const config: FrontendConfig = { logo: 'l', title: 't', videoMeta: [{ type: 'string', name: 'metaN', encrypted: false }] };
+      const config: FrontendConfig = { logo: 'l', title: 't', description: 's', videoMeta: [{ type: 'string', name: 'metaN', encrypted: false }] };
       await mkdir('./conf', { recursive: true });
       await writeFile('./conf/frontend.json', Buffer.from(JSON.stringify(config), 'utf8'));
 

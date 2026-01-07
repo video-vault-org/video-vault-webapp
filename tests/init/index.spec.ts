@@ -72,7 +72,7 @@ describe('init', () => {
   test('isInit returns false if all configs available.', async () => {
     mocked_dbConfig = { type: 'in-memory' };
     mocked_storageConfig = { type: 'local', conf: { basePath: '' } };
-    mocked_frontendConfig = { videoMeta: [], title: '', logo: '' };
+    mocked_frontendConfig = { videoMeta: [], title: '', description: '', logo: '' };
 
     const init = await isInit();
 
@@ -81,7 +81,7 @@ describe('init', () => {
 
   test('isInit returns true if one config missing.', async () => {
     mocked_dbConfig = { type: 'in-memory' };
-    mocked_frontendConfig = { videoMeta: [], title: '', logo: '' };
+    mocked_frontendConfig = { videoMeta: [], title: '', description: '', logo: '' };
 
     const init = await isInit();
 
@@ -100,7 +100,7 @@ describe('init', () => {
   test('initialize saves no initKey if all configs available.', async () => {
     mocked_dbConfig = { type: 'in-memory' };
     mocked_storageConfig = { type: 'local', conf: { basePath: '' } };
-    mocked_frontendConfig = { videoMeta: [], title: '', logo: '' };
+    mocked_frontendConfig = { videoMeta: [], title: '', description: '', logo: '' };
 
     await initialize();
 

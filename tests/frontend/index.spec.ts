@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 import { FrontendConfig } from '@/frontend/types/FrontendConfig';
 
 describe('frontend', (): void => {
-  const conf: FrontendConfig = { title: 'title', logo: 'logo', videoMeta: [{ name: 'name', type: 'string', encrypted: true }] };
+  const conf: FrontendConfig = { title: 'title', description: '', logo: 'logo', videoMeta: [{ name: 'name', type: 'string', encrypted: true }] };
 
   afterEach(async (): Promise<void> => {
     mockFS.restore();
