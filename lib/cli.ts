@@ -1,6 +1,6 @@
 import http from 'http';
 import http2 from 'http2';
-import { readFile, mkdir } from 'fs/promises';
+import { readFileSync, mkdirSync, existsSync } from 'fs';
 import express from 'express';
 import http2Express from 'http2-express-bridge';
 import { Command } from 'commander';
@@ -22,8 +22,8 @@ const startHttpServer = async function (port: number, start: number): Promise<vo
 
 const startHttpsServer = async function (port: number, start: number): Promise<void> {
   const logger = loadLogger();
-  const key = await readFile('./ssl/key.pem', 'utf8');
-  const cert = await readFile('./ssl/cert.pem', 'utf8');
+  const key = readFileSync('./ssl/key.pem', 'utf8');
+  const cert = readFileSync('./ssl/cert.pem', 'utf8');
   const app = http2Express(express);
   app.use(buildApi(true));
   const server = http2.createSecureServer({ key, cert, allowHTTP1: true }, app);
@@ -63,12 +63,27 @@ program
 
     await initJwt();
     await initialize();
-    await mkdir('./ssl', { recursive: true });
+    mkdirSync('./ssl', { recursive: true });
 
     if (scheme === 'http') {
       return await startHttpServer(parseInt(port ?? '-1'), start);
     }
-    await startHttpsServer(parseInt(port ?? '-1'), start);
+
+    if (!existsSync('./ssl/key.pem')) {
+      logger.error('File ./ssl/key.pem does not exist.');
+      return;
+    }
+
+    if (!existsSync('./ssl/cert.pem')) {
+      logger.error('File ./ssl/cert.pem does not exist.');
+      return;
+    }
+
+    try {
+      await startHttpsServer(parseInt(port ?? '-1'), start);
+    } catch (err: unknown) {
+      logger.error('Could not start https server.', { error: (err as Error).message ?? 'Unknown error' });
+    }
   });
 
 export { program };

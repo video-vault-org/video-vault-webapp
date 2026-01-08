@@ -97,6 +97,8 @@ K14rvuWCamLxG4C3mM6qExHPaLgK
 -----END PRIVATE KEY-----
 `;
 
+const keyHex = '6161616161616161616161616161616161616161';
+
 let mocked_lastPort = -1;
 let mocked_lastScheme = '';
 let mocked_lastApp: Express | null = null;
@@ -192,7 +194,7 @@ describe('cli', (): void => {
       'First start, you will need init key for initial configuration. Key generated.',
       'Successfully started server.'
     ]);
-    expect(mocked_lastLoggedMetas?.at(0)).toEqual({ key: '6161616161616161616161616161616161616161' });
+    expect(mocked_lastLoggedMetas?.at(0)).toEqual({ key: keyHex });
     expect(mocked_lastLoggedMetas?.at(1)?.port).toBe(port);
     expect(mocked_lastLoggedMetas?.at(1)?.scheme).toEqual(scheme);
     expect(mocked_lastLoggedMetas?.at(1)?.startTime).toMatch(/^\d+ms$/iu);
@@ -222,6 +224,54 @@ describe('cli', (): void => {
     expect(await exists('./initKey')).toBe(true);
     expect(await exists('./ssl')).toBe(true);
     assertStartupLogs(8000, 'https');
+  });
+
+  test('logs error if key.pem does not exist.', async () => {
+    mockFS({ './ssl': { 'cert.pem': CERT } });
+
+    await program.parseAsync(['--port', '8000', '--scheme', 'https'], { from: 'user' });
+
+    expect(mocked_lastScheme).toEqual('');
+    expect(mocked_lastPort).toEqual(-1);
+    expect(mocked_lastApp).toBeNull();
+    expect(mocked_lastLoggedMessages).toEqual([
+      'First start, you will need init key for initial configuration. Key generated.',
+      'File ./ssl/key.pem does not exist.'
+    ]);
+    expect(mocked_lastLoggedMetas).toEqual([{ key: keyHex }, {}]);
+    expect(mocked_lastLoggedLevels).toEqual(['info', 'error']);
+  });
+
+  test('logs error if cert.pem does not exist.', async () => {
+    mockFS({ './ssl': { 'key.pem': KEY } });
+
+    await program.parseAsync(['--port', '8000', '--scheme', 'https'], { from: 'user' });
+
+    expect(mocked_lastScheme).toEqual('');
+    expect(mocked_lastPort).toEqual(-1);
+    expect(mocked_lastApp).toBeNull();
+    expect(mocked_lastLoggedMessages).toEqual([
+      'First start, you will need init key for initial configuration. Key generated.',
+      'File ./ssl/cert.pem does not exist.'
+    ]);
+    expect(mocked_lastLoggedMetas).toEqual([{ key: keyHex }, {}]);
+    expect(mocked_lastLoggedLevels).toEqual(['info', 'error']);
+  });
+
+  test('logs error if key.pem is invalid.', async () => {
+    mockFS({ './ssl': { 'key.pem': 'invalid key file', 'cert.pem': CERT } });
+
+    await program.parseAsync(['--port', '8000', '--scheme', 'https'], { from: 'user' });
+
+    expect(mocked_lastScheme).toEqual('');
+    expect(mocked_lastPort).toEqual(-1);
+    expect(mocked_lastApp).toBeNull();
+    expect(mocked_lastLoggedMessages).toEqual([
+      'First start, you will need init key for initial configuration. Key generated.',
+      'Could not start https server.'
+    ]);
+    expect(mocked_lastLoggedMetas).toEqual([{ key: keyHex }, { error: 'error:1E08010C:DECODER routines::unsupported' }]);
+    expect(mocked_lastLoggedLevels).toEqual(['info', 'error']);
   });
 
   test('logs error on forbidden http, port 80.', async () => {
