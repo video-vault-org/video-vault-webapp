@@ -9,8 +9,4 @@ const loadLogger = function (): Logger {
   return (logger = new Logger());
 };
 
-const getLogger = function (): Logger | null {
-  return logger;
-};
-
-export { loadLogger, getLogger };
+export { loadLogger };

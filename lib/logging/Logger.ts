@@ -200,14 +200,8 @@ class Logger {
    * @returns This logger instance
    */
   public access({ method, path, statusCode, contentLength, ...rest }: Omit<AccessLogEntry, 'timestamp'>): Logger {
+    this.ttyLogger?.info(`Access: ${method} ${path} - ${statusCode} - ${contentLength}`, { sourcePath: getSourcePath() });
     this.accessFileLogger?.info('', { method, path, statusCode, contentLength, ...rest });
-    const isApiRequest = /^\/api\//.test(path as string);
-    if (!isApiRequest && (statusCode as number) < 400) {
-      this.ttyLogger?.info(`Access: statusCode ${statusCode} on ${method} ${path}`, {
-        sourcePath: getSourcePath(),
-        meta: { method, path, statusCode, contentLength }
-      });
-    }
     return this;
   }
 }
