@@ -66,7 +66,7 @@ const logAccessMiddleware: express.RequestHandler = function (req, res: express.
 const buildApi = function (fallbacks: boolean) {
   const api = express();
   api.use(logAccessMiddleware);
-  api.use(express.static('./web'));
+  api.use(express.static('./frontend/dist'));
   api.use(express.json());
   api.get('/init', async (_, res) => {
     const init = await isInit();

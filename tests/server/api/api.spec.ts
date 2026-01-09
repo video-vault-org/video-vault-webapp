@@ -67,7 +67,7 @@ describe('api', () => {
     if (await exists('./initKey')) {
       await unlink('./initKey');
     }
-    await deleteDirectory('./web');
+    await deleteDirectory('./frontend/dist');
     await deleteDirectory('./conf');
   });
 
@@ -315,11 +315,11 @@ describe('api', () => {
     });
   });
 
-  describe('web', () => {
-    test('serves given web file.', async () => {
+  describe('static', () => {
+    test('serves given static file.', async () => {
       const css = 'body { margin: 0 }';
-      await mkdir('./web', { recursive: true });
-      await writeFile('./web/test.css', Buffer.from(css, 'utf8'));
+      await mkdir('./frontend/dist', { recursive: true });
+      await writeFile('./frontend/dist/test.css', Buffer.from(css, 'utf8'));
       const api = buildApi(true);
 
       const response = await request(api).get('/test.css');
