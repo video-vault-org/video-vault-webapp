@@ -36,7 +36,8 @@ const buildMetaPad = function (meta: unknown, delimiter: ' - ' | '\n'): string {
 const logFormats = {
   coloredHumanReadableLine({ level, message, timestamp, sourcePath, meta }: LogEntry): string {
     const metaPad = buildMetaPad(meta, ' - ');
-    return colorize().colorize(level, `${timestamp} [${sourcePath}] ${level.toUpperCase()}: ${message}${metaPad}`);
+    const prefix = message.startsWith('Access:') ? timestamp : `${timestamp} [${sourcePath}] ${level.toUpperCase()}:`;
+    return colorize().colorize(level, `${prefix} ${message}${metaPad}`);
   },
   json({ level, message, timestamp, sourcePath, meta }: LogEntry): string {
     const messageString = message as string;
@@ -200,7 +201,15 @@ class Logger {
    * @returns This logger instance
    */
   public access({ method, path, statusCode, contentLength, ...rest }: Omit<AccessLogEntry, 'timestamp'>): Logger {
-    this.ttyLogger?.info(`Access: ${method} ${path} - ${statusCode} - ${contentLength}`, { sourcePath: getSourcePath() });
+    if (this.ttyLogger) {
+      let level: 'info' | 'warn' | 'error' = 'info';
+      if ((statusCode as number) >= 399) {
+        level = 'error';
+      } else if ((statusCode as number) >= 299 || (statusCode as number) < 200) {
+        level = 'warn';
+      }
+      this.ttyLogger[level](`Access: ${method} ${path} - ${statusCode} - ${contentLength}`, { sourcePath: getSourcePath() });
+    }
     this.accessFileLogger?.info('', { method, path, statusCode, contentLength, ...rest });
     return this;
   }

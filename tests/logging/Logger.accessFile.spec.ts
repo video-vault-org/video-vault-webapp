@@ -46,7 +46,8 @@ describe('Access Logger', (): void => {
         const { timestamp, ...rest } = JSON.parse(message.trim());
         expect(rest).toEqual({ ip, method, path: uri, httpVersion, statusCode, contentLength, referer, userAgent, time });
         expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/u);
-        expect(lastLoggedMessage).toContain('INFO: Access: GET /image.png - 200 - 815');
+        expect(lastLoggedMessage).toContain('Access: GET /image.png - 200 - 815');
+        expect(lastLoggedMessage).not.toContain('] INFO: ');
         done();
       }, 300);
     });
