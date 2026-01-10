@@ -31,6 +31,7 @@ cleanup() {
   rm -rf built
   rm -rf logs
   rm -rf ssl
+  rm -rf conf
   rm initKey 2>/dev/null
 
   exit 0

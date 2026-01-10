@@ -7,6 +7,7 @@ cleanup() {
   rm -rf logs
   rm -rf ssl
   rm -rf conf
+  rm -rf frontend/dist
   rm initKey 2>/dev/null
 
   exit 0

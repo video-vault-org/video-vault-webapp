@@ -14,7 +14,7 @@ const deleteDirectory = async function (path: string) {
   if (!(await exists(path))) {
     return;
   }
-  await rm(path, { recursive: true });
+  await rm(path, { recursive: true, force: true });
 };
 
 const createEmptyFile = async function (path: string) {
