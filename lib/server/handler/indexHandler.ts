@@ -1,7 +1,23 @@
+import { existsSync, readdirSync } from 'fs';
 import express from 'express';
 import { loadConfig as loadFrontendConfig } from '@/frontend';
 
 let port = '9090';
+
+let js = '';
+let css = '';
+
+const setJsAndCss = function () {
+  if (!js || !css) {
+    const exists = existsSync('./frontend/dist/assets');
+    if (!exists) {
+      return;
+    }
+    const files = exists ? readdirSync('./frontend/dist/assets') : [];
+    js = files.find((file) => file.endsWith('.js')) ?? 'index.js';
+    css = files.find((file) => file.endsWith('.css')) ?? 'index.css';
+  }
+};
 
 const setPort = function (portToSet: string): void {
   port = portToSet;
@@ -12,6 +28,7 @@ const getPort = function (): string {
 };
 
 const getHtml = function (logoDirName: string, title: string, description: string, baseUrl: string): string {
+  setJsAndCss();
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -28,10 +45,11 @@ const getHtml = function (logoDirName: string, title: string, description: strin
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:image" content="${baseUrl}/logo/${logoDirName}/og-image.jpg" />
     <title>${title}</title>
+    <script type="module" crossorigin src="/assets/${js}"></script>
+    <link rel="stylesheet" crossorigin href="/assets/${css}">
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
 `;
@@ -50,8 +68,10 @@ const indexHandler: express.RequestHandler = async function (req, res) {
   res.status(200).send(html);
 };
 
-const redirectDirectHandler: express.RequestHandler = async function (req, res) {
+const redirectDirectHandler: express.RequestHandler = async function (_req, res) {
   res.redirect(301, '/');
 };
+
+setJsAndCss();
 
 export { setPort, getPort, indexHandler, redirectDirectHandler };

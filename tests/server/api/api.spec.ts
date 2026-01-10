@@ -334,8 +334,12 @@ describe('api', () => {
 
     test('serves generated index.html on /.', async () => {
       const config: FrontendConfig = { logo: 'testLogo', title: 'testTitle', description: 'testDesc', videoMeta: [] };
+      await deleteDirectory('./frontend/dist/assets');
       await mkdir('./conf', { recursive: true });
+      await mkdir('./frontend/dist/assets', { recursive: true });
       await writeFile('./conf/frontend.json', Buffer.from(JSON.stringify(config), 'utf8'));
+      await writeFile('./frontend/dist/assets/index-12345abc.js', Buffer.from('const t = 2;', 'utf8'));
+      await writeFile('./frontend/dist/assets/index-cba54321.css', Buffer.from('body { margin: 0 }', 'utf8'));
       const api = buildApi(true);
       setPort('1234');
 
@@ -346,6 +350,9 @@ describe('api', () => {
       expect(response.text).toContain('property="og:title" content="testTitle"');
       expect(response.text).toContain('property="og:description" content="testDesc"');
       expect(response.text).toContain('property="og:image" content="http://127.0.0.1:1234/logo/testLogo/og-image.jpg"');
+      expect(response.text).toContain('script type="module" crossorigin src="/assets/index-12345abc.js"');
+      expect(response.text).toContain('link rel="stylesheet" crossorigin href="/assets/index-cba54321.css"');
+      expect(response.text).not.toContain('script type="module" src="/src/main.tsx"');
       expect(response.headers['content-type']).toEqual('text/html; charset=utf-8');
       expect(response.headers['content-length']).toBe(response.text.length + '');
     });

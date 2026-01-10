@@ -21,7 +21,8 @@
     "build:backend": "rimraf ./built && tsc && tsc-alias",
     "build:frontend": "cd frontend && npm run build",
     "build": "npm run build:backend && npm run build:frontend",
-    "dev": "./dev.sh"
+    "dev": "./dev.sh",
+    "prod": "./prod.sh"
   },
   "repository": {
     "type": "git",
