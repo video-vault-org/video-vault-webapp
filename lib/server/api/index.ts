@@ -1,6 +1,7 @@
 import express from 'express';
 import onFinished from 'on-finished';
 import { authorizeHandler, loginHandler } from '@/server/handler/userHandler';
+import { indexHandler, redirectDirectHandler } from '@/server/handler/indexHandler';
 import { buildUserApi } from '@/server/api/userApi';
 import { buildCommentApi } from '@/server/api/commentApi';
 import { buildVideoApi } from '@/server/api/videoApi';
@@ -66,6 +67,8 @@ const logAccessMiddleware: express.RequestHandler = function (req, res: express.
 const buildApi = function (fallbacks: boolean) {
   const api = express();
   api.use(logAccessMiddleware);
+  api.get('/', indexHandler);
+  api.get('/index.html', redirectDirectHandler);
   api.use(express.static('./frontend/dist'));
   api.use(express.json());
   api.get('/init', async (_, res) => {

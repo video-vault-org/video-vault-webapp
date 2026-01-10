@@ -2,6 +2,7 @@ import { Express } from 'express';
 import mockFS from 'mock-fs';
 import { program } from '@/cli';
 import { exists } from '#/util';
+import { getPort } from '@/server/handler/indexHandler';
 
 interface HttpsConf {
   key: string;
@@ -209,6 +210,7 @@ describe('cli', (): void => {
     expect(mocked_lastApp).toBeInstanceOf(Function);
     expect(await exists('./initKey')).toBe(true);
     expect(await exists('./ssl')).toBe(true);
+    expect(getPort()).toEqual('9000');
     assertStartupLogs(9000, 'http');
   });
 
@@ -223,6 +225,7 @@ describe('cli', (): void => {
     expect(mocked_lastHttpsConf).toEqual({ key: KEY, cert: CERT, allowHTTP1: true });
     expect(await exists('./initKey')).toBe(true);
     expect(await exists('./ssl')).toBe(true);
+    expect(getPort()).toEqual('8000');
     assertStartupLogs(8000, 'https');
   });
 

@@ -9,6 +9,7 @@ import { buildApi } from '@/server/api';
 import { initJwt } from '@/auth/jwt';
 import { initialize } from '@/init';
 import { loadLogger } from '@/logging';
+import { setPort } from '@/server/handler/indexHandler';
 
 const startHttpServer = async function (port: number, start: number): Promise<void> {
   const logger = loadLogger();
@@ -64,6 +65,8 @@ program
     await initJwt();
     await initialize();
     mkdirSync('./ssl', { recursive: true });
+
+    setPort(port ?? '9090');
 
     if (scheme === 'http') {
       return await startHttpServer(parseInt(port ?? '-1'), start);

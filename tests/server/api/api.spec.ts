@@ -5,11 +5,13 @@ import { initJwt, issueToken } from '@/auth/jwt';
 import { buildApi } from '@/server/api';
 import request from 'supertest';
 import { initialize } from '@/init';
+import { setPort } from '@/server/handler/indexHandler';
 import { User } from '@/user/types/User';
 import { AuthorizedUserRequest } from '@/server/types/AuthorizedUserRequest';
 import { AuthorizedInitRequest } from '@/server/types/AuthorizedInitRequest';
 import { Lock } from '@/auth/types/Lock';
 import { DbItem } from '@/db/types/DbItem';
+import { FrontendConfig } from '@/frontend/types/FrontendConfig';
 
 const mocked_db = new InMemoryDatabaseAdapter();
 
@@ -315,8 +317,8 @@ describe('api', () => {
     });
   });
 
-  describe('static', () => {
-    test('serves given static file.', async () => {
+  describe('frontend', () => {
+    test('serves given static file on /test.css.', async () => {
       const css = 'body { margin: 0 }';
       await mkdir('./frontend/dist', { recursive: true });
       await writeFile('./frontend/dist/test.css', Buffer.from(css, 'utf8'));
@@ -328,6 +330,33 @@ describe('api', () => {
       expect(response.text).toEqual(css);
       expect(response.headers['content-type']).toEqual('text/css; charset=utf-8');
       expect(response.headers['content-length']).toBe(css.length + '');
+    });
+
+    test('serves generated index.html on /.', async () => {
+      const config: FrontendConfig = { logo: 'testLogo', title: 'testTitle', description: 'testDesc', videoMeta: [] };
+      await mkdir('./conf', { recursive: true });
+      await writeFile('./conf/frontend.json', Buffer.from(JSON.stringify(config), 'utf8'));
+      const api = buildApi(true);
+      setPort('1234');
+
+      const response = await request(api).get('/');
+
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('/logo/testLogo/favicon.ico');
+      expect(response.text).toContain('property="og:title" content="testTitle"');
+      expect(response.text).toContain('property="og:description" content="testDesc"');
+      expect(response.text).toContain('property="og:image" content="http://127.0.0.1:1234/logo/testLogo/og-image.jpg"');
+      expect(response.headers['content-type']).toEqual('text/html; charset=utf-8');
+      expect(response.headers['content-length']).toBe(response.text.length + '');
+    });
+
+    test('redirects direct index.html request on /index.html', async () => {
+      const api = buildApi(true);
+
+      const response = await request(api).get('/index.html');
+
+      expect(response.status).toBe(301);
+      expect(response.headers['location']).toEqual('/');
     });
   });
 
