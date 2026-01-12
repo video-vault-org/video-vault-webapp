@@ -16,7 +16,9 @@
   "scripts": {
     "audit": "better-npm-audit audit",
     "lint": "eslint '**/*.ts' && cd frontend && npm run lint",
-    "test": "jest --runInBand --verbose --detectOpenHandles --forceExit",
+    "test:backend": "jest --runInBand --verbose --detectOpenHandles --forceExit",
+    "test:frontend": "cd frontend && npm run test",
+    "test": "npm run test:backend && npm run test:frontend",
     "qa": "npm run lint && npm run audit && npm run test",
     "build:backend": "rimraf ./built && tsc && tsc-alias",
     "build:frontend": "cd frontend && npm run build",
