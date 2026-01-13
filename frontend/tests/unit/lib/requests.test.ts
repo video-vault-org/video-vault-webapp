@@ -3,7 +3,7 @@ import axios from 'axios';
 import AxiosMockAdapter from 'axios-mock-adapter';
 import { doGet, doPost, doDelete } from '../../../src/lib/requests.ts';
 
-describe('api client (axios-mock-adapter)', () => {
+describe('requests', () => {
   const token = 'test-token';
   let mock: AxiosMockAdapter;
 
