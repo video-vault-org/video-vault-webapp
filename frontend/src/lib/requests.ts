@@ -10,7 +10,7 @@ const handleError = function (err: unknown): RequestResult {
   if (axios.isAxiosError(err) && err.response) {
     return [false, err.response.data];
   }
-  if (axios.isAxiosError(err) && err.request) {
+  if (axios.isAxiosError(err)) {
     return ['axios-network-error'];
   }
   return ['axios-internal-error'];
