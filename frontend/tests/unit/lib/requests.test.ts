@@ -32,7 +32,7 @@ describe('requests', () => {
 
       const result = await doGet<TestBodyType>('/test', token);
 
-      expect(result).toEqual([true, { foo: 'bar' }]);
+      expect(result).toEqual([null, { foo: 'bar' }]);
     });
 
     it('returns error response data on axios response error', async () => {
@@ -40,7 +40,7 @@ describe('requests', () => {
 
       const result = await doGet<TestErrorBodyType>('/test', token);
 
-      expect(result).toEqual([false, { error: 'bad-request' }]);
+      expect(result).toEqual(['bad-request']);
     });
 
     it('returns network error on axios network error', async () => {
@@ -87,7 +87,7 @@ describe('requests', () => {
 
       const result = await doPost<{ id: number }, { name: string }>('/test', token, { name: 'foo' });
 
-      expect(result).toEqual([true, { id: 1 }]);
+      expect(result).toEqual([null, { id: 1 }]);
     });
 
     it('returns network error on axios network error', async () => {
@@ -114,7 +114,7 @@ describe('requests', () => {
 
       const result = await doDelete<Record<never, never>>('/test', token);
 
-      expect(result).toEqual([true, {}]);
+      expect(result).toEqual([null, {}]);
     });
 
     it('returns network error on axios network error', async () => {
