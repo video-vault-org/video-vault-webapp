@@ -19,7 +19,7 @@ describe('requests', () => {
     it('returns success=true for 2xx response', async () => {
       mock.onGet('/test').reply(200, { foo: 'bar' });
 
-      const result = await doGet('test', token);
+      const result = await doGet('/init', token);
 
       expect(result).toEqual([true, { foo: 'bar' }]);
     });
@@ -27,7 +27,7 @@ describe('requests', () => {
     it('returns error response data on axios response error', async () => {
       mock.onGet('/test').reply(400, { error: 'bad-request' });
 
-      const result = await doGet('test', token);
+      const result = await doGet('/test', token);
 
       expect(result).toEqual([false, { error: 'bad-request' }]);
     });
@@ -83,7 +83,7 @@ describe('requests', () => {
         return [200, {}];
       });
 
-      await doPost('test', token, {});
+      await doPost('/test', token, {});
     });
   });
 
@@ -110,7 +110,7 @@ describe('requests', () => {
         return [200, {}];
       });
 
-      await doDelete('test', token);
+      await doDelete('/test', token);
     });
   });
 });
