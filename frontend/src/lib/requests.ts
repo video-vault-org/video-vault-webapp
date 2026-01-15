@@ -1,11 +1,12 @@
 import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 
-type ResponseRequestResult = [boolean, Record<string, unknown>];
+type Body = Record<string, unknown>;
+type ResponseRequestResult<T extends Body> = [boolean, T];
 type ErrorRequestResult = [string];
-type RequestResult = ResponseRequestResult | ErrorRequestResult;
+type RequestResult<T extends Body> = ResponseRequestResult<T> | ErrorRequestResult;
 
-const handleError = function (err: unknown): RequestResult {
+const handleError = function <T extends Body>(err: unknown): RequestResult<T> {
   console.error((err as Error).message);
   if (axios.isAxiosError(err) && err.response) {
     return [false, err.response.data];
@@ -16,10 +17,10 @@ const handleError = function (err: unknown): RequestResult {
   return ['axios-internal-error'];
 };
 
-const doGet = async function (path: string, token: string): Promise<RequestResult> {
+const doGet = async function <T extends Body>(path: string, token: string): Promise<RequestResult<T>> {
   try {
     const conf: AxiosRequestConfig = { headers: { Authorization: `Bearer ${token}` } };
-    const response = await axios.get('/' + path.replace(/^\//, ''), conf);
+    const response = await axios.get<T>('/' + path.replace(/^\//, ''), conf);
     const success = response.status >= 200 && response.status <= 299;
     return [success, response.data];
   } catch (err: unknown) {
@@ -27,10 +28,10 @@ const doGet = async function (path: string, token: string): Promise<RequestResul
   }
 };
 
-const doPost = async function (path: string, token: string, body: Record<string, unknown>): Promise<RequestResult> {
+const doPost = async function <S extends Body, C extends Body>(path: string, token: string, body: C): Promise<RequestResult<S>> {
   try {
     const conf: AxiosRequestConfig = { headers: { Authorization: `Bearer ${token}` } };
-    const response = await axios.post('/' + path.replace(/^\//, ''), body, conf);
+    const response = await axios.post<S>('/' + path.replace(/^\//, ''), body, conf);
     const success = response.status >= 200 && response.status <= 299;
     return [success, response.data];
   } catch (err: unknown) {
@@ -38,10 +39,10 @@ const doPost = async function (path: string, token: string, body: Record<string,
   }
 };
 
-const doDelete = async function (path: string, token: string): Promise<RequestResult> {
+const doDelete = async function <T extends Body>(path: string, token: string): Promise<RequestResult<T>> {
   try {
     const conf: AxiosRequestConfig = { headers: { Authorization: `Bearer ${token}` } };
-    const response = await axios.delete('/' + path.replace(/^\//, ''), conf);
+    const response = await axios.delete<T>('/' + path.replace(/^\//, ''), conf);
     const success = response.status >= 200 && response.status <= 299;
     return [success, response.data];
   } catch (err: unknown) {

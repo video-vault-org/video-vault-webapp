@@ -3,6 +3,9 @@ import axios from 'axios';
 import AxiosMockAdapter from 'axios-mock-adapter';
 import { doGet, doPost, doDelete } from '../../../src/lib/requests.ts';
 
+type TestBodyType = { foo: string };
+type TestErrorBodyType = { error: string };
+
 describe('requests', () => {
   const token = 'test-token';
   let mock: AxiosMockAdapter;
@@ -19,7 +22,7 @@ describe('requests', () => {
     it('returns success=true for 2xx response', async () => {
       mock.onGet('/test').reply(200, { foo: 'bar' });
 
-      const result = await doGet('/init', token);
+      const result = await doGet<TestBodyType>('/test', token);
 
       expect(result).toEqual([true, { foo: 'bar' }]);
     });
@@ -27,7 +30,7 @@ describe('requests', () => {
     it('returns error response data on axios response error', async () => {
       mock.onGet('/test').reply(400, { error: 'bad-request' });
 
-      const result = await doGet('/test', token);
+      const result = await doGet<TestErrorBodyType>('/test', token);
 
       expect(result).toEqual([false, { error: 'bad-request' }]);
     });
@@ -35,7 +38,7 @@ describe('requests', () => {
     it('returns network error on axios network error', async () => {
       mock.onGet('/test').networkError();
 
-      const result = await doGet('/test', token);
+      const result = await doGet<TestErrorBodyType>('/test', token);
 
       expect(result).toEqual(['axios-network-error']);
     });
@@ -45,7 +48,7 @@ describe('requests', () => {
         throw new Error('boom');
       });
 
-      const result = await doGet('/test', token);
+      const result = await doGet<TestErrorBodyType>('/test', token);
 
       expect(result).toEqual(['axios-internal-error']);
     });
@@ -64,7 +67,7 @@ describe('requests', () => {
     it('returns success=true for 2xx response', async () => {
       mock.onPost('/test', { name: 'foo' }).reply(201, { id: 1 });
 
-      const result = await doPost('/test', token, { name: 'foo' });
+      const result = await doPost<{ id: number }, { name: string }>('/test', token, { name: 'foo' });
 
       expect(result).toEqual([true, { id: 1 }]);
     });
@@ -72,7 +75,7 @@ describe('requests', () => {
     it('returns network error on axios network error', async () => {
       mock.onPost('/test', {}).networkError();
 
-      const result = await doPost('/test', token, {});
+      const result = await doPost<Record<never, never>, Record<never, never>>('/test', token, {});
 
       expect(result).toEqual(['axios-network-error']);
     });
@@ -83,7 +86,7 @@ describe('requests', () => {
         return [200, {}];
       });
 
-      await doPost('/test', token, {});
+      await doPost<Record<never, never>, Record<never, never>>('/test', token, {});
     });
   });
 
@@ -91,7 +94,7 @@ describe('requests', () => {
     it('returns success=true for 2xx response', async () => {
       mock.onDelete('/test').reply(204, {});
 
-      const result = await doDelete('/test', token);
+      const result = await doDelete<Record<never, never>>('/test', token);
 
       expect(result).toEqual([true, {}]);
     });
@@ -99,7 +102,7 @@ describe('requests', () => {
     it('returns network error on axios network error', async () => {
       mock.onDelete('/test').networkError();
 
-      const result = await doDelete('/test', token);
+      const result = await doDelete<Record<never, never>>('/test', token);
 
       expect(result).toEqual(['axios-network-error']);
     });
@@ -110,7 +113,7 @@ describe('requests', () => {
         return [200, {}];
       });
 
-      await doDelete('/test', token);
+      await doDelete<Record<never, never>>('/test', token);
     });
   });
 });
