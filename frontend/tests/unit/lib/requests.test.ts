@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import axios from 'axios';
 import AxiosMockAdapter from 'axios-mock-adapter';
 import { doGet, doPost, doDelete } from '../../../src/lib/requests.ts';
@@ -6,16 +6,24 @@ import { doGet, doPost, doDelete } from '../../../src/lib/requests.ts';
 type TestBodyType = { foo: string };
 type TestErrorBodyType = { error: string };
 
+let errorSpy: ReturnType<typeof vi.spyOn>;
+let loggedMessage = '';
+
 describe('requests', () => {
   const token = 'test-token';
   let mock: AxiosMockAdapter;
 
   beforeEach(() => {
     mock = new AxiosMockAdapter(axios);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation((message) => {
+      loggedMessage = message;
+    });
   });
 
   afterEach(() => {
     mock.restore();
+    errorSpy?.mockRestore();
+    loggedMessage = '';
   });
 
   describe('doGet', () => {
@@ -51,6 +59,16 @@ describe('requests', () => {
       const result = await doGet<TestErrorBodyType>('/test', token);
 
       expect(result).toEqual(['axios-internal-error']);
+    });
+
+    it('logs internal error for non-axios error to console', async () => {
+      mock.onGet('/test').reply(() => {
+        throw new Error('boom');
+      });
+
+      await doGet<TestErrorBodyType>('/test', token);
+
+      expect(loggedMessage).toEqual('boom');
     });
 
     it('sets Authorization header', async () => {
