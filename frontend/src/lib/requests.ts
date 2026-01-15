@@ -24,7 +24,7 @@ const doGet = async function <T extends Body>(path: string, token: string): Prom
     const success = response.status >= 200 && response.status <= 299;
     return [success, response.data];
   } catch (err: unknown) {
-    return handleError(err);
+    return handleError<T>(err);
   }
 };
 
@@ -35,7 +35,7 @@ const doPost = async function <S extends Body, C extends Body>(path: string, tok
     const success = response.status >= 200 && response.status <= 299;
     return [success, response.data];
   } catch (err: unknown) {
-    return handleError(err);
+    return handleError<S>(err);
   }
 };
 
@@ -46,7 +46,7 @@ const doDelete = async function <T extends Body>(path: string, token: string): P
     const success = response.status >= 200 && response.status <= 299;
     return [success, response.data];
   } catch (err: unknown) {
-    return handleError(err);
+    return handleError<T>(err);
   }
 };
 
