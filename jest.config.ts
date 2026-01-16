@@ -13,5 +13,5 @@ export default {
     '@/(.*)': '<rootDir>/lib/$1',
     '#/(.*)': '<rootDir>/tests/$1'
   },
-  modulePathIgnorePatterns: ['<rootDir>/built']
+  modulePathIgnorePatterns: ['<rootDir>/built', '<rootDir>/frontend']
 };
