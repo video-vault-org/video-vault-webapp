@@ -1,11 +1,17 @@
 import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
+import type { FileType } from '../types/FileType.ts';
+
+type Body = Record<string, unknown>;
 
 interface ErrorBody {
   error: string;
 }
 
-type Body = Record<string, unknown>;
+interface SuccessBody extends Body {
+  message: string;
+}
+
 type BodyRequestResult<T extends Body> = [null, T];
 type ErrorRequestResult = [string];
 type RequestResult<T extends Body> = BodyRequestResult<T> | ErrorRequestResult;
@@ -86,4 +92,19 @@ const download = async function (path: string, token: string): Promise<DownloadR
   }
 };
 
-export { doPost, doGet, doDelete, download };
+const upload = async function (path: string, token: string, filename: string, data: Blob, type: FileType): Promise<RequestResult<SuccessBody>> {
+  try {
+    const file = new File([data], filename, { type, lastModified: Date.now() });
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const conf: AxiosRequestConfig = { headers: { Authorization: `Bearer ${token}` } };
+    const response = await axios.post(path, formData, conf);
+    const success = response.status >= 200 && response.status <= 299;
+    return success ? [null, response.data] : [(response.data as unknown as ErrorBody).error];
+  } catch (err: unknown) {
+    return handleError<SuccessBody>(err);
+  }
+};
+
+export { doPost, doGet, doDelete, download, upload };
