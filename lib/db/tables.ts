@@ -38,7 +38,8 @@ const video: DbTableDefinition = {
     videoId: 'string',
     title: 'string',
     meta: 'object',
-    mimeType: 'string',
+    videoMimeType: 'string',
+    thumbnailMimeType: 'string',
     lastModified: 'Date',
     hmac: 'string'
   }
