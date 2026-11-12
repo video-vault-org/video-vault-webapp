@@ -1,5 +1,5 @@
 import { DbItem } from './DbItem';
-import { DbLimit } from './DbLimit';
+import { PaginationParams } from './PaginationParams';
 import { DbValue } from './DbValue';
 import { DbPrimitiveValue } from './DbPrimitiveValue';
 import { DbTableDefinition } from './DbTableDefinition';
@@ -71,21 +71,20 @@ interface DatabaseAdapter {
   findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null>;
 
   /**
-   * Finds many items in the database.
+   * Finds many items in the database, sorted by creation date (descendent), with pagination.
    * @param table The name of the table.
    * @param filterKey The name of the key to filter for.
    * @param filterValue The value to filter for.
-   * @param dbLimit limit params for paging, no paging if not given
+   * @param pagination pagination parameters, pass an empty object for all matches
    * @returns Promise fulfilling with the item or with null if item does not exist.
    */
-  findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, dbLimit?: DbLimit): Promise<DbItem[]>;
+  findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, pagination: PaginationParams): Promise<DbItem[]>;
 
   /**
-   * Finds all items of the specified table
+   * Finds all items of the specified table in unspecified order.
    * @param table name of the table
-   * @param dbLimit limit params for paging, no paging if not given
    */
-  findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]>;
+  findAll(table: string): Promise<DbItem[]>;
 
   /**
    * Finds all items of the specified table, last modified since specified Date.

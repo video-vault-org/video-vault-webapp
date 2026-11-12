@@ -72,14 +72,14 @@ describe('PostgresDatabaseAdapter', (): void => {
   });
 
   describe('queries', () => {
-    const testItem: DbItem = { testPropStr: 'A', testPropNo: 42, testPropBool: false, testPropDate: new Date(0) };
+    const testItem: DbItem = { testPropStr: 'A', testPropNo: 42, testPropBool: false, testPropDate: new Date(0), created: new Date(0) };
 
     beforeEach(async (): Promise<void> => {
       await db?.open();
       await db?.getClient().query('DROP TABLE IF EXISTS test_').catch();
       await db?.init({
         table: 'test_',
-        fields: { testPropStr: 'string', testPropNo: 'number', testPropBool: 'boolean', testPropDate: 'Date' },
+        fields: { testPropStr: 'string', testPropNo: 'number', testPropBool: 'boolean', testPropDate: 'Date', created: 'Date' },
         key: ''
       });
     });
@@ -194,56 +194,32 @@ describe('PostgresDatabaseAdapter', (): void => {
       expect(item).toEqual(testItem);
     });
 
-    test('PostgresqlDatabaseAdapter->findMany finds many, without limit.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      await db?.add('test_', { ...testItem, testPropBool: true });
-      await db?.add('test_', { ...testItem, testPropNo: 23 });
-      await db?.add('test_', { ...testItem, testPropStr: 'B' });
+    test('PostgresqlDatabaseAdapter->findMany filters and sorts by creation date before paging', async () => {
+      const items = [
+        { ...testItem, created: new Date(10) },
+        { ...testItem, testPropStr: 'B', created: new Date(40) },
+        { ...testItem, created: new Date(30) },
+        { ...testItem, created: new Date(20) }
+      ];
+      for (const item of items) {
+        await db?.add('test_', item);
+      }
 
-      const items = await db?.findMany('test_', 'testPropStr', 'A');
-
-      expect(items?.length).toBe(3);
-      expect(items?.at(0)).toEqual(testItem);
-      expect(items?.at(1)).toEqual({ ...testItem, testPropBool: true });
-      expect(items?.at(2)).toEqual({ ...testItem, testPropNo: 23 });
+      expect(await db?.findMany('test_', 'testPropStr', 'A', {})).toEqual([items[2], items[3], items[0]]);
+      expect(await db?.findMany('test_', 'testPropStr', 'A', { skip: 1, get: 1 })).toEqual([items[3]]);
+      expect(await db?.findMany('test_', 'testPropStr', 'A', { get: 0 })).toEqual([]);
     });
 
-    test('PostgresqlDatabaseAdapter->findMany finds many, with limit.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      await db?.add('test_', { ...testItem, testPropBool: true });
-      await db?.add('test_', { ...testItem, testPropNo: 23 });
-      await db?.add('test_', { ...testItem, testPropStr: 'B' });
+    test('PostgresqlDatabaseAdapter->findAll returns all rows', async () => {
+      const items = [testItem, { ...testItem, testPropBool: true }, { ...testItem, testPropNo: 23 }];
+      for (const item of items) {
+        await db?.add('test_', item);
+      }
 
-      const items = await db?.findMany('test_', 'testPropStr', 'A', { skip: 1, get: 2 });
+      const result = await db?.findAll('test_');
 
-      expect(items?.length).toBe(2);
-      expect(items?.at(0)).toEqual({ ...testItem, testPropBool: true });
-      expect(items?.at(1)).toEqual({ ...testItem, testPropNo: 23 });
-    });
-
-    test('PostgresqlDatabaseAdapter->findAll finds all, without limit.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      await db?.add('test_', { ...testItem, testPropBool: true });
-      await db?.add('test_', { ...testItem, testPropNo: 23 });
-
-      const items = await db?.findAll('test_');
-
-      expect(items?.length).toBe(3);
-      expect(items?.at(0)).toEqual(testItem);
-      expect(items?.at(1)).toEqual({ ...testItem, testPropBool: true });
-      expect(items?.at(2)).toEqual({ ...testItem, testPropNo: 23 });
-    });
-
-    test('PostgresqlDatabaseAdapter->findAll finds all, with limit.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      await db?.add('test_', { ...testItem, testPropBool: true });
-      await db?.add('test_', { ...testItem, testPropNo: 23 });
-
-      const items = await db?.findAll('test_', { skip: 1, get: 2 });
-
-      expect(items?.length).toBe(2);
-      expect(items?.at(0)).toEqual({ ...testItem, testPropBool: true });
-      expect(items?.at(1)).toEqual({ ...testItem, testPropNo: 23 });
+      expect(result).toHaveLength(items.length);
+      expect(result).toEqual(expect.arrayContaining(items));
     });
 
     test('PostgresqlDatabaseAdapter->findAllSince finds all, last modified since.', async (): Promise<void> => {

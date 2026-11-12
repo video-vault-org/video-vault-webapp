@@ -3,21 +3,11 @@ import mongoose from 'mongoose';
 import { DatabaseAdapter } from '../types/DatabaseAdapter';
 import { MongoItem } from '../types/MongoItem';
 import { DbTableDefinition } from '@/db/types/DbTableDefinition';
-import { DbLimit } from '@/db/types/DbLimit';
+import { PaginationParams } from '@/db/types/PaginationParams';
 import { DbItem } from '@/db/types/DbItem';
 import { DbValue } from '@/db/types/DbValue';
 import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
 import { MongoDatabaseConf } from '@/db/types/MongoDatabaseConf';
-
-const applyFilter = function (itemsCursor: mongoose.mongo.FindCursor, limit?: DbLimit): mongoose.mongo.FindCursor {
-  if (limit?.skip) {
-    itemsCursor = itemsCursor?.skip(limit.skip);
-  }
-  if (limit?.get) {
-    itemsCursor = itemsCursor?.limit(limit.get);
-  }
-  return itemsCursor;
-};
 
 /**
  * Database Adapter for MongoDB.
@@ -126,64 +116,39 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return item as DbItem;
   }
 
-  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, dbLimit?: DbLimit): Promise<DbItem[]> {
-    const collection = this.collections[table];
-    const items: DbItem[] = [];
-    const itemsCursor = applyFilter(collection?.find({ [filterKey]: filterValue }), dbLimit);
-    while (await itemsCursor?.hasNext()) {
-      const doc = await itemsCursor?.next();
-      if (!doc) {
-        continue;
-      }
-      const item: DbItem = {
-        ...doc
-      };
-      delete item._id;
-      items.push(item);
+  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, pagination: PaginationParams): Promise<DbItem[]> {
+    const { skip, get } = pagination;
+    if (get === 0) {
+      return [];
     }
-    return items;
+
+    const cursor = this.collections[table]?.find({ [filterKey]: filterValue }).sort({ created: -1, _id: 1 });
+    if (skip !== undefined) {
+      cursor?.skip(skip);
+    }
+    if (get !== undefined) {
+      cursor?.limit(get);
+    }
+    return this.readItems(cursor);
   }
 
-  public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
-    const collection = this.collections[table];
-    const items: DbItem[] = [];
-    const itemsCursor = applyFilter(collection?.find(), dbLimit);
-    while (await itemsCursor?.hasNext()) {
-      const doc = await itemsCursor?.next();
-      if (!doc) {
-        continue;
-      }
-      const item: DbItem = {
-        ...doc
-      };
-      delete item._id;
-      items.push(item);
-    }
-    return items;
+  public async findAll(table: string): Promise<DbItem[]> {
+    return this.readItems(this.collections[table]?.find());
   }
 
   public async findAllSince(table: string, since: Date): Promise<DbItem[]> {
-    const collection = this.collections[table];
-    const items: DbItem[] = [];
-    const filter = {
-      lastModified: {
-        $exists: true,
-        $gte: since
-      }
-    };
-    const itemsCursor = applyFilter(collection?.find(filter));
-    while (await itemsCursor?.hasNext()) {
-      const doc = await itemsCursor?.next();
-      if (!doc) {
-        continue;
-      }
-      const item: DbItem = {
-        ...doc
-      };
-      delete item._id;
-      items.push(item);
-    }
-    return items;
+    return this.readItems(
+      this.collections[table]?.find({
+        lastModified: {
+          $exists: true,
+          $gte: since
+        }
+      })
+    );
+  }
+
+  private async readItems(cursor?: mongoose.mongo.FindCursor<mongoose.mongo.WithId<DbItem>>): Promise<DbItem[]> {
+    return ((await cursor?.toArray()) ?? []).map(({ _id, ...item }) => item);
   }
 }
 

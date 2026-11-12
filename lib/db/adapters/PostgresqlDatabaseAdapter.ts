@@ -4,20 +4,15 @@ import { DbTableDefinition } from '@/db/types/DbTableDefinition';
 import { DbValue } from '@/db/types/DbValue';
 import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
 import { DbItem } from '@/db/types/DbItem';
-import { DbLimit } from '@/db/types/DbLimit';
+import { PaginationParams } from '@/db/types/PaginationParams';
 import { PostgresqlDatabaseConf } from '@/db/types/PostgresqlDatabaseConf';
-
-const buildLimit = function (dbLimit?: DbLimit) {
-  const offset = dbLimit?.skip ? `OFFSET ${dbLimit?.skip}` : '';
-  const limit = dbLimit?.get ? `LIMIT ${dbLimit?.get}` : '';
-  return ` ${limit} ${offset}`;
-};
 
 /**
  * Postgresql Database Adapter
  */
 class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   private readonly client: Client;
+  private readonly tablesWithCreated = new Set<string>();
   private connected = false;
 
   /**
@@ -83,17 +78,20 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     });
     const query = `CREATE TABLE IF NOT EXISTS ${table}(${fieldsArray.join(', ')})`;
     await this.client?.query(query);
+    if (fields.created === 'Date') {
+      this.tablesWithCreated.add(table);
+    }
   }
 
   public async add(table: string, item: DbItem): Promise<void> {
     const valueParts: string[] = [];
     const keys: string[] = [];
-    const values: DbPrimitiveValue[] = [];
+    const values: (DbPrimitiveValue | Date)[] = [];
     let index = 1;
     Object.entries(item).forEach(([key, value]) => {
       valueParts.push(`$${index++}`);
       keys.push(`"${key}"`);
-      values.push(typeof value === 'object' ? JSON.stringify(value) : value);
+      values.push(typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : value);
     });
     const query = `INSERT INTO ${table}(${keys.join(', ')}) VALUES(${valueParts.join(', ')})`;
     await this.client?.query(query, values);
@@ -102,10 +100,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
     let index = 1;
     const updateParts: string[] = [];
-    const updateValues: DbPrimitiveValue[] = [];
+    const updateValues: (DbPrimitiveValue | Date)[] = [];
     Object.entries(update).forEach(([key, value]) => {
       updateParts.push(`"${key}"=$${index++}`);
-      updateValues.push(typeof value === 'object' ? JSON.stringify(value) : value);
+      updateValues.push(typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : value);
     });
     const updater = `SET ${updateParts.join(', ')}`;
     const values = [...updateValues, filterValue];
@@ -120,12 +118,9 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
-    const items = await this.findMany(table, filterKey, filterValue);
     const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1`;
-    const values = [filterValue];
-    await this.client?.query(query, values);
-    await this.client?.query(query, values);
-    return items.length;
+    const result = await this.client.query(query, [filterValue]);
+    return result.rowCount ?? 0;
   }
 
   public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
@@ -133,25 +128,23 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     return item ? item : null;
   }
 
-  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, dbLimit?: DbLimit): Promise<DbItem[]> {
-    const limit = buildLimit(dbLimit);
-    const query = `SELECT * FROM ${table} WHERE "${filterKey}"=$1 ${limit}`;
+  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, pagination: PaginationParams): Promise<DbItem[]> {
     const values = [filterValue];
-    const result = await this.client?.query<DbItem>(query, values);
-    if (!result || result.rowCount === 0) {
-      return [];
+    let query = `SELECT * FROM ${table} WHERE ${this.client.escapeIdentifier(filterKey)}=$1`;
+    if (this.tablesWithCreated.has(table)) {
+      query += ' ORDER BY "created" DESC NULLS LAST';
     }
-    return result.rows;
+    if (pagination.get !== undefined) {
+      query += ` LIMIT $${values.push(pagination.get)}`;
+    }
+    if (pagination.skip !== undefined) {
+      query += ` OFFSET $${values.push(pagination.skip)}`;
+    }
+    return (await this.client.query<DbItem>(query, values)).rows;
   }
 
-  public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
-    const limit = buildLimit(dbLimit);
-    const query = `SELECT * FROM ${table} ${limit}`;
-    const result = await this.client?.query<DbItem>(query);
-    if (!result || result.rowCount === 0) {
-      return [];
-    }
-    return result.rows;
+  public async findAll(table: string): Promise<DbItem[]> {
+    return (await this.client.query<DbItem>(`SELECT * FROM ${table}`)).rows;
   }
 
   public async findAllSince(table: string, since: Date): Promise<DbItem[]> {

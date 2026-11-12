@@ -164,26 +164,8 @@ describe('MongoDatabaseAdapter', (): void => {
 
     const items = await db?.findAll('test_');
 
-    expect(items).toEqual(testItems);
-  });
-
-  test('MongoDatabaseAdapter->findAll finds all, with limit', async (): Promise<void> => {
-    const testItems = [
-      { testProp1: 'A1', testProp2: 21 },
-      { testProp1: 'A2', testProp2: 22 },
-      { testProp1: 'A3', testProp2: 23 },
-      { testProp1: 'A4', testProp2: 24 }
-    ];
-    await db?.open();
-    await db?.init({ table: 'test_', fields: {}, key: 'key' });
-    await db?.add('test_', testItems[0]);
-    await db?.add('test_', testItems[1]);
-    await db?.add('test_', testItems[2]);
-    await db?.add('test_', testItems[3]);
-
-    const items = await db?.findAll('test_', { skip: 1, get: 2 });
-
-    expect(items).toEqual([testItems[1], testItems[2]]);
+    expect(items).toHaveLength(testItems.length);
+    expect(items).toEqual(expect.arrayContaining(testItems));
   });
 
   test('MongoDatabaseAdapter->findAllSince finds all, last modified since.', async (): Promise<void> => {
@@ -205,40 +187,22 @@ describe('MongoDatabaseAdapter', (): void => {
     expect(items).toEqual([testItems[1], testItems[2]]);
   });
 
-  test('MongoDatabaseAdapter->findMany finds many, no limit', async (): Promise<void> => {
-    const testItems = [
-      { testProp1: 'A1', testProp2: 'A' },
-      { testProp1: 'A2', testProp2: 'A' },
-      { testProp1: 'A3', testProp2: 'B' }
+  test('MongoDatabaseAdapter->findMany filters and sorts by creation date without a limit', async () => {
+    const items = [
+      { group: 'A', created: new Date(10) },
+      { group: 'B', created: new Date(40) },
+      { group: 'A', created: new Date(30) },
+      { group: 'A', created: new Date(20) }
     ];
     await db?.open();
-    await db?.init({ table: 'test_', fields: {}, key: '...' });
-    await db?.add('test_', testItems[0]);
-    await db?.add('test_', testItems[1]);
-    await db?.add('test_', testItems[2]);
+    await db?.init({ table: 'test_', fields: { group: 'string', created: 'Date' }, key: '' });
+    for (const item of items) {
+      await db?.add('test_', item);
+    }
 
-    const items = await db?.findMany('test_', 'testProp2', 'A');
-
-    expect(items).toEqual([testItems[0], testItems[1]]);
-  });
-
-  test('MongoDatabaseAdapter->findMany finds many, with limit', async (): Promise<void> => {
-    const testItems = [
-      { testProp1: 'A1', testProp2: 'A' },
-      { testProp1: 'A2', testProp2: 'B' },
-      { testProp1: 'A3', testProp2: 'B' },
-      { testProp1: 'A4', testProp2: 'B' }
-    ];
-    await db?.open();
-    await db?.init({ table: 'test_', fields: {}, key: '.' });
-    await db?.add('test_', testItems[0]);
-    await db?.add('test_', testItems[1]);
-    await db?.add('test_', testItems[2]);
-    await db?.add('test_', testItems[3]);
-
-    const items = await db?.findMany('test_', 'testProp2', 'B', { skip: 1, get: 2 });
-
-    expect(items).toEqual([testItems[2], testItems[3]]);
+    expect(await db?.findMany('test_', 'group', 'A', {})).toEqual([items[2], items[3], items[0]]);
+    expect(await db?.findMany('test_', 'group', 'A', { skip: 1, get: 1 })).toEqual([items[3]]);
+    expect(await db?.findMany('test_', 'group', 'A', { get: 0 })).toEqual([]);
   });
 
   test('MongoDatabaseAdapter->exists checks for existence correctly.', async (): Promise<void> => {

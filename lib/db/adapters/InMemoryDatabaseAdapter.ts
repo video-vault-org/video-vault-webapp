@@ -3,7 +3,7 @@ import { DbTableDefinition } from '@/db/types/DbTableDefinition';
 import { DbValue } from '@/db/types/DbValue';
 import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
 import { DbItem } from '@/db/types/DbItem';
-import { DbLimit } from '@/db/types/DbLimit';
+import { PaginationParams } from '@/db/types/PaginationParams';
 
 interface Table {
   name: string;
@@ -14,12 +14,9 @@ interface Table {
 
 type Memory = Record<string, Table>;
 
-const applyLimit = function (items: DbItem[], limit?: DbLimit): DbItem[] {
-  if (!limit) {
-    return items;
-  }
-  const skip = limit.skip ?? 0;
-  const get = limit.get ?? items.length;
+const applyLimit = function (items: DbItem[], pagination: PaginationParams): DbItem[] {
+  const skip = pagination.skip ?? 0;
+  const get = pagination.get ?? items.length;
   return items.slice(skip, skip + get);
 };
 
@@ -97,17 +94,16 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     return item ? item : null;
   }
 
-  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, dbLimit?: DbLimit): Promise<DbItem[]> {
+  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, pagination: PaginationParams): Promise<DbItem[]> {
     const items = this.memory[table].items.filter((item) => item[filterKey] === filterValue);
-    return applyLimit(items, dbLimit);
+    return applyLimit(items.sort((left, right) => (right.created as number) - (left.created as number)), pagination);
   }
 
-  public async findAll(table: string, dbLimit?: DbLimit): Promise<DbItem[]> {
-    const items = this.memory[table].items;
-    return applyLimit(items, dbLimit);
+  public async findAll(table: string): Promise<DbItem[]> {
+    return this.memory[table].items;
   }
 
-  public async findAllSince(table: string, since: Date, dbLimit?: DbLimit): Promise<DbItem[]> {
+  public async findAllSince(table: string, since: Date): Promise<DbItem[]> {
     const itemsAll = this.memory[table].items;
     const itemsSince: DbItem[] = [];
     itemsAll.forEach((item) => {
@@ -115,7 +111,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
         itemsSince.push(item);
       }
     });
-    return applyLimit(itemsSince, dbLimit);
+    return itemsSince;
   }
 }
 

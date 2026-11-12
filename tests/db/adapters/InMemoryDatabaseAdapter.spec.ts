@@ -30,15 +30,6 @@ describe('InMemoryDatabaseAdapter', (): void => {
     addItemManually(db, 'testAnother', 23, false);
   };
 
-  const addMuch = function (db: DatabaseAdapter): void {
-    for (let i = 0; i < 30; i++) {
-      addItemManually(db, 'test' + i, 100 + i, !!(i % 2));
-    }
-    addItemManually(db, 'testLast', 1, true);
-    addItemManually(db, 'testLast', 2, true);
-    addItemManually(db, 'testLast', 3, true);
-  };
-
   test('InMemoryDatabaseAdapter->open opens db.', async (): Promise<void> => {
     const db = new InMemoryDatabaseAdapter();
 
@@ -219,18 +210,6 @@ describe('InMemoryDatabaseAdapter', (): void => {
     expect(items?.length).toBe(0);
   });
 
-  test('InMemoryDatabaseAdapter->findAll finds paged items correctly.', async (): Promise<void> => {
-    const tableName = 'testTable';
-    const db = await init();
-    addMuch(db);
-
-    const items = await db.findAll(tableName, { skip: 10, get: 15 });
-
-    expect(items?.length).toBe(15);
-    expect(items?.at(0)?.testPropStr).toEqual('test10');
-    expect(items?.at(14)?.testPropStr).toEqual('test24');
-  });
-
   test('InMemoryDatabaseAdapter->findAllSince finds all items since, correctly.', async (): Promise<void> => {
     const tableName = 'testTable';
     const db = await init();
@@ -247,38 +226,22 @@ describe('InMemoryDatabaseAdapter', (): void => {
     expect(items?.at(1)?.testPropStr).toEqual('test3');
   });
 
-  test('InMemoryDatabaseAdapter->findMany finds many items correctly.', async (): Promise<void> => {
-    const tableName = 'testTable';
+  test('InMemoryDatabaseAdapter->findMany filters and sorts by creation date before paging', async () => {
+    const table = 'testTable';
     const db = await init();
-    addMuch(db);
+    const items = [
+      { testPropStr: 'A', created: new Date(10) },
+      { testPropStr: 'B', created: new Date(40) },
+      { testPropStr: 'A', created: new Date(30) },
+      { testPropStr: 'A', created: new Date(20) }
+    ];
+    for (const item of items) {
+      await db.add(table, item);
+    }
 
-    const items = await db.findMany(tableName, 'testPropStr', 'testLast');
-
-    expect(items?.length).toBe(3);
-    expect(items?.at(0)?.testPropNo).toEqual(1);
-    expect(items?.at(1)?.testPropNo).toEqual(2);
-    expect(items?.at(2)?.testPropNo).toEqual(3);
-  });
-
-  test('InMemoryDatabaseAdapter->findMany finds nothing correctly.', async (): Promise<void> => {
-    const tableName = 'testTable';
-    const db = await init();
-    addMuch(db);
-
-    const items = await db.findMany(tableName, 'testPropStr', 'testNoting');
-
-    expect(items?.length).toBe(0);
-  });
-
-  test('InMemoryDatabaseAdapter->findMany finds many paged items correctly.', async (): Promise<void> => {
-    const tableName = 'testTable';
-    const db = await init();
-    addMuch(db);
-
-    const items = await db.findMany(tableName, 'testPropStr', 'testLast', { skip: 1, get: 2 });
-
-    expect(items?.length).toBe(2);
-    expect(items?.at(0)?.testPropNo).toEqual(2);
-    expect(items?.at(1)?.testPropNo).toEqual(3);
+    expect(await db.findMany(table, 'testPropStr', 'A', {})).toEqual([items[2], items[3], items[0]]);
+    expect(await db.findMany(table, 'testPropStr', 'A', { skip: 1, get: 1 })).toEqual([items[3]]);
+    expect(await db.findMany(table, 'testPropStr', 'A', { get: 0 })).toEqual([]);
+    expect(await db.findMany(table, 'testPropStr', 'missing', {})).toEqual([]);
   });
 });
