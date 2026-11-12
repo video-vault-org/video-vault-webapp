@@ -4,6 +4,7 @@ import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { MongoDatabaseAdapter } from '@/db/adapters/MongoDatabaseAdapter';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
+import { SqliteDatabaseAdapter } from '@/db/adapters/SqliteDatabaseAdapter';
 import { tables } from './tables';
 
 let db: DatabaseAdapter | null;
@@ -43,6 +44,8 @@ const loadDb = async function (): Promise<DatabaseAdapter> {
     db = new MongoDatabaseAdapter(config.conf);
   } else if (config.type === 'postgresql') {
     db = new PostgresqlDatabaseAdapter(config.conf);
+  } else if (config.type === 'sqlite') {
+    db = new SqliteDatabaseAdapter(config.conf);
   } else {
     db = new InMemoryDatabaseAdapter();
   }

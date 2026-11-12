@@ -1,5 +1,6 @@
 import { MongoDatabaseConf } from './MongoDatabaseConf';
 import { PostgresqlDatabaseConf } from './PostgresqlDatabaseConf';
+import { SqliteDatabaseConf } from './SqliteDatabaseConf';
 
 interface DatabaseConfigInMemory {
   type: 'in-memory';
@@ -15,6 +16,11 @@ interface DatabaseConfigPostgresql {
   conf: PostgresqlDatabaseConf;
 }
 
-type DatabaseConfig = DatabaseConfigInMemory | DatabaseConfigMongo | DatabaseConfigPostgresql;
+interface DatabaseConfigSqlite {
+  type: 'sqlite';
+  conf: SqliteDatabaseConf;
+}
+
+type DatabaseConfig = DatabaseConfigInMemory | DatabaseConfigMongo | DatabaseConfigPostgresql | DatabaseConfigSqlite;
 
 export { DatabaseConfig };

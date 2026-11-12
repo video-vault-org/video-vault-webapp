@@ -114,4 +114,15 @@ describe('db', (): void => {
     expect(db).toBeInstanceOf(PostgresqlDatabaseAdapter);
     expect((db as PostgresqlDatabaseAdapter).getConf()).toEqual([config.conf.host, config.conf.port, config.conf.database, undefined, undefined]);
   });
+
+  test('loadDb initializes the SQLite tables from config', async () => {
+    const config: DatabaseConfig = { type: 'sqlite', conf: { filePath: ':memory:' } };
+    mockFS({ './conf': { 'db.json': JSON.stringify(config) } });
+
+    const db = await loadDb();
+
+    await db.add('jwtkey', { keyId: 'key1', key: 'value' });
+    expect(await db.findAll('jwtkey')).toEqual([{ keyId: 'key1', key: 'value' }]);
+    expect(await db.findAll('comment')).toEqual([]);
+  });
 });
