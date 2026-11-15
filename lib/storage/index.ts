@@ -2,6 +2,7 @@ import { StorageConfig } from '@/storage/types/StorageConfig';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import { StorageAdapter } from '@/storage/types/StorageAdapter';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
+import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 
 let storage: StorageAdapter | null = null;
 
@@ -29,8 +30,10 @@ const loadStorage = async function (): Promise<StorageAdapter> {
 
   if (config.type === 's3') {
     storage = new S3StorageAdapter(config.conf);
-  } else {
+  } else if (config.type === 'local') {
     storage = new LocalStorageAdapter(config.conf);
+  } else {
+    storage = new InMemoryStorageAdapter();
   }
 
   return storage;

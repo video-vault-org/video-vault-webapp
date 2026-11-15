@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import mockFS from 'mock-fs';
 import { loadConfig, loadStorage, resetStorage, saveConfig } from '@/storage';
+import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
 import { StorageConfig } from '@/storage/types/StorageConfig';
@@ -26,11 +27,26 @@ describe('storage', () => {
     expect(JSON.parse(await readFile(configPath, 'utf8'))).toEqual(localConfig);
   });
 
-  test('loadConfig reads the saved configuration', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(s3Config) } });
+  test.each([
+    [{ type: 'in-memory' }, InMemoryStorageAdapter],
+    [localConfig, LocalStorageAdapter],
+    [s3Config, S3StorageAdapter]
+  ] satisfies [StorageConfig, typeof InMemoryStorageAdapter | typeof LocalStorageAdapter | typeof S3StorageAdapter][])(
+    'loads configuration and selects the matching adapter for %j',
+    async (config, expectedAdapter) => {
+      mockFS({ './conf': { 'storage.json': JSON.stringify(config) } });
 
-    expect(await loadConfig()).toEqual(s3Config);
-  });
+      expect(await loadConfig()).toEqual(config);
+      const storage = await loadStorage();
+      try {
+        expect(storage).toBeInstanceOf(expectedAdapter);
+      } finally {
+        if (storage instanceof S3StorageAdapter) {
+          storage.getConf()[0].destroy();
+        }
+      }
+    }
+  );
 
   test('loadConfig returns null when the configuration is missing', async () => {
     mockFS({ './conf': {} });
