@@ -15,7 +15,7 @@ class StorageWrapper {
    * @param videoId The id of the video to save the video file for
    * @param data The encrypted binary video data
    */
-  public async saveVideoFile(videoId: string, data: Buffer): Promise<void> {
+  public async saveVideoFile({ videoId, data }: { videoId: string; data: Buffer }): Promise<void> {
     await this.storageAdapter.save(`${videoId}.${VIDEO_EXTENSION}`, data);
   }
 
@@ -24,7 +24,7 @@ class StorageWrapper {
    * @param videoId The id of the video to save the thumbnail file for
    * @param data The encrypted binary thumbnail data
    */
-  public async saveThumbnailFile(videoId: string, data: Buffer): Promise<void> {
+  public async saveThumbnailFile({ videoId, data }: { videoId: string; data: Buffer }): Promise<void> {
     await this.storageAdapter.save(`${videoId}.${THUMBNAIL_EXTENSION}`, data);
   }
 
@@ -35,7 +35,7 @@ class StorageWrapper {
    * @param to The byte position where the range ends, if undefined it ends at last file byte
    * @returns promise with file range content as Buffer if file exists, null if not
    */
-  public async readVideoFileRange(videoId: string, from?: number, to?: number): Promise<Buffer | null> {
+  public async readVideoFileRange({ videoId, from, to }: { videoId: string; from?: number; to?: number }): Promise<Buffer | null> {
     return await this.storageAdapter.readRange(`${videoId}.${VIDEO_EXTENSION}`, from, to);
   }
 
@@ -44,7 +44,7 @@ class StorageWrapper {
    * @param videoId The id of the video to read the thumbnail file for
    * @returns promise with file content as Buffer if file exists, null if not
    */
-  public async readThumbnailFile(videoId: string): Promise<Buffer | null> {
+  public async readThumbnailFile({ videoId }: { videoId: string }): Promise<Buffer | null> {
     return await this.storageAdapter.read(`${videoId}.${THUMBNAIL_EXTENSION}`);
   }
 
@@ -52,7 +52,7 @@ class StorageWrapper {
    * Deletes both, the video file and the thumbnail file for a video
    * @param videoId The id of the video to delete the files from
    */
-  public async deleteFiles(videoId: string): Promise<void> {
+  public async deleteFiles({ videoId }: { videoId: string }): Promise<void> {
     await this.storageAdapter.delete(`${videoId}.${VIDEO_EXTENSION}`);
     await this.storageAdapter.delete(`${videoId}.${THUMBNAIL_EXTENSION}`);
   }
