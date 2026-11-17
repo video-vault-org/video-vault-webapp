@@ -1,7 +1,7 @@
-import { StorageAdapter } from '@/storage/types/StorageAdapter';
+import { StorageAdapter } from './StorageAdapter';
 import { readFile, open, mkdir, stat, writeFile, unlink } from 'fs/promises';
 import { dirname, join } from 'path';
-import { LocalStorageConf } from '@/storage/types/LocalStorageConf';
+import { LocalStorageConf } from '@/storage/config/LocalStorageConf';
 
 /**
  * Storage Adapter for local file system

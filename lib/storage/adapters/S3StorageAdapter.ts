@@ -7,8 +7,8 @@ import {
   DeleteObjectCommand,
   DeleteObjectCommandInput
 } from '@aws-sdk/client-s3';
-import { StorageAdapter } from '@/storage/types/StorageAdapter';
-import { S3StorageConf } from '@/storage/types/S3StorageConf';
+import { StorageAdapter } from './StorageAdapter';
+import { S3StorageConf } from '@/storage/config/S3StorageConf';
 
 /**
  * Storage Adapter for S3 (and compatible services)

@@ -4,7 +4,7 @@ import { loadConfig, loadStorage, resetStorage, saveConfig } from '@/storage';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
-import { StorageConfig } from '@/storage/types/StorageConfig';
+import { StorageConfig } from '@/storage/config/StorageConfig';
 
 describe('storage', () => {
   const configPath = './conf/storage.json';

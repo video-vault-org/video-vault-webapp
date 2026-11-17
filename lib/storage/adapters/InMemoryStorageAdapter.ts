@@ -1,4 +1,4 @@
-import { StorageAdapter } from '@/storage/types/StorageAdapter';
+import { StorageAdapter } from './StorageAdapter';
 
 class InMemoryStorageAdapter implements StorageAdapter {
   private readonly storage: Record<string, Buffer | undefined> = {};

@@ -1,6 +1,6 @@
-import { StorageConfig } from '@/storage/types/StorageConfig';
+import { StorageConfig } from '@/storage/config/StorageConfig';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
-import { StorageAdapter } from '@/storage/types/StorageAdapter';
+import { StorageAdapter } from '@/storage/adapters/StorageAdapter';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 
