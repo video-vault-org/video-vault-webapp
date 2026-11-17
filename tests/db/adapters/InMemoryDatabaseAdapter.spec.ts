@@ -266,26 +266,26 @@ describe('InMemoryDatabaseAdapter', () => {
       expect((await page())[0]).toEqual([{ ...comment, ...changes, edited: true }, byOtherUser]);
     });
 
-    test('markCommentAsDeletedByCommentId marks only the matching comment', async () => {
+    test('markCommentAsDeletedByCommentId marks only the matching comment and clears its content', async () => {
       await db.markCommentAsDeletedByCommentId({ commentId: 'missing' });
       await db.markCommentAsDeletedByCommentId({ commentId });
 
-      expect((await page())[0]).toEqual([{ ...comment, deleted: true }, byOtherUser]);
+      expect((await page())[0]).toEqual([{ ...comment, deleted: true, content: '' }, byOtherUser]);
     });
 
-    test('markCommentAsDeletedByCommentIdAndUserId requires both IDs', async () => {
+    test('markCommentAsDeletedByCommentIdAndUserId clears content only when both IDs match', async () => {
       await db.markCommentAsDeletedByCommentIdAndUserId({ commentId, userId: otherUser.userId });
       expect((await page())[0]).toEqual([comment, byOtherUser]);
 
       await db.markCommentAsDeletedByCommentIdAndUserId({ commentId, userId });
-      expect((await page())[0]).toEqual([{ ...comment, deleted: true }, byOtherUser]);
+      expect((await page())[0]).toEqual([{ ...comment, deleted: true, content: '' }, byOtherUser]);
     });
 
-    test('markCommentsAsDeletedByUserId marks all comments by that user across videos', async () => {
+    test('markCommentsAsDeletedByUserId clears content and marks all comments by that user across videos', async () => {
       await db.markCommentsAsDeletedByUserId({ userId });
 
-      expect((await page())[0]).toEqual([{ ...comment, deleted: true }, byOtherUser]);
-      expect(await db.findOneCommentByCommentId({ commentId: forOtherVideo.commentId })).toEqual({ ...forOtherVideo, deleted: true });
+      expect((await page())[0]).toEqual([{ ...comment, deleted: true, content: '' }, byOtherUser]);
+      expect(await db.findOneCommentByCommentId({ commentId: forOtherVideo.commentId })).toEqual({ ...forOtherVideo, deleted: true, content: '' });
     });
 
     test('deleteCommentsByVideoId removes comments for just one video', async () => {

@@ -147,15 +147,15 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void> {
-    await (await this.comments()).updateOne({ commentId }, { $set: { deleted: true } });
+    await (await this.comments()).updateOne({ commentId }, { $set: { deleted: true, content: '' } });
   }
 
   public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void> {
-    await (await this.comments()).updateOne({ commentId, userId }, { $set: { deleted: true } });
+    await (await this.comments()).updateOne({ commentId, userId }, { $set: { deleted: true, content: '' } });
   }
 
   public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {
-    await this.writeManyComments((comments, session) => comments.updateMany({ userId }, { $set: { deleted: true } }, { session }));
+    await this.writeManyComments((comments, session) => comments.updateMany({ userId }, { $set: { deleted: true, content: '' } }, { session }));
   }
 
   public async deleteCommentsByVideoId({ videoId }: { videoId: string }): Promise<void> {

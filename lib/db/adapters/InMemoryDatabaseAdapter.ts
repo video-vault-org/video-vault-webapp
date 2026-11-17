@@ -206,6 +206,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
       return;
     }
     comment.deleted = true;
+    comment.content = '';
   }
 
   public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string, userId: string }): Promise<void> {
@@ -214,12 +215,14 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
       return;
     }
     comment.deleted = true;
+    comment.content = '';
   }
 
   public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {
     for (const comment of this.comments) {
       if (comment.userId === userId) {
         comment.deleted = true;
+        comment.content = '';
       }
     }
   }

@@ -232,15 +232,15 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void> {
-    await this.query('UPDATE comments SET deleted = true WHERE "commentId" = $1', [commentId]);
+    await this.query('UPDATE comments SET deleted = true, content = \'\' WHERE "commentId" = $1', [commentId]);
   }
 
   public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void> {
-    await this.query('UPDATE comments SET deleted = true WHERE "commentId" = $1 AND "userId" = $2', [commentId, userId]);
+    await this.query('UPDATE comments SET deleted = true, content = \'\' WHERE "commentId" = $1 AND "userId" = $2', [commentId, userId]);
   }
 
   public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {
-    await this.query('UPDATE comments SET deleted = true WHERE "userId" = $1', [userId]);
+    await this.query('UPDATE comments SET deleted = true, content = \'\' WHERE "userId" = $1', [userId]);
   }
 
   public async deleteCommentsByVideoId({ videoId }: { videoId: string }): Promise<void> {

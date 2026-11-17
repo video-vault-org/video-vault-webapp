@@ -186,20 +186,20 @@ interface DatabaseAdapter {
   changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string, content: string, lastModified: Date, hmac: string }): Promise<void>;
 
   /**
-   * Marks a comment as deleted, matched by commentId
+   * Sets deleted to true and content to an empty string, matched by commentId.
    * @param commentId The id of the comment to be changed
    */
   markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void>;
 
   /**
-   * Marks a comment as deleted, matched by commentId and userId
+   * Sets deleted to true and content to an empty string, matched by commentId and userId.
    * @param commentId The id of the comment to be changed
    * @param userId The id of the user the comment belongs to
    */
   markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string, userId: string }): Promise<void>;
 
   /**
-   * Marks comments as deleted, matched by belonging user's ID
+   * Sets deleted to true and content to an empty string for all comments matched by the user's ID.
    * @param userId The id of the comments from which the comments are to be marked as deleted
    */
   markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void>;

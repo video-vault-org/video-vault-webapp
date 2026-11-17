@@ -331,11 +331,11 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void> {
-    await this.update('comments', { commentId }, { deleted: true });
+    await this.update('comments', { commentId }, { deleted: true, content: '' });
   }
 
   public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void> {
-    await this.update('comments', { commentId }, { deleted: true }, { field: 'userId', value: userId });
+    await this.update('comments', { commentId }, { deleted: true, content: '' }, { field: 'userId', value: userId });
   }
 
   public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {

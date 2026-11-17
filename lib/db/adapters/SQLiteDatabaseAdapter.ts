@@ -244,15 +244,15 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void> {
-    this.write('UPDATE comments SET deleted = 1 WHERE "commentId" = $1', [commentId]);
+    this.write('UPDATE comments SET deleted = 1, content = \'\' WHERE "commentId" = $1', [commentId]);
   }
 
   public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void> {
-    this.write('UPDATE comments SET deleted = 1 WHERE "commentId" = $1 AND "userId" = $2', [commentId, userId]);
+    this.write('UPDATE comments SET deleted = 1, content = \'\' WHERE "commentId" = $1 AND "userId" = $2', [commentId, userId]);
   }
 
   public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {
-    this.write('UPDATE comments SET deleted = 1 WHERE "userId" = $1', [userId]);
+    this.write('UPDATE comments SET deleted = 1, content = \'\' WHERE "userId" = $1', [userId]);
   }
 
   public async deleteCommentsByVideoId({ videoId }: { videoId: string }): Promise<void> {
