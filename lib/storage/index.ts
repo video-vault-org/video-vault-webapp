@@ -1,3 +1,4 @@
+import fs from 'fs/promises';
 import { StorageConfig } from '@/storage/config/StorageConfig';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import { StorageAdapter } from '@/storage/adapters/StorageAdapter';
@@ -7,18 +8,25 @@ import { StorageWrapper } from '@/storage/StorageWrapper';
 
 let storage: StorageWrapper | null = null;
 
+const configDirectory = './conf';
+const configPath = `${configDirectory}/storage.json`;
+
 const saveConfig = async function (config: StorageConfig) {
-  const configBuffer = Buffer.from(JSON.stringify(config, null, 4), 'utf8');
-  await new LocalStorageAdapter({ basePath: './conf' }).save('storage.json', configBuffer);
+  await fs.mkdir(configDirectory, { recursive: true });
+  await fs.writeFile(configPath, JSON.stringify(config, null, 4), 'utf8');
   resetStorage();
 };
 
 const loadConfig = async function (): Promise<StorageConfig | null> {
-  const configBuffer = await new LocalStorageAdapter({ basePath: './conf' }).read('storage.json');
-  if (!configBuffer) {
-    return null;
+  try {
+    const contents = await fs.readFile(configPath, 'utf8');
+    return JSON.parse(contents);
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
-  return JSON.parse(configBuffer.toString('utf8'));
 };
 
 const loadStorage = async function (): Promise<StorageWrapper> {

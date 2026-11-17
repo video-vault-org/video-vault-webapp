@@ -54,6 +54,12 @@ describe('storage', () => {
     expect(await loadConfig()).toBeNull();
   });
 
+  test('loadConfig propagates filesystem errors other than a missing file', async () => {
+    mockFS({ './conf': 'not a directory' });
+
+    await expect(loadConfig()).rejects.toMatchObject({ code: 'ENOTDIR' });
+  });
+
   test('loadStorage wraps an in-memory adapter when the configuration is missing', async () => {
     mockFS({ './conf': {} });
 
@@ -76,7 +82,7 @@ describe('storage', () => {
     const storage = await loadStorage();
 
     const bytes = Buffer.from([0, 255]);
-    await storage.saveVideoFile('clip', bytes);
+    await storage.saveVideoFile({ videoId: 'clip', data: bytes });
 
     expect(await readFile('./videos/clip.video')).toEqual(bytes);
   });
@@ -107,7 +113,7 @@ describe('storage', () => {
     const reloaded = await loadStorage();
     expect(reloaded).not.toBe(original);
     const bytes = Buffer.from([1]);
-    await reloaded.saveVideoFile('clip', bytes);
+    await reloaded.saveVideoFile({ videoId: 'clip', data: bytes });
     expect(await readFile('./other/clip.video')).toEqual(bytes);
   });
 
@@ -120,7 +126,7 @@ describe('storage', () => {
     const reloaded = await loadStorage();
     expect(reloaded).not.toBe(original);
     const bytes = Buffer.from([2]);
-    await reloaded.saveThumbnailFile('clip', bytes);
+    await reloaded.saveThumbnailFile({ videoId: 'clip', data: bytes });
     expect(await readFile('./new/clip.thumbnail')).toEqual(bytes);
   });
 });
