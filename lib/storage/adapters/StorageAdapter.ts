@@ -26,11 +26,10 @@ interface StorageAdapter {
   readRange(descriptor: string, from?: number, to?: number): Promise<Buffer | null>;
 
   /**
-   * deletes a file
+   * Deletes a file. If it does not exist, the operation succeeds.
    * @param descriptor filename for file storage, object key on s3 storage
-   * @retuens promise with boolean, true if file/object deleted, false if not because it does not exist
    */
-  delete(descriptor: string): Promise<boolean>;
+  delete(descriptor: string): Promise<void>;
 }
 
 export { StorageAdapter };

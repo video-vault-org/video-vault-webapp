@@ -112,12 +112,12 @@ describe('S3StorageAdapter', () => {
     });
   });
 
-  test('delete removes an empty object and returns false if repeated', async () => {
+  test('delete removes an empty object and succeeds if repeated', async () => {
     const key = 'delete-empty';
     await adapter.save(key, Buffer.alloc(0));
 
-    expect(await adapter.delete(key)).toBe(true);
+    await expect(adapter.delete(key)).resolves.toBeUndefined();
     expect(await adapter.read(key)).toBeNull();
-    expect(await adapter.delete(key)).toBe(false);
+    await expect(adapter.delete(key)).resolves.toBeUndefined();
   });
 });

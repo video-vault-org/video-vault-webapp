@@ -48,18 +48,13 @@ class S3StorageAdapter implements StorageAdapter {
     return await this.readObject(descriptor, from, to);
   }
 
-  public async delete(descriptor: string): Promise<boolean> {
-    const buffer = await this.read(descriptor);
-    if (!buffer) {
-      return false;
-    }
+  public async delete(descriptor: string): Promise<void> {
     const commandInput: DeleteObjectCommandInput = {
       Bucket: this.bucket,
       Key: descriptor
     };
     const command = new DeleteObjectCommand(commandInput);
     await this.client.send(command);
-    return true;
   }
 
   private async readObject(descriptor: string, from?: number, to?: number): Promise<Buffer | null> {

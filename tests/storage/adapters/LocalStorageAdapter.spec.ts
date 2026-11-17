@@ -87,12 +87,12 @@ describe('LocalStorageAdapter', () => {
     await expect(storage.readRange(descriptor, 0, 0)).rejects.toMatchObject({ code: 'ENOTDIR' });
   });
 
-  test('delete removes an empty file, preserves its parent and returns false if repeated', async () => {
+  test('delete removes an empty file, preserves its parent and succeeds if repeated', async () => {
     await adapter.save(descriptor, Buffer.alloc(0));
 
-    expect(await adapter.delete(descriptor)).toBe(true);
+    await expect(adapter.delete(descriptor)).resolves.toBeUndefined();
     await expect(stat(join(directory, descriptor))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await stat(directory)).isDirectory()).toBe(true);
-    expect(await adapter.delete(descriptor)).toBe(false);
+    await expect(adapter.delete(descriptor)).resolves.toBeUndefined();
   });
 });

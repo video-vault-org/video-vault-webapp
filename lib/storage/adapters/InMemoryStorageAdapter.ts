@@ -30,12 +30,8 @@ class InMemoryStorageAdapter implements StorageAdapter {
     return data.subarray(start, end + 1);
   }
 
-  public async delete(descriptor: string): Promise<boolean> {
-    if (!this.storage[descriptor]) {
-      return false;
-    }
-    this.storage[descriptor] = undefined;
-    return true;
+  public async delete(descriptor: string): Promise<void> {
+    delete this.storage[descriptor];
   }
 }
 

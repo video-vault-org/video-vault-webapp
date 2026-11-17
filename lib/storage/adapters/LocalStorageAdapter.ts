@@ -98,14 +98,14 @@ class LocalStorageAdapter implements StorageAdapter {
     }
   };
 
-  public async delete(descriptor: string): Promise<boolean> {
-    const path = join(this.basePath, descriptor);
-    const exists = await this.exists(path);
-    if (!exists) {
-      return false;
+  public async delete(descriptor: string): Promise<void> {
+    try {
+      await unlink(join(this.basePath, descriptor));
+    } catch (error: unknown) {
+      if ((error as Record<string, unknown>)?.code !== 'ENOENT') {
+        throw error;
+      }
     }
-    await unlink(path);
-    return true;
   }
 }
 

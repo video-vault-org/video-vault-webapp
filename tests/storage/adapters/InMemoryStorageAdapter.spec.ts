@@ -67,13 +67,13 @@ describe('InMemoryStorageAdapter', () => {
     await expect(adapter.readRange(descriptor)).rejects.toThrow(RangeError);
   });
 
-  test('delete removes only the selected entry and returns false when repeated', async () => {
+  test('delete removes only the selected entry and succeeds when repeated', async () => {
     await adapter.save(descriptor, Buffer.alloc(0));
     await adapter.save('other.bin', bytes);
 
-    expect(await adapter.delete(descriptor)).toBe(true);
+    await expect(adapter.delete(descriptor)).resolves.toBeUndefined();
     expect(await adapter.read(descriptor)).toBeNull();
     expect(await adapter.read('other.bin')).toEqual(bytes);
-    expect(await adapter.delete(descriptor)).toBe(false);
+    await expect(adapter.delete(descriptor)).resolves.toBeUndefined();
   });
 });
