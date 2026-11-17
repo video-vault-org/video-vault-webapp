@@ -213,9 +213,9 @@ interface DatabaseAdapter {
   /**
    * Finds comments, matched by videoId, sorted by created, paginated using cursor pagination
    * @param videoId The id of the video to find the comments from
-   * @param paginationCursor The commentId of the last item on the previous page, or an empty string for the first page
+   * @param paginationCursor The cursor returned by the previous request, or an empty string for the first page
    * @param paginationSize The desired page size
-   * @returns The comments and a cursor for the next page. The cursor is the last commentId if more comments exist, or an empty string otherwise.
+   * @returns The comments and an opaque cursor for the next page, or an empty string if there is no next page.
    */
   findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string, paginationCursor: string, paginationSize: number }): Promise<[Comment[], string]>;
 

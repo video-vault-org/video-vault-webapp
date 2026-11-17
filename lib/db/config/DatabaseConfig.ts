@@ -1,3 +1,4 @@
+import { DynamoDBConf } from './DynamoDBConf';
 import { MongoDatabaseConf } from './MongoDatabaseConf';
 import { PostgresqlDatabaseConf } from './PostgresqlDatabaseConf';
 import { SqliteDatabaseConf } from './SqliteDatabaseConf';
@@ -21,6 +22,11 @@ interface DatabaseConfigSqlite {
   conf: SqliteDatabaseConf;
 }
 
-type DatabaseConfig = DatabaseConfigInMemory | DatabaseConfigMongo | DatabaseConfigPostgresql | DatabaseConfigSqlite;
+interface DatabaseConfigDynamoDB {
+  type: 'dynamodb';
+  conf: DynamoDBConf;
+}
+
+type DatabaseConfig = DatabaseConfigInMemory | DatabaseConfigMongo | DatabaseConfigPostgresql | DatabaseConfigSqlite | DatabaseConfigDynamoDB;
 
 export { DatabaseConfig };

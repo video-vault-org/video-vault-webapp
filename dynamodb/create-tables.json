@@ -1,0 +1,158 @@
+[
+  {
+    "TableName": "video-vault-users",
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+      {
+        "AttributeName": "userId",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "userId",
+        "AttributeType": "S"
+      }
+    ]
+  },
+  {
+    "TableName": "video-vault-usernames",
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+      {
+        "AttributeName": "username",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "username",
+        "AttributeType": "S"
+      }
+    ]
+  },
+  {
+    "TableName": "video-vault-login-attempts",
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+      {
+        "AttributeName": "username",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "username",
+        "AttributeType": "S"
+      }
+    ]
+  },
+  {
+    "TableName": "video-vault-videos",
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+      {
+        "AttributeName": "videoPartition",
+        "KeyType": "HASH"
+      },
+      {
+        "AttributeName": "videoId",
+        "KeyType": "RANGE"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "videoPartition",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "videoId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "lastModified",
+        "AttributeType": "N"
+      }
+    ],
+    "LocalSecondaryIndexes": [
+      {
+        "IndexName": "VideosByLastModified",
+        "KeySchema": [
+          {
+            "AttributeName": "videoPartition",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "lastModified",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      }
+    ]
+  },
+  {
+    "TableName": "video-vault-comments",
+    "BillingMode": "PAY_PER_REQUEST",
+    "KeySchema": [
+      {
+        "AttributeName": "commentId",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "commentId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "videoId",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "createdKey",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "userId",
+        "AttributeType": "S"
+      }
+    ],
+    "GlobalSecondaryIndexes": [
+      {
+        "IndexName": "CommentsByVideo",
+        "KeySchema": [
+          {
+            "AttributeName": "videoId",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "createdKey",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      },
+      {
+        "IndexName": "CommentsByAuthor",
+        "KeySchema": [
+          {
+            "AttributeName": "userId",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "commentId",
+            "KeyType": "RANGE"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "KEYS_ONLY"
+        }
+      }
+    ]
+  }
+]

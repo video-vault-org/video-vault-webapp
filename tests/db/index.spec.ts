@@ -4,6 +4,7 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { MongoDatabaseAdapter } from '@/db/adapters/MongoDatabaseAdapter';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
 import { SQLiteDatabaseAdapter } from '@/db/adapters/SQLiteDatabaseAdapter';
+import { DynamoDBDatabaseAdapter } from '@/db/adapters/DynamoDBDatabaseAdapter';
 import { DatabaseConfig } from '@/db/config/DatabaseConfig';
 
 function mockAdapter() {
@@ -19,6 +20,7 @@ jest.mock('@/db/adapters/InMemoryDatabaseAdapter', () => ({ InMemoryDatabaseAdap
 jest.mock('@/db/adapters/MongoDatabaseAdapter', () => ({ MongoDatabaseAdapter: mockAdapter() }));
 jest.mock('@/db/adapters/PostgresqlDatabaseAdapter', () => ({ PostgresqlDatabaseAdapter: mockAdapter() }));
 jest.mock('@/db/adapters/SQLiteDatabaseAdapter', () => ({ SQLiteDatabaseAdapter: mockAdapter() }));
+jest.mock('@/db/adapters/DynamoDBDatabaseAdapter', () => ({ DynamoDBDatabaseAdapter: mockAdapter() }));
 
 describe('db', () => {
   const path = './conf/db.json';
@@ -26,6 +28,7 @@ describe('db', () => {
   const mongo: DatabaseConfig = { type: 'mongo', conf: { url: 'mongodb://localhost/video-vault', user: 'test', pass: 'test' } };
   const postgresql: DatabaseConfig = { type: 'postgresql', conf: { host: 'localhost', port: 5432, database: 'video-vault-test' } };
   const sqlite: DatabaseConfig = { type: 'sqlite', conf: { filePath: ':memory:' } };
+  const dynamodb: DatabaseConfig = { type: 'dynamodb', conf: { region: 'eu-central-1', tablePrefix: 'vault-' } };
   const read = jest.mocked(readFile);
   const write = jest.mocked(writeFile);
 
@@ -39,7 +42,7 @@ describe('db', () => {
   });
 
   describe('loadConfig', () => {
-    test.each([inMemory, mongo, postgresql, sqlite])('reads the $type configuration', async (config) => {
+    test.each([inMemory, mongo, postgresql, sqlite, dynamodb])('reads the $type configuration', async (config) => {
       read.mockResolvedValue(JSON.stringify(config));
 
       expect(await loadConfig()).toEqual(config);
@@ -64,7 +67,8 @@ describe('db', () => {
       { config: inMemory, adapter: InMemoryDatabaseAdapter, args: [] },
       { config: mongo, adapter: MongoDatabaseAdapter, args: [mongo.conf] },
       { config: postgresql, adapter: PostgresqlDatabaseAdapter, args: [postgresql.conf] },
-      { config: sqlite, adapter: SQLiteDatabaseAdapter, args: [sqlite.conf] }
+      { config: sqlite, adapter: SQLiteDatabaseAdapter, args: [sqlite.conf] },
+      { config: dynamodb, adapter: DynamoDBDatabaseAdapter, args: [dynamodb.conf] }
     ])('constructs and initializes the $config.type adapter', async ({ config, adapter, args }) => {
       read.mockResolvedValue(JSON.stringify(config));
 
@@ -89,6 +93,19 @@ describe('db', () => {
       expect(db.open).toHaveBeenCalledTimes(1);
       expect(db.initialize).toHaveBeenCalledTimes(1);
       expect(SQLiteDatabaseAdapter).not.toHaveBeenCalled();
+    });
+
+    test('allows a retry after initialization fails and closes the failed adapter', async () => {
+      read.mockResolvedValue(JSON.stringify(dynamodb));
+      const error = new Error('CreateTable denied');
+      const failed = { open: jest.fn().mockResolvedValue(undefined), initialize: jest.fn().mockRejectedValue(error), close: jest.fn().mockResolvedValue(undefined) };
+      jest.mocked(DynamoDBDatabaseAdapter).mockImplementationOnce(() => failed as unknown as DynamoDBDatabaseAdapter);
+
+      await expect(loadDb()).rejects.toBe(error);
+      expect(failed.close).toHaveBeenCalledTimes(1);
+      const recovered = await loadDb();
+      expect(recovered).not.toBe(failed);
+      expect(recovered.initialize).toHaveBeenCalledTimes(1);
     });
 
     test('propagates configuration read errors', async () => {

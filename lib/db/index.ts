@@ -5,13 +5,9 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { MongoDatabaseAdapter } from '@/db/adapters/MongoDatabaseAdapter';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
 import { SQLiteDatabaseAdapter } from '@/db/adapters/SQLiteDatabaseAdapter';
+import { DynamoDBDatabaseAdapter } from '@/db/adapters/DynamoDBDatabaseAdapter';
 
-let db: DatabaseAdapter | null;
-
-const init = async function (): Promise<void> {
-  await db?.open();
-  await db?.initialize();
-};
+let db: Promise<DatabaseAdapter> | null = null;
 
 const saveConfig = async function (config: DatabaseConfig) {
   await writeFile('./conf/db.json', JSON.stringify(config, null, 4), 'utf8');
@@ -30,31 +26,49 @@ const loadConfig = async function (): Promise<DatabaseConfig | null> {
   }
 };
 
-const loadDb = async function (): Promise<DatabaseAdapter> {
-  if (db) {
-    return db;
-  }
-
-  const config = JSON.parse(await readFile('./conf/db.json', 'utf8'));
+const connectDb = async function (): Promise<DatabaseAdapter> {
+  const config: DatabaseConfig = JSON.parse(await readFile('./conf/db.json', 'utf8'));
+  let adapter: DatabaseAdapter;
 
   if (config.type === 'mongo') {
-    db = new MongoDatabaseAdapter(config.conf);
+    adapter = new MongoDatabaseAdapter(config.conf);
   } else if (config.type === 'postgresql') {
-    db = new PostgresqlDatabaseAdapter(config.conf);
+    adapter = new PostgresqlDatabaseAdapter(config.conf);
   } else if (config.type === 'sqlite') {
-    db = new SQLiteDatabaseAdapter(config.conf);
+    adapter = new SQLiteDatabaseAdapter(config.conf);
+  } else if (config.type === 'dynamodb') {
+    adapter = new DynamoDBDatabaseAdapter(config.conf);
   } else {
-    db = new InMemoryDatabaseAdapter();
+    adapter = new InMemoryDatabaseAdapter();
   }
 
-  await init();
+  try {
+    await adapter.open();
+    await adapter.initialize();
+    return adapter;
+  } catch (error) {
+    await adapter.close().catch(() => undefined);
+    throw error;
+  }
+};
 
-  return db;
+const loadDb = async function (): Promise<DatabaseAdapter> {
+  const connection = (db ??= connectDb());
+  try {
+    return await connection;
+  } catch (error) {
+    if (db === connection) {
+      db = null;
+    }
+    throw error;
+  }
 };
 
 const resetDb = async function () {
-  await db?.close();
+  const connection = db;
   db = null;
+  const adapter = await connection?.catch(() => undefined);
+  await adapter?.close();
 };
 
 export { saveConfig, loadConfig, loadDb, resetDb };
