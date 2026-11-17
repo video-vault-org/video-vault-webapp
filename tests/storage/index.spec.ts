@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import mockFS from 'mock-fs';
 import { loadConfig, loadStorage, resetStorage, saveConfig } from '@/storage';
+import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { LocalStorageAdapter } from '@/storage/adapters/LocalStorageAdapter';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
@@ -31,27 +32,35 @@ describe('storage', () => {
     [{ type: 'in-memory' }, InMemoryStorageAdapter],
     [localConfig, LocalStorageAdapter],
     [s3Config, S3StorageAdapter]
-  ] satisfies [StorageConfig, typeof InMemoryStorageAdapter | typeof LocalStorageAdapter | typeof S3StorageAdapter][])(
-    'loads configuration and selects the matching adapter for %j',
-    async (config, expectedAdapter) => {
-      mockFS({ './conf': { 'storage.json': JSON.stringify(config) } });
+  ] satisfies [StorageConfig, typeof InMemoryStorageAdapter | typeof LocalStorageAdapter | typeof S3StorageAdapter][])('loads configuration and wraps the matching adapter for %j', async (config, expectedAdapter) => {
+    mockFS({ './conf': { 'storage.json': JSON.stringify(config) } });
 
-      expect(await loadConfig()).toEqual(config);
-      const storage = await loadStorage();
-      try {
-        expect(storage).toBeInstanceOf(expectedAdapter);
-      } finally {
-        if (storage instanceof S3StorageAdapter) {
-          storage.getConf()[0].destroy();
-        }
+    expect(await loadConfig()).toEqual(config);
+    const storage = await loadStorage();
+    const adapter = storage['storageAdapter'];
+    try {
+      expect(storage).toBeInstanceOf(StorageWrapper);
+      expect(adapter).toBeInstanceOf(expectedAdapter);
+    } finally {
+      if (adapter instanceof S3StorageAdapter) {
+        adapter.getConf()[0].destroy();
       }
     }
-  );
+  });
 
   test('loadConfig returns null when the configuration is missing', async () => {
     mockFS({ './conf': {} });
 
     expect(await loadConfig()).toBeNull();
+  });
+
+  test('loadStorage wraps an in-memory adapter when the configuration is missing', async () => {
+    mockFS({ './conf': {} });
+
+    const storage = await loadStorage();
+
+    expect(storage).toBeInstanceOf(StorageWrapper);
+    expect(storage['storageAdapter']).toBeInstanceOf(InMemoryStorageAdapter);
   });
 
   test('loadConfig and loadStorage report malformed JSON', async () => {
@@ -61,21 +70,23 @@ describe('storage', () => {
     await expect(loadStorage()).rejects.toThrow(SyntaxError);
   });
 
-  test('loadStorage builds a local adapter from its configuration', async () => {
+  test('loadStorage writes media through the wrapper to the configured local directory', async () => {
     mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) } });
 
     const storage = await loadStorage();
 
-    expect(storage).toBeInstanceOf(LocalStorageAdapter);
-    expect((storage as LocalStorageAdapter).getBasePath()).toBe(localConfig.conf.basePath);
+    const bytes = Buffer.from([0, 255]);
+    await storage.saveVideoFile('clip', bytes);
+
+    expect(await readFile('./videos/clip.video')).toEqual(bytes);
   });
 
   test('loadStorage builds an S3 adapter from its configuration', async () => {
     mockFS({ './conf': { 'storage.json': JSON.stringify(s3Config) } });
 
     const storage = await loadStorage();
-    expect(storage).toBeInstanceOf(S3StorageAdapter);
-    const [client, bucket] = (storage as S3StorageAdapter).getConf();
+    const adapter = storage['storageAdapter'] as S3StorageAdapter;
+    const [client, bucket] = adapter.getConf();
     try {
       expect(bucket).toBe(s3Config.conf.bucket);
       expect(await client.config.region()).toBe(s3Config.conf.region);
@@ -84,9 +95,10 @@ describe('storage', () => {
     }
   });
 
-  test('loadStorage reuses its cached instance until resetStorage is called', async () => {
+  test('loadStorage reuses its cached wrapper until resetStorage is called', async () => {
     mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) } });
-    const original = await loadStorage();
+    const [original, concurrent] = await Promise.all([loadStorage(), loadStorage()]);
+    expect(concurrent).toBe(original);
     await writeFile(configPath, JSON.stringify({ type: 'local', conf: { basePath: './other' } }));
 
     expect(await loadStorage()).toBe(original);
@@ -94,10 +106,12 @@ describe('storage', () => {
     resetStorage();
     const reloaded = await loadStorage();
     expect(reloaded).not.toBe(original);
-    expect((reloaded as LocalStorageAdapter).getBasePath()).toBe('./other');
+    const bytes = Buffer.from([1]);
+    await reloaded.saveVideoFile('clip', bytes);
+    expect(await readFile('./other/clip.video')).toEqual(bytes);
   });
 
-  test('saveConfig replaces the cached adapter with one using the new configuration', async () => {
+  test('saveConfig replaces the cached wrapper with one using the new configuration', async () => {
     mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) } });
     const original = await loadStorage();
 
@@ -105,6 +119,8 @@ describe('storage', () => {
 
     const reloaded = await loadStorage();
     expect(reloaded).not.toBe(original);
-    expect((reloaded as LocalStorageAdapter).getBasePath()).toBe('./new');
+    const bytes = Buffer.from([2]);
+    await reloaded.saveThumbnailFile('clip', bytes);
+    expect(await readFile('./new/clip.thumbnail')).toEqual(bytes);
   });
 });

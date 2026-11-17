@@ -21,7 +21,7 @@ interface StorageAdapter {
    * @param descriptor filename for file storage, object key on s3 storage
    * @param from byte offset the file should be read from (inclusive); if undefined, file will be read from start
    * @param to byte offset the file should be read to (inclusive); if undefined, file will be read to end
-   * @returns promise with file content as Buffer if file/object exists, null if not
+   * @returns promise with file range content as Buffer if file/object exists, null if not
    */
   readRange(descriptor: string, from?: number, to?: number): Promise<Buffer | null>;
 
