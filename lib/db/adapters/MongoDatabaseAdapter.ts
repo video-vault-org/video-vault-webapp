@@ -177,8 +177,13 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
       filter.$or = [{ created: { $lt: cursor.created } }, { created: cursor.created, commentId: { $gt: paginationCursor } }];
     }
 
-    const page = await comments.find<Comment>(filter, withoutId).sort({ created: -1, commentId: 1 }).limit(paginationSize).toArray();
-    return [page, page[page.length - 1]?.commentId ?? ''];
+    const page = await comments.find<Comment>(filter, withoutId).sort({ created: -1, commentId: 1 }).limit(paginationSize + 1).toArray();
+    if (page.length <= paginationSize) {
+      return [page, ''];
+    }
+
+    page.pop();
+    return [page, page[page.length - 1].commentId];
   }
 
   public async findOneCommentByCommentId({ commentId }: { commentId: string }): Promise<Comment | null> {

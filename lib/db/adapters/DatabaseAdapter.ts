@@ -215,7 +215,7 @@ interface DatabaseAdapter {
    * @param videoId The id of the video to find the comments from
    * @param paginationCursor The commentId of the last item on the previous page, or an empty string for the first page
    * @param paginationSize The desired page size
-   * @returns The comments and the last commentId, or an empty string when the page is empty
+   * @returns The comments and a cursor for the next page. The cursor is the last commentId if more comments exist, or an empty string otherwise.
    */
   findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string, paginationCursor: string, paginationSize: number }): Promise<[Comment[], string]>;
 

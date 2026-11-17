@@ -246,8 +246,13 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
       start = index + 1;
     }
 
-    const page = comments.slice(start, start + paginationSize);
-    return [page, page[page.length - 1]?.commentId ?? ''];
+    const page = comments.slice(start, start + paginationSize + 1);
+    if (page.length <= paginationSize) {
+      return [page, ''];
+    }
+
+    page.pop();
+    return [page, page[page.length - 1].commentId];
   }
 
   public async findOneCommentByCommentId({ commentId }: { commentId: string }): Promise<Comment | null> {

@@ -373,8 +373,18 @@ describe('MongoDatabaseAdapter', () => {
       expect(firstPage).toEqual([[newest, comment], commentId]);
 
       const secondPage = await page(firstPage[1], 2);
-      expect(secondPage).toEqual([[byOtherUser], byOtherUser.commentId]);
-      expect(await page(secondPage[1], 2)).toEqual([[], '']);
+      expect(secondPage).toEqual([[byOtherUser], '']);
+    });
+
+    test('returns an empty cursor when the last page is exactly full', async () => {
+      const newest = { ...comment, commentId: 'c4', created: new Date(300) };
+      const oldest = { ...comment, commentId: 'c5', created: new Date(50) };
+      await db.postComment(newest);
+      await db.postComment(oldest);
+
+      const firstPage = await page('', 2);
+      expect(firstPage).toEqual([[newest, comment], commentId]);
+      expect(await page(firstPage[1], 2)).toEqual([[byOtherUser, oldest], '']);
     });
 
     test('rejects cursors that do not identify a comment of the requested video', async () => {

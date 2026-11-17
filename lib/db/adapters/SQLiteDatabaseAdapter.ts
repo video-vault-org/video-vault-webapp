@@ -264,6 +264,7 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
       return [[], ''];
     }
 
+    const limit = paginationSize + 1;
     const page = paginationCursor
       ? this.find(
           toComment,
@@ -275,11 +276,16 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
            AND (comment.created < cursor_comment.created OR comment."commentId" > cursor_comment."commentId")
          ORDER BY comment.created DESC, comment."commentId" ASC
          LIMIT $2`,
-          [videoId, paginationSize, paginationCursor]
+          [videoId, limit, paginationCursor]
         )
-      : this.find(toComment, 'SELECT * FROM comments WHERE "videoId" = $1 ORDER BY created DESC, "commentId" ASC LIMIT $2', [videoId, paginationSize]);
+      : this.find(toComment, 'SELECT * FROM comments WHERE "videoId" = $1 ORDER BY created DESC, "commentId" ASC LIMIT $2', [videoId, limit]);
 
-    return [page, page[page.length - 1]?.commentId ?? ''];
+    if (page.length <= paginationSize) {
+      return [page, ''];
+    }
+
+    page.pop();
+    return [page, page[page.length - 1].commentId];
   }
 
   public async findOneCommentByCommentId({ commentId }: { commentId: string }): Promise<Comment | null> {
