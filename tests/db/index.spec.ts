@@ -1,128 +1,154 @@
-import fs from 'fs/promises';
-import { saveConfig, loadDb, resetDb, loadConfig } from '@/db';
-import mockFS from 'mock-fs';
-import { exists } from '#/util';
+import { readFile, writeFile } from 'fs/promises';
+import { loadConfig, loadDb, resetDb, saveConfig } from '@/db';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
-import { DatabaseConfig } from '@/db/types/DatabaseConfig';
 import { MongoDatabaseAdapter } from '@/db/adapters/MongoDatabaseAdapter';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
-import { PostgresqlDatabaseConf } from '@/db/types/PostgresqlDatabaseConf';
+import { SQLiteDatabaseAdapter } from '@/db/adapters/SQLiteDatabaseAdapter';
+import { DatabaseConfig } from '@/db/config/DatabaseConfig';
 
-jest.mock('pg', () => {
-  return {
-    Client: class {
-      public readonly host: string;
-      public readonly port: number;
-      public readonly database: string;
-      public readonly user: string | undefined;
-      public readonly password: string | undefined;
+function mockAdapter() {
+  return jest.fn().mockImplementation(() => ({
+    open: jest.fn().mockResolvedValue(undefined),
+    initialize: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined)
+  }));
+}
 
-      public constructor({ host, port, database, user, password }: PostgresqlDatabaseConf) {
-        this.host = host;
-        this.port = port;
-        this.database = database;
-        this.user = user;
-        this.password = password;
-      }
+jest.mock('fs/promises', () => ({ readFile: jest.fn(), writeFile: jest.fn() }));
+jest.mock('@/db/adapters/InMemoryDatabaseAdapter', () => ({ InMemoryDatabaseAdapter: mockAdapter() }));
+jest.mock('@/db/adapters/MongoDatabaseAdapter', () => ({ MongoDatabaseAdapter: mockAdapter() }));
+jest.mock('@/db/adapters/PostgresqlDatabaseAdapter', () => ({ PostgresqlDatabaseAdapter: mockAdapter() }));
+jest.mock('@/db/adapters/SQLiteDatabaseAdapter', () => ({ SQLiteDatabaseAdapter: mockAdapter() }));
 
-      public async connect() {}
+describe('db', () => {
+  const path = './conf/db.json';
+  const inMemory: DatabaseConfig = { type: 'in-memory' };
+  const mongo: DatabaseConfig = { type: 'mongo', conf: { url: 'mongodb://localhost/video-vault', user: 'test', pass: 'test' } };
+  const postgresql: DatabaseConfig = { type: 'postgresql', conf: { host: 'localhost', port: 5432, database: 'video-vault-test' } };
+  const sqlite: DatabaseConfig = { type: 'sqlite', conf: { filePath: ':memory:' } };
+  const read = jest.mocked(readFile);
+  const write = jest.mocked(writeFile);
 
-      public async end() {}
+  beforeEach(() => {
+    read.mockReset();
+    write.mockReset().mockResolvedValue(undefined);
+  });
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      public async query(_query: string) {}
-    }
-  };
-});
-
-jest.mock('mongoose', () => {
-  return {
-    createConnection() {
-      return {
-        async close() {},
-        collection() {},
-        async startSession() {
-          return {
-            async endSession() {}
-          };
-        },
-        async asPromise() {
-          return;
-        }
-      };
-    }
-  };
-});
-
-describe('db', (): void => {
-  afterEach(async (): Promise<void> => {
-    mockFS.restore();
+  afterEach(async () => {
     await resetDb();
   });
 
-  test('saveConfig saves config', async () => {
-    mockFS({ './conf': {} });
+  describe('loadConfig', () => {
+    test.each([inMemory, mongo, postgresql, sqlite])('reads the $type configuration', async (config) => {
+      read.mockResolvedValue(JSON.stringify(config));
 
-    await saveConfig({ type: 'in-memory' });
+      expect(await loadConfig()).toEqual(config);
+      expect(read).toHaveBeenCalledWith(path, 'utf8');
+    });
 
-    expect(await exists('./conf/db.json')).toBe(true);
-    expect(JSON.parse((await fs.readFile('./conf/db.json'))?.toString('utf8'))).toEqual({ type: 'in-memory' });
+    test.each(['', '{'])('returns null for empty or malformed JSON (%j)', async (contents) => {
+      read.mockResolvedValue(contents);
+
+      expect(await loadConfig()).toBeNull();
+    });
+
+    test.each(['ENOENT', 'EACCES'])('returns null when reading fails with %s', async (code) => {
+      read.mockRejectedValue(Object.assign(new Error(code), { code }));
+
+      expect(await loadConfig()).toBeNull();
+    });
   });
 
-  test('loadConfig loads config.', async () => {
-    mockFS({ './conf': { 'db.json': JSON.stringify({ type: 'in-memory' }) } });
+  describe('loadDb', () => {
+    test.each([
+      { config: inMemory, adapter: InMemoryDatabaseAdapter, args: [] },
+      { config: mongo, adapter: MongoDatabaseAdapter, args: [mongo.conf] },
+      { config: postgresql, adapter: PostgresqlDatabaseAdapter, args: [postgresql.conf] },
+      { config: sqlite, adapter: SQLiteDatabaseAdapter, args: [sqlite.conf] }
+    ])('constructs and initializes the $config.type adapter', async ({ config, adapter, args }) => {
+      read.mockResolvedValue(JSON.stringify(config));
 
-    const config = await loadConfig();
+      const db = await loadDb();
 
-    expect(config).toEqual({ type: 'in-memory' });
+      expect(read).toHaveBeenCalledWith(path, 'utf8');
+      expect(adapter).toHaveBeenCalledTimes(1);
+      expect(adapter).toHaveBeenCalledWith(...args);
+      expect(db).toBe(jest.mocked(adapter).mock.results[0].value);
+      expect(db.open).toHaveBeenCalledTimes(1);
+      expect(db.initialize).toHaveBeenCalledTimes(1);
+      expect(jest.mocked(db.open).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(db.initialize).mock.invocationCallOrder[0]);
+    });
+
+    test('reuses the cached adapter without rereading the configuration or reopening it', async () => {
+      read.mockResolvedValueOnce(JSON.stringify(inMemory)).mockResolvedValueOnce(JSON.stringify(sqlite));
+
+      const db = await loadDb();
+      expect(await loadDb()).toBe(db);
+
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(db.open).toHaveBeenCalledTimes(1);
+      expect(db.initialize).toHaveBeenCalledTimes(1);
+      expect(SQLiteDatabaseAdapter).not.toHaveBeenCalled();
+    });
+
+    test('propagates configuration read errors', async () => {
+      const error = Object.assign(new Error('Config not found'), { code: 'ENOENT' });
+      read.mockRejectedValue(error);
+
+      await expect(loadDb()).rejects.toBe(error);
+    });
+
+    test('rejects malformed JSON before opening an adapter', async () => {
+      read.mockResolvedValue('{');
+
+      await expect(loadDb()).rejects.toThrow(SyntaxError);
+      expect(InMemoryDatabaseAdapter).not.toHaveBeenCalled();
+    });
   });
 
-  test('loadConfig returns null.', async () => {
-    mockFS({ './conf': {} });
+  describe('saveConfig', () => {
+    test('writes JSON, closes the cached adapter and uses the new configuration afterwards', async () => {
+      read.mockResolvedValueOnce(JSON.stringify(inMemory)).mockResolvedValueOnce(JSON.stringify(sqlite));
+      const previous = await loadDb();
 
-    const config = await loadConfig();
+      await saveConfig(sqlite);
 
-    expect(config).toBeNull();
+      expect(write).toHaveBeenCalledWith(path, JSON.stringify(sqlite, null, 4), 'utf8');
+      expect(previous.close).toHaveBeenCalledTimes(1);
+      expect(write.mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(previous.close).mock.invocationCallOrder[0]);
+      const next = await loadDb();
+      expect(next).not.toBe(previous);
+      expect(SQLiteDatabaseAdapter).toHaveBeenCalledWith(sqlite.conf);
+    });
+
+    test('keeps the cached adapter when writing the configuration fails', async () => {
+      read.mockResolvedValue(JSON.stringify(inMemory));
+      const current = await loadDb();
+      const error = new Error('Could not write config');
+      write.mockRejectedValueOnce(error);
+
+      await expect(saveConfig(sqlite)).rejects.toBe(error);
+      expect(current.close).not.toHaveBeenCalled();
+      expect(await loadDb()).toBe(current);
+    });
   });
 
-  test('loadDb loads in-memory db correctly', async () => {
-    mockFS({ './conf': { 'db.json': JSON.stringify({ type: 'in-memory' }) } });
+  describe('resetDb', () => {
+    test('does nothing when no adapter has been loaded', async () => {
+      await expect(resetDb()).resolves.toBeUndefined();
+      expect(read).not.toHaveBeenCalled();
+    });
 
-    const db = await loadDb();
+    test('closes the cached adapter once and permits reloading', async () => {
+      read.mockResolvedValueOnce(JSON.stringify(inMemory)).mockResolvedValueOnce(JSON.stringify(mongo));
+      const previous = await loadDb();
 
-    expect(db).toBeInstanceOf(InMemoryDatabaseAdapter);
-    expect((db as InMemoryDatabaseAdapter).isOpen()).toBe(true);
-    expect(Object.keys((db as InMemoryDatabaseAdapter).getMemory())).toEqual(['comment', 'user_', 'video', 'jwtkey', 'lock']);
-  });
+      await resetDb();
+      await resetDb();
 
-  test('loadDb loads mongo db correctly', async () => {
-    const config: DatabaseConfig = { type: 'mongo', conf: { url: 'mongodb://localhost:27017/video-vault' } };
-    mockFS({ './conf': { 'db.json': JSON.stringify(config) } });
-
-    const db = await loadDb();
-
-    expect(db).toBeInstanceOf(MongoDatabaseAdapter);
-    expect((db as MongoDatabaseAdapter).getConf()).toEqual([config.conf.url, '', '']);
-  });
-
-  test('loadDb loads postgresql db correctly', async () => {
-    const config: DatabaseConfig = { type: 'postgresql', conf: { host: '127.0.0.1', port: 5432, database: 'video-vault' } };
-    mockFS({ './conf': { 'db.json': JSON.stringify(config) } });
-
-    const db = await loadDb();
-
-    expect(db).toBeInstanceOf(PostgresqlDatabaseAdapter);
-    expect((db as PostgresqlDatabaseAdapter).getConf()).toEqual([config.conf.host, config.conf.port, config.conf.database, undefined, undefined]);
-  });
-
-  test('loadDb initializes the SQLite tables from config', async () => {
-    const config: DatabaseConfig = { type: 'sqlite', conf: { filePath: ':memory:' } };
-    mockFS({ './conf': { 'db.json': JSON.stringify(config) } });
-
-    const db = await loadDb();
-
-    await db.add('jwtkey', { keyId: 'key1', key: 'value' });
-    expect(await db.findAll('jwtkey')).toEqual([{ keyId: 'key1', key: 'value' }]);
-    expect(await db.findAll('comment')).toEqual([]);
+      expect(previous.close).toHaveBeenCalledTimes(1);
+      expect(await loadDb()).not.toBe(previous);
+      expect(MongoDatabaseAdapter).toHaveBeenCalledWith(mongo.conf);
+    });
   });
 });

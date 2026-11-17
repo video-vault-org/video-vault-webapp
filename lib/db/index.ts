@@ -1,19 +1,16 @@
 import { readFile, writeFile } from 'fs/promises';
-import { DatabaseConfig } from '@/db/types/DatabaseConfig';
-import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
+import { DatabaseConfig } from '@/db/config/DatabaseConfig';
+import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { MongoDatabaseAdapter } from '@/db/adapters/MongoDatabaseAdapter';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
-import { SqliteDatabaseAdapter } from '@/db/adapters/SqliteDatabaseAdapter';
-import { tables } from './tables';
+import { SQLiteDatabaseAdapter } from '@/db/adapters/SQLiteDatabaseAdapter';
 
 let db: DatabaseAdapter | null;
 
 const init = async function (): Promise<void> {
   await db?.open();
-  for (const tableDefinition of tables) {
-    await db?.init(tableDefinition);
-  }
+  await db?.initialize();
 };
 
 const saveConfig = async function (config: DatabaseConfig) {
@@ -45,7 +42,7 @@ const loadDb = async function (): Promise<DatabaseAdapter> {
   } else if (config.type === 'postgresql') {
     db = new PostgresqlDatabaseAdapter(config.conf);
   } else if (config.type === 'sqlite') {
-    db = new SqliteDatabaseAdapter(config.conf);
+    db = new SQLiteDatabaseAdapter(config.conf);
   } else {
     db = new InMemoryDatabaseAdapter();
   }

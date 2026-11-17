@@ -1,117 +1,279 @@
-import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
-import { DbTableDefinition } from '@/db/types/DbTableDefinition';
-import { DbValue } from '@/db/types/DbValue';
-import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
-import { DbItem } from '@/db/types/DbItem';
-import { PaginationParams } from '@/db/types/PaginationParams';
+import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
+import { User } from '@/domain/User';
+import { Video } from '@/domain/Video';
+import { Comment } from '@/domain/Comment';
+import { AttemptsCount } from '@/domain/AttemptsCount';
 
-interface Table {
-  name: string;
-  fields: Record<string, DbValue>;
-  key: string;
-  items: DbItem[];
-}
-
-type Memory = Record<string, Table>;
-
-const applyLimit = function (items: DbItem[], pagination: PaginationParams): DbItem[] {
-  const skip = pagination.skip ?? 0;
-  const get = pagination.get ?? items.length;
-  return items.slice(skip, skip + get);
-};
-
-/**
- * In-Memory Database Adapter, mostly for testing, not suitable for production, no data will be persistent
- */
 class InMemoryDatabaseAdapter implements DatabaseAdapter {
-  private dbOpen = false;
-  private readonly memory: Memory;
+  private users: User[] = [];
+  private videos: Video[] = [];
+  private comments: Comment[] = [];
+  private attempts: AttemptsCount[] = [];
+  private opened: boolean | undefined;
 
-  /**
-   * Constructor
-   * no-args
-   */
   public constructor() {
-    this.memory = {};
-  }
-
-  public isOpen() {
-    return this.dbOpen;
-  }
-
-  public getMemory() {
-    return this.memory;
+    // left blank intentionally
   }
 
   public async open(): Promise<void> {
-    this.dbOpen = true;
+    this.opened = true;
   }
 
   public async close(): Promise<void> {
-    this.dbOpen = false;
+    this.opened = false;
   }
 
-  public async init({ table, fields, key }: DbTableDefinition): Promise<void> {
-    this.memory[table] = {
-      name: table,
-      fields,
-      key,
-      items: []
-    };
+  public async initialize(): Promise<void> {
+    this.users = [];
+    this.videos = [];
+    this.comments = [];
+    this.attempts = [];
   }
 
-  public async add(table: string, item: DbItem): Promise<void> {
-    this.memory[table].items.push({ ...item });
-  }
-
-  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
-    const items = this.memory[table].items.filter((item) => item[filterKey] === filterValue);
-    items.forEach((item) => {
-      Object.keys(update).forEach((key) => {
-        item[key] = update[key];
-      });
-    });
-    return items.length;
-  }
-
-  public async exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
-    const item = this.memory[table].items.find((item) => item[filterKey] === filterValue);
-    return !!item;
-  }
-
-  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
-    let count = 0;
-    let index;
-    while ((index = this.memory[table].items.findIndex((item) => item[filterKey] === filterValue)) >= 0) {
-      this.memory[table].items.splice(index, 1);
-      count++;
+  public async createUser(user: User): Promise<void> {
+    if (this.users.some((existing) => existing.username === user.username)) {
+      throw new Error('Username already exists');
     }
-    return count;
+    this.users.push({ ...user });
   }
 
-  public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
-    const item = this.memory[table].items.find((item) => item[filterKey] === filterValue);
-    return item ? item : null;
+  public async changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string, displayName: string }): Promise<void> {
+    const user = this.users.find((user) => user.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.displayName = displayName;
   }
 
-  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, pagination: PaginationParams): Promise<DbItem[]> {
-    const items = this.memory[table].items.filter((item) => item[filterKey] === filterValue);
-    return applyLimit(items.sort((left, right) => (right.created as number) - (left.created as number)), pagination);
+  public async changeUsersUsernameByUserId({ userId, username }: { userId: string, username: string }): Promise<void> {
+    const user = this.users.find((user) => user.userId === userId);
+    if (!user) {
+      return;
+    }
+    if (this.users.some((existing) => existing !== user && existing.username === username)) {
+      throw new Error('Username already exists');
+    }
+    user.username = username;
   }
 
-  public async findAll(table: string): Promise<DbItem[]> {
-    return this.memory[table].items;
+  public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string, loginHash: string, passwordKeySalt: string, userKey: string }): Promise<void> {
+    const user = this.users.find((user) => user.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.loginHash = loginHash;
+    user.passwordKeySalt = passwordKeySalt;
+    user.userKey = userKey;
   }
 
-  public async findAllSince(table: string, since: Date): Promise<DbItem[]> {
-    const itemsAll = this.memory[table].items;
-    const itemsSince: DbItem[] = [];
-    itemsAll.forEach((item) => {
-      if (item.lastModified && item.lastModified.getTime() >= since.getTime()) {
-        itemsSince.push(item);
+  public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string, admin: boolean }): Promise<void> {
+    const user = this.users.find((user) => user.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.admin = admin;
+  }
+
+  public async changeUsersEditorRoleByUserId({ userId, editor }: { userId: string, editor: boolean }): Promise<void> {
+    const user = this.users.find((user) => user.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.editor = editor;
+  }
+
+  public async changeUsersModeratorRoleByUserId({ userId, moderator }: { userId: string, moderator: boolean }): Promise<void> {
+    const user = this.users.find((user) => user.userId === userId);
+    if (!user) {
+      return;
+    }
+    user.moderator = moderator;
+  }
+
+  public async findOneUserByUserId({ userId }: { userId: string }): Promise<User | null> {
+    return this.users.find((user) => user.userId === userId) ?? null;
+  }
+
+  public async findOneUserByUsername({ username }: { username: string }): Promise<User | null> {
+    return this.users.find((user) => user.username === username) ?? null;
+  }
+
+  public async findAllUsers(): Promise<User[]> {
+    return this.users;
+  }
+
+  public async deleteUserByUserId({ userId }: { userId: string }): Promise<void> {
+    const userIndex = this.users.findIndex((user) => user.userId === userId);
+    if (userIndex < 0) {
+      return;
+    }
+    this.users.splice(userIndex, 1);
+  }
+
+  public async postVideo(video: Video): Promise<void> {
+    this.videos.push({ ...video });
+  }
+
+  public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string, title: string, lastModified: Date, hmac: string }): Promise<void> {
+    const video = this.videos.find((video) => video.videoId === videoId);
+    if (!video) {
+      return;
+    }
+    video.title = title;
+    video.lastModified = lastModified;
+    video.hmac = hmac;
+  }
+
+  public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string, metadata: Record<string, unknown>, lastModified: Date, hmac: string }): Promise<void> {
+    const video = this.videos.find((video) => video.videoId === videoId);
+    if (!video) {
+      return;
+    }
+    video.meta = metadata;
+    video.lastModified = lastModified;
+    video.hmac = hmac;
+  }
+
+  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string, mimetype: string, lastModified: Date, hmac: string }): Promise<void> {
+    const video = this.videos.find((video) => video.videoId === videoId);
+    if (!video) {
+      return;
+    }
+    video.videoMimeType = mimetype;
+    video.lastModified = lastModified;
+    video.hmac = hmac;
+  }
+
+  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string, mimetype: string, lastModified: Date, hmac: string }): Promise<void> {
+    const video = this.videos.find((video) => video.videoId === videoId);
+    if (!video) {
+      return;
+    }
+    video.thumbnailMimeType = mimetype;
+    video.lastModified = lastModified;
+    video.hmac = hmac;
+  }
+
+  public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {
+    return this.videos.find((video) => video.videoId === videoId) ?? null;
+  }
+
+  public async findManyVideosLastModified({ since }: { since: Date }): Promise<Video[]> {
+    return this.videos.filter((video) => video.lastModified.getTime() >= since.getTime());
+  }
+
+  public async findAllVideos(): Promise<Video[]> {
+    return this.videos;
+  }
+
+  public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
+    const videoIndex = this.videos.findIndex((video) => video.videoId === videoId);
+    if (videoIndex < 0) {
+      return;
+    }
+    this.videos.splice(videoIndex, 1);
+  }
+
+  public async postComment(comment: Comment): Promise<void> {
+    this.comments.push({ ...comment });
+  }
+
+  public async changeCommentsContentByCommentIdAndUserId({ commentId, userId, content, lastModified, hmac }: { commentId: string, userId: string, content: string, lastModified: Date, hmac: string }): Promise<void> {
+    const comment = this.comments.find((comment) => comment.commentId === commentId && comment.userId === userId);
+    if (!comment) {
+      return;
+    }
+    comment.content = content;
+    comment.lastModified = lastModified;
+    comment.hmac = hmac;
+    comment.edited = true;
+  }
+
+  public async changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string, content: string, lastModified: Date, hmac: string }): Promise<void> {
+    const comment = this.comments.find((comment) => comment.commentId === commentId);
+    if (!comment) {
+      return;
+    }
+    comment.content = content;
+    comment.lastModified = lastModified;
+    comment.hmac = hmac;
+    comment.edited = true;
+  }
+
+  public async markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void> {
+    const comment = this.comments.find((comment) => comment.commentId === commentId);
+    if (!comment) {
+      return;
+    }
+    comment.deleted = true;
+  }
+
+  public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string, userId: string }): Promise<void> {
+    const comment = this.comments.find((comment) => comment.commentId === commentId && comment.userId === userId);
+    if (!comment) {
+      return;
+    }
+    comment.deleted = true;
+  }
+
+  public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {
+    for (const comment of this.comments) {
+      if (comment.userId === userId) {
+        comment.deleted = true;
       }
-    });
-    return itemsSince;
+    }
+  }
+
+  public async deleteCommentsByVideoId({ videoId }: { videoId: string }): Promise<void> {
+    this.comments = this.comments.filter((comment) => comment.videoId !== videoId);
+  }
+
+  public async findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string, paginationCursor: string, paginationSize: number }): Promise<[Comment[], string]> {
+    if (paginationSize <= 0 || !Number.isSafeInteger(paginationSize)) {
+      return [[], ''];
+    }
+
+    const comments = this.comments
+      .filter((comment) => comment.videoId === videoId)
+      .sort((left, right) => right.created.getTime() - left.created.getTime() || left.commentId.localeCompare(right.commentId));
+
+    let start = 0;
+    if (paginationCursor) {
+      const index = comments.findIndex((comment) => comment.commentId === paginationCursor);
+      if (index < 0) {
+        return [[], ''];
+      }
+      start = index + 1;
+    }
+
+    const page = comments.slice(start, start + paginationSize);
+    return [page, page[page.length - 1]?.commentId ?? ''];
+  }
+
+  public async findOneCommentByCommentId({ commentId }: { commentId: string }): Promise<Comment | null> {
+    return this.comments.find((comment) => comment.commentId === commentId) ?? null;
+  }
+
+  public async increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string, lastAttempt: Date }): Promise<void> {
+    const count = this.attempts.find((count) => count.username === username);
+    if (!count) {
+      this.attempts.push({ username, attempts: 1, lastAttempt });
+      return;
+    }
+    count.attempts++;
+    count.lastAttempt = lastAttempt;
+  }
+
+  public async clearAttemptsCountByUsername({ username }: { username: string }): Promise<void> {
+    const index = this.attempts.findIndex((count) => count.username === username);
+    if (index < 0) {
+      return;
+    }
+    this.attempts.splice(index, 1);
+  }
+
+  public async findOneAttemptsCountByUsername({ username }: { username: string }): Promise<AttemptsCount | null> {
+    return this.attempts.find((count) => count.username === username) ?? null;
   }
 }
 

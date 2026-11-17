@@ -1,27 +1,84 @@
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { Pool } from 'pg';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
-import { DbItem } from '@/db/types/DbItem';
+import { PostgresqlDatabaseConf } from '@/db/config/PostgresqlDatabaseConf';
+import { Comment } from '@/domain/Comment';
+import { User } from '@/domain/User';
+import { Video } from '@/domain/Video';
 
-describe('PostgresDatabaseAdapter', (): void => {
-  jest.setTimeout(60_000);
+describe('PostgresqlDatabaseAdapter', () => {
+  jest.setTimeout(120_000);
+  const user: User = {
+    userId: 'u1',
+    username: 'alice',
+    displayName: 'Alice',
+    loginHash: 'old-hash',
+    passwordKeySalt: 'old-salt',
+    userKey: 'old-key',
+    admin: false,
+    editor: false,
+    moderator: false
+  };
 
-  let postgresContainer: null | StartedPostgreSqlContainer = null;
-  let db: null | PostgresqlDatabaseAdapter = null;
-  let host = '';
-  let port = 0;
-  let user = '';
-  let password = '';
+  const otherUser: User = { ...user, userId: 'u2', username: 'bob' };
+
+  const video: Video = {
+    videoId: 'v1',
+    title: 'Original',
+    meta: { duration: 10 },
+    videoMimeType: 'video/mp4',
+    thumbnailMimeType: 'image/png',
+    lastModified: new Date(100),
+    hmac: 'old-hmac'
+  };
+
+  const otherVideo: Video = { ...video, videoId: 'v2' };
+
+  const comment: Comment = {
+    commentId: 'c1',
+    userId: user.userId,
+    videoId: video.videoId,
+    content: 'Original comment',
+    created: new Date(100),
+    lastModified: new Date(100),
+    edited: false,
+    deleted: false,
+    hmac: 'old-hmac'
+  };
+
+  const modified = { lastModified: new Date(200), hmac: 'new-hmac' };
+
+  let db: PostgresqlDatabaseAdapter;
+  let config: PostgresqlDatabaseConf;
+  let container: StartedPostgreSqlContainer | undefined;
+  let admin: Pool | undefined;
 
   beforeAll(async () => {
-    postgresContainer = await new PostgreSqlContainer('postgres:18.1').withDatabase('video-vault').start();
-    host = postgresContainer.getHost();
-    port = postgresContainer.getPort();
-    user = postgresContainer.getUsername();
-    password = postgresContainer.getPassword();
+    container = await new PostgreSqlContainer('postgres:18.1').withDatabase('video-vault-test').withUsername('vault-test').withPassword('vault-test-password').start();
+    config = {
+      host: container.getHost(),
+      port: container.getPort(),
+      database: container.getDatabase(),
+      user: container.getUsername(),
+      password: container.getPassword()
+    };
+    admin = new Pool({ ...config, connectionTimeoutMillis: 5000 });
+    const setup = new PostgresqlDatabaseAdapter(config);
+    try {
+      await setup.open();
+      await setup.initialize();
+    } finally {
+      await setup.close();
+    }
   });
 
   beforeEach(async () => {
-    db = new PostgresqlDatabaseAdapter({ host, port, database: 'video-vault', user, password });
+    if (!admin) {
+      return;
+    }
+    await admin.query('TRUNCATE users, videos, comments, login_attempts');
+    db = new PostgresqlDatabaseAdapter(config);
+    await db.open();
   });
 
   afterEach(async () => {
@@ -29,220 +86,349 @@ describe('PostgresDatabaseAdapter', (): void => {
   });
 
   afterAll(async () => {
-    await db?.close();
-    await postgresContainer?.stop();
+    await admin?.end();
+    await container?.stop();
   });
 
-  test('PostgresqlDatabaseAdapter->constructor loads db correctly.', async () => {
-    const newDb = new PostgresqlDatabaseAdapter({ host, port, database: 'video-vault', user, password });
-
-    expect(newDb.getConf()).toEqual([host, port, 'video-vault', user, password]);
-    expect(newDb.getClient()?.host).toEqual(host);
-  });
-
-  test('PostgresqlDatabaseAdapter->open connects to db.', async (): Promise<void> => {
-    await db?.open();
-
-    expect(db?.isConnected()).toBe(true);
-  });
-
-  test('PostgresqlDatabaseAdapter->close disconnects from db.', async (): Promise<void> => {
-    await db?.open();
-
-    await db?.close();
-
-    expect(db?.isConnected()).toBe(false);
-  });
-
-  test('PostgresqlDatabaseAdapter->init initializes table correctly.', async (): Promise<void> => {
-    await db?.open();
-
-    await db?.init({ table: 'test_', fields: { testStr: 'string', testDate: 'Date' }, key: '' });
-
+  test('open connects and can be called more than once', async () => {
+    const unopened = new PostgresqlDatabaseAdapter(config);
     try {
-      const res = await db?.getClient().query('SELECT * FROM test_');
-      expect(res?.rowCount).toEqual(0);
-      expect(res?.fields.at(0)?.name).toEqual('testStr');
-      expect(res?.fields.at(0)?.dataTypeID).toEqual(25);
-      expect(res?.fields.at(1)?.name).toEqual('testDate');
-      expect(res?.fields.at(1)?.dataTypeID).toEqual(1184);
-    } catch (ex: unknown) {
-      expect(ex).toBeUndefined();
+      await expect(unopened.findAllUsers()).rejects.toThrow('PostgreSQL database is not open');
+      await Promise.all([unopened.open(), unopened.open()]);
+      expect(await unopened.findAllUsers()).toEqual([]);
+    } finally {
+      await unopened.close();
     }
   });
 
-  describe('queries', () => {
-    const testItem: DbItem = { testPropStr: 'A', testPropNo: 42, testPropBool: false, testPropDate: new Date(0), created: new Date(0) };
+  test('close releases the connection and allows reopening', async () => {
+    await db.createUser(user);
 
-    beforeEach(async (): Promise<void> => {
-      await db?.open();
-      await db?.getClient().query('DROP TABLE IF EXISTS test_').catch();
-      await db?.init({
-        table: 'test_',
-        fields: { testPropStr: 'string', testPropNo: 'number', testPropBool: 'boolean', testPropDate: 'Date', created: 'Date' },
-        key: ''
-      });
+    await db.close();
+    await db.close();
+    await expect(db.findAllUsers()).rejects.toThrow('PostgreSQL database is not open');
+
+    await db.open();
+    expect(await db.findAllUsers()).toEqual([user]);
+  });
+
+  test('initialize creates the schema in the default database and preserves data when called again', async () => {
+    const isolated = new PostgresqlDatabaseAdapter({ ...config, database: undefined });
+    await admin!.query('CREATE DATABASE "video-vault-db"');
+    try {
+      await isolated.open();
+      await expect(isolated.findAllUsers()).rejects.toMatchObject({ code: '42P01' });
+      await isolated.initialize();
+      await isolated.createUser(user);
+      await isolated.postVideo(video);
+      await isolated.postComment(comment);
+      await isolated.increaseAttemptsCountByUsername({ username: user.username, lastAttempt: new Date(100) });
+      await isolated.initialize();
+
+      expect(await isolated.findAllUsers()).toEqual([user]);
+      expect(await isolated.findAllVideos()).toEqual([video]);
+      expect(await isolated.findOneCommentByCommentId({ commentId: comment.commentId })).toEqual(comment);
+      expect(await isolated.findOneAttemptsCountByUsername({ username: user.username })).toEqual({ username: user.username, attempts: 1, lastAttempt: new Date(100) });
+      expect(await db.findAllUsers()).toEqual([]);
+    } finally {
+      await isolated.close();
+      await admin!.query('DROP DATABASE "video-vault-db"');
+    }
+  });
+
+  describe('users', () => {
+    const { userId, username } = user;
+
+    beforeEach(async () => {
+      await db.createUser(user);
+      await db.createUser(otherUser);
     });
 
-    test('PostgresqlDatabaseAdapter->add adds item.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
+    test('createUser stores the supplied user', async () => {
+      const input = { ...user, userId: 'u3', username: 'charlie' };
+      await db.createUser(input);
 
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(1);
-      expect(res?.rows?.at(0)).toEqual(testItem);
+      expect(await db.findOneUserByUserId({ userId: input.userId })).toEqual({ ...user, userId: 'u3', username: 'charlie' });
     });
 
-    test('PostgresqlDatabaseAdapter->update updates item, without key change.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      const update = { testPropNo: 23, testPropBool: true };
+    test('changeUsersDisplayNameByUserId updates only the matching user', async () => {
+      await db.changeUsersDisplayNameByUserId({ userId: 'missing', displayName: 'Ignored' });
+      await db.changeUsersDisplayNameByUserId({ userId, displayName: 'New display name' });
 
-      const count = await db?.update('test_', 'testPropStr', 'A', update);
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(1);
-      expect(res?.rows?.at(0)).toEqual({ ...testItem, ...update });
-      expect(count).toBe(1);
+      expect(await db.findOneUserByUserId({ userId })).toEqual({ ...user, displayName: 'New display name' });
+      expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
-    test('PostgresqlDatabaseAdapter->update updates item, with key change.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      const update = { testPropStr: 'B', testPropBool: true };
+    test('changeUsersUsernameByUserId makes the user findable under the new username', async () => {
+      await db.changeUsersUsernameByUserId({ userId: 'missing', username: 'ignored' });
+      await db.changeUsersUsernameByUserId({ userId, username: 'new-name' });
 
-      await db?.update('test_', 'testPropStr', 'A', update);
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(1);
-      expect(res?.rows?.at(0)).toEqual({ ...testItem, ...update });
+      expect(await db.findOneUserByUsername({ username })).toBeNull();
+      expect(await db.findOneUserByUsername({ username: 'new-name' })).toEqual({ ...user, username: 'new-name' });
+      expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
-    test('PostgresqlDatabaseAdapter->update updates items.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      await db?.add('test_', { ...testItem, testPropNo: 0 });
-      const update = { testPropNo: 23 };
+    test('duplicate usernames are rejected without changing the existing user', async () => {
+      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ code: '23505' });
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ code: '23505' });
 
-      const count = await db?.update('test_', 'testPropStr', 'A', update);
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(2);
-      expect(res?.rows?.at(0)).toEqual({ ...testItem, ...update });
-      expect(res?.rows?.at(1)).toEqual({ ...testItem, ...update });
-      expect(count).toBe(2);
+      expect(await db.findOneUserByUsername({ username })).toEqual(user);
+      expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
-    test('PostgresqlDatabaseAdapter->update updates no items.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-      const update = { testPropNo: 23 };
+    test('changeUsersPasswordByUserId updates all three password attributes', async () => {
+      const password = { loginHash: 'new-hash', passwordKeySalt: 'new-salt', userKey: 'new-key' };
+      await db.changeUsersPasswordByUserId({ userId: 'missing', ...password });
+      await db.changeUsersPasswordByUserId({ userId, ...password });
 
-      const count = await db?.update('test_', 'testPropStr', 'nope', update);
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(1);
-      expect(res?.rows?.at(0)).toEqual(testItem);
-      expect(count).toBe(0);
+      expect(await db.findOneUserByUserId({ userId })).toEqual({ ...user, ...password });
+      expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
-    test('PostgresqlDatabaseAdapter->exists returns true if item exists.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
+    test.each([
+      { role: 'admin', change: (db: PostgresqlDatabaseAdapter, userId: string, admin: boolean) => db.changeUsersAdminRoleByUserId({ userId, admin }) },
+      { role: 'editor', change: (db: PostgresqlDatabaseAdapter, userId: string, editor: boolean) => db.changeUsersEditorRoleByUserId({ userId, editor }) },
+      { role: 'moderator', change: (db: PostgresqlDatabaseAdapter, userId: string, moderator: boolean) => db.changeUsersModeratorRoleByUserId({ userId, moderator }) }
+    ])('changes the $role role by user ID', async ({ role, change }) => {
+      await change(db, 'missing', true);
+      await change(db, userId, true);
+      expect(await db.findOneUserByUserId({ userId })).toEqual({ ...user, [role]: true });
 
-      const existsA = await db?.exists('test_', 'testPropStr', 'A');
-      const existsB = await db?.exists('test_', 'testPropStr', 'B');
-
-      expect(existsA).toBe(true);
-      expect(existsB).toBe(false);
+      await change(db, userId, false);
+      expect(await db.findOneUserByUserId({ userId })).toEqual(user);
+      expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
-    test('PostgresqlDatabaseAdapter->delete deletes item.', async (): Promise<void> => {
-      const otherItem = { ...testItem, testPropStr: 'B' };
-      await db?.add('test_', testItem);
-      await db?.add('test_', otherItem);
-
-      const count = await db?.delete('test_', 'testPropStr', 'A');
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(1);
-      expect(res?.rows?.at(0)).toEqual(otherItem);
-      expect(count).toBe(1);
+    test('findOneUserByUserId returns the matching user or null', async () => {
+      expect(await db.findOneUserByUserId({ userId })).toEqual(user);
+      expect(await db.findOneUserByUserId({ userId: 'missing' })).toBeNull();
     });
 
-    test('PostgresqlDatabaseAdapter->delete deletes items.', async (): Promise<void> => {
-      const otherItem = { ...testItem, testPropNo: 5 };
-      await db?.add('test_', testItem);
-      await db?.add('test_', otherItem);
+    test('handles apostrophes in query values', async () => {
+      const username = "O'Neil";
+      await db.changeUsersUsernameByUserId({ userId, username });
 
-      const count = await db?.delete('test_', 'testPropStr', 'A');
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(0);
-      expect(count).toBe(2);
+      expect(await db.findOneUserByUsername({ username })).toEqual({ ...user, username });
     });
 
-    test('PostgresqlDatabaseAdapter->delete deletes no items.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-
-      const count = await db?.delete('test_', 'testPropStr', 'nope');
-
-      const res = await db?.getClient().query<DbItem>('SELECT * FROM test_');
-      expect(res?.rowCount).toBe(1);
-      expect(count).toBe(0);
+    test('findOneUserByUsername returns the matching user or null', async () => {
+      expect(await db.findOneUserByUsername({ username })).toEqual(user);
+      expect(await db.findOneUserByUsername({ username: 'missing' })).toBeNull();
     });
 
-    test('PostgresqlDatabaseAdapter->findOne finds one.', async (): Promise<void> => {
-      await db?.add('test_', testItem);
-
-      const item = await db?.findOne('test_', 'testPropStr', 'A');
-
-      expect(item).toEqual(testItem);
+    test('findAllUsers returns every user', async () => {
+      expect(await db.findAllUsers()).toHaveLength(2);
+      expect(await db.findAllUsers()).toEqual(expect.arrayContaining([user, otherUser]));
     });
 
-    test('PostgresqlDatabaseAdapter->findMany filters and sorts by creation date before paging', async () => {
-      const items = [
-        { ...testItem, created: new Date(10) },
-        { ...testItem, testPropStr: 'B', created: new Date(40) },
-        { ...testItem, created: new Date(30) },
-        { ...testItem, created: new Date(20) }
-      ];
-      for (const item of items) {
-        await db?.add('test_', item);
+    test('deleteUserByUserId removes only the matching user and can be repeated', async () => {
+      await db.deleteUserByUserId({ userId });
+      await db.deleteUserByUserId({ userId });
+
+      expect(await db.findAllUsers()).toEqual([otherUser]);
+    });
+  });
+
+  describe('videos', () => {
+    const { videoId } = video;
+
+    beforeEach(async () => {
+      await db.postVideo(video);
+      await db.postVideo(otherVideo);
+    });
+
+    test('postVideo persists video metadata as JSON', async () => {
+      const input = { ...video, videoId: 'v3', meta: { tracks: ['video', 'audio'], dimensions: { width: 1920 } } };
+      await db.postVideo(input);
+
+      expect(await db.findOneVideoByVideoId({ videoId: 'v3' })).toEqual(input);
+    });
+
+    test.each([
+      { field: 'title', changes: { title: 'New title' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosTitleByVideoId({ videoId, title: 'New title', ...modified }) },
+      { field: 'metadata', changes: { meta: { duration: 30 } }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosMetadataByVideoId({ videoId, metadata: { duration: 30 }, ...modified }) },
+      { field: 'video MIME type', changes: { videoMimeType: 'video/webm' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosVideoMimetypeByVideoId({ videoId, mimetype: 'video/webm', ...modified }) },
+      { field: 'thumbnail MIME type', changes: { thumbnailMimeType: 'image/webp' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype: 'image/webp', ...modified }) }
+    ])('changes the $field, lastModified and hmac for the matching video', async ({ changes, change }) => {
+      await change(db, 'missing');
+      await change(db, videoId);
+
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual({ ...video, ...changes, ...modified });
+      expect(await db.findOneVideoByVideoId({ videoId: otherVideo.videoId })).toEqual(otherVideo);
+    });
+
+    test('findOneVideoByVideoId returns the matching video or null', async () => {
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(video);
+      expect(await db.findOneVideoByVideoId({ videoId: 'missing' })).toBeNull();
+    });
+
+    test('findManyVideosLastModified includes the boundary and excludes older videos', async () => {
+      const newer = { ...video, videoId: 'v3', lastModified: new Date(300) };
+      await db.postVideo(newer);
+      await db.changeVideosTitleByVideoId({ videoId, title: video.title, ...modified });
+
+      const results = await db.findManyVideosLastModified({ since: modified.lastModified });
+      expect(results).toHaveLength(2);
+      expect(results).toEqual(expect.arrayContaining([{ ...video, ...modified }, newer]));
+      expect(await db.findManyVideosLastModified({ since: new Date(400) })).toEqual([]);
+    });
+
+    test('findAllVideos returns every video', async () => {
+      expect(await db.findAllVideos()).toHaveLength(2);
+      expect(await db.findAllVideos()).toEqual(expect.arrayContaining([video, otherVideo]));
+    });
+
+    test('deleteVideoByVideoId removes only the matching video and can be repeated', async () => {
+      await db.deleteVideoByVideoId({ videoId });
+      await db.deleteVideoByVideoId({ videoId });
+
+      expect(await db.findAllVideos()).toEqual([otherVideo]);
+    });
+  });
+
+  describe('comments', () => {
+    const { commentId, userId, videoId } = comment;
+    const forOtherVideo = { ...comment, commentId: 'c2', videoId: otherVideo.videoId };
+    const byOtherUser = { ...comment, commentId: 'c3', userId: otherUser.userId };
+    const changes = { ...modified, content: 'Edited comment' };
+    const page = (paginationCursor = '', paginationSize = 10) => db.findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize });
+
+    beforeEach(async () => {
+      await db.postComment(comment);
+      await db.postComment(forOtherVideo);
+      await db.postComment(byOtherUser);
+    });
+
+    test('postComment persists the supplied comment', async () => {
+      const input = { ...comment, commentId: 'c4' };
+      await db.postComment(input);
+
+      expect(await db.findOneCommentByCommentId({ commentId: 'c4' })).toEqual({ ...comment, commentId: 'c4' });
+    });
+
+    test('changeCommentsContentByCommentIdAndUserId requires both IDs', async () => {
+      await db.changeCommentsContentByCommentIdAndUserId({ commentId, userId: otherUser.userId, ...changes });
+      expect((await page())[0]).toEqual([comment, byOtherUser]);
+
+      await db.changeCommentsContentByCommentIdAndUserId({ commentId, userId, ...changes });
+      expect((await page())[0]).toEqual([{ ...comment, ...changes, edited: true }, byOtherUser]);
+    });
+
+    test('changeCommentsContentByCommentId updates content and edit metadata', async () => {
+      await db.changeCommentsContentByCommentId({ commentId: 'missing', ...changes });
+      await db.changeCommentsContentByCommentId({ commentId, ...changes });
+
+      expect((await page())[0]).toEqual([{ ...comment, ...changes, edited: true }, byOtherUser]);
+    });
+
+    test('markCommentAsDeletedByCommentId marks only the matching comment', async () => {
+      await db.markCommentAsDeletedByCommentId({ commentId: 'missing' });
+      await db.markCommentAsDeletedByCommentId({ commentId });
+
+      expect((await page())[0]).toEqual([{ ...comment, deleted: true }, byOtherUser]);
+    });
+
+    test('markCommentAsDeletedByCommentIdAndUserId requires both IDs', async () => {
+      await db.markCommentAsDeletedByCommentIdAndUserId({ commentId, userId: otherUser.userId });
+      expect((await page())[0]).toEqual([comment, byOtherUser]);
+
+      await db.markCommentAsDeletedByCommentIdAndUserId({ commentId, userId });
+      expect((await page())[0]).toEqual([{ ...comment, deleted: true }, byOtherUser]);
+    });
+
+    test('markCommentsAsDeletedByUserId marks all comments by that user across videos', async () => {
+      await db.markCommentsAsDeletedByUserId({ userId });
+
+      expect((await page())[0]).toEqual([{ ...comment, deleted: true }, byOtherUser]);
+      expect(await db.findOneCommentByCommentId({ commentId: forOtherVideo.commentId })).toEqual({ ...forOtherVideo, deleted: true });
+    });
+
+    test('deleteCommentsByVideoId removes comments for just one video', async () => {
+      await db.deleteCommentsByVideoId({ videoId });
+
+      expect(await page()).toEqual([[], '']);
+      expect(await db.findOneCommentByCommentId({ commentId })).toBeNull();
+      expect(await db.findOneCommentByCommentId({ commentId: forOtherVideo.commentId })).toEqual(forOtherVideo);
+    });
+
+    test('findOneCommentByCommentId returns the matching comment or null', async () => {
+      expect(await db.findOneCommentByCommentId({ commentId })).toEqual(comment);
+      expect(await db.findOneCommentByCommentId({ commentId: 'missing' })).toBeNull();
+    });
+
+    test('paginates only the requested video, newest first with comment IDs breaking ties', async () => {
+      const newest = { ...comment, commentId: 'c4', created: new Date(300) };
+      await db.postComment(newest);
+
+      const firstPage = await page('', 2);
+      expect(firstPage).toEqual([[newest, comment], commentId]);
+
+      const secondPage = await page(firstPage[1], 2);
+      expect(secondPage).toEqual([[byOtherUser], byOtherUser.commentId]);
+      expect(await page(secondPage[1], 2)).toEqual([[], '']);
+    });
+
+    test('rejects cursors that do not identify a comment of the requested video', async () => {
+      expect(await page('missing')).toEqual([[], '']);
+      expect(await page(forOtherVideo.commentId)).toEqual([[], '']);
+    });
+
+    test.each([0, -1, 1.5])('returns an empty page for invalid page size %s', async (size) => {
+      expect(await page('', size)).toEqual([[], '']);
+    });
+  });
+
+  describe('login attempts', () => {
+    const { username } = user;
+    const firstAttempt = new Date(100);
+    const lastAttempt = new Date(200);
+
+    test('increaseAttemptsCountByUsername creates and increments separate counters', async () => {
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt: firstAttempt });
+      expect(await db.findOneAttemptsCountByUsername({ username })).toEqual({ username, attempts: 1, lastAttempt: firstAttempt });
+
+      await db.increaseAttemptsCountByUsername({ username: otherUser.username, lastAttempt: firstAttempt });
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt });
+
+      expect(await db.findOneAttemptsCountByUsername({ username })).toEqual({ username, attempts: 2, lastAttempt });
+      expect(await db.findOneAttemptsCountByUsername({ username: otherUser.username })).toEqual({ username: otherUser.username, attempts: 1, lastAttempt: firstAttempt });
+    });
+
+    test('concurrent increments on independent connections do not lose attempts', async () => {
+      const second = new PostgresqlDatabaseAdapter(config);
+      try {
+        await second.open();
+        await Promise.all(Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? db : second).increaseAttemptsCountByUsername({ username, lastAttempt })));
+
+        expect(await db.findOneAttemptsCountByUsername({ username })).toEqual({ username, attempts: 20, lastAttempt });
+      } finally {
+        await second.close();
       }
-
-      expect(await db?.findMany('test_', 'testPropStr', 'A', {})).toEqual([items[2], items[3], items[0]]);
-      expect(await db?.findMany('test_', 'testPropStr', 'A', { skip: 1, get: 1 })).toEqual([items[3]]);
-      expect(await db?.findMany('test_', 'testPropStr', 'A', { get: 0 })).toEqual([]);
     });
 
-    test('PostgresqlDatabaseAdapter->findAll returns all rows', async () => {
-      const items = [testItem, { ...testItem, testPropBool: true }, { ...testItem, testPropNo: 23 }];
-      for (const item of items) {
-        await db?.add('test_', item);
-      }
+    test('clearAttemptsCountByUsername clears only the matching counter and can be repeated', async () => {
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt });
+      await db.increaseAttemptsCountByUsername({ username: otherUser.username, lastAttempt });
 
-      const result = await db?.findAll('test_');
+      await db.clearAttemptsCountByUsername({ username });
+      await db.clearAttemptsCountByUsername({ username });
 
-      expect(result).toHaveLength(items.length);
-      expect(result).toEqual(expect.arrayContaining(items));
+      expect(await db.findOneAttemptsCountByUsername({ username })).toBeNull();
+      expect(await db.findOneAttemptsCountByUsername({ username: otherUser.username })).toEqual({ username: otherUser.username, attempts: 1, lastAttempt });
     });
 
-    test('PostgresqlDatabaseAdapter->findAllSince finds all, last modified since.', async (): Promise<void> => {
-      await db?.init({ table: 'test__', key: 'testPropStr', fields: { testPropStr: 'string', lastModified: 'Date' } });
-      await db?.add('test__', { testPropStr: 'A', lastModified: new Date(5) });
-      await db?.add('test__', { testPropStr: 'B', lastModified: new Date(9) });
-      await db?.add('test__', { testPropStr: 'C', lastModified: new Date(9) });
+    test('findOneAttemptsCountByUsername returns the count for an existing username', async () => {
+      await db.increaseAttemptsCountByUsername({ username: otherUser.username, lastAttempt: firstAttempt });
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt: firstAttempt });
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt });
 
-      const items = await db?.findAllSince('test__', new Date(7));
-
-      expect(items?.length).toBe(2);
-      expect(items?.at(0)).toEqual({ testPropStr: 'B', lastModified: new Date(9) });
-      expect(items?.at(1)).toEqual({ testPropStr: 'C', lastModified: new Date(9) });
+      expect(await db.findOneAttemptsCountByUsername({ username })).toEqual({ username, attempts: 2, lastAttempt });
     });
 
-    test('PostgresqlDatabaseAdapter->findAllSince finds nothing, if no lastModified column.', async (): Promise<void> => {
-      await db?.init({ table: 'test___', key: 'testPropStr', fields: { testPropStr: 'string' } });
-      await db?.add('test___', { testPropStr: 'A' });
-      await db?.add('test___', { testPropStr: 'B' });
+    test('findOneAttemptsCountByUsername returns null for an unknown username', async () => {
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt });
 
-      const items = await db?.findAllSince('test___', new Date(7));
-
-      expect(items?.length).toBe(0);
+      expect(await db.findOneAttemptsCountByUsername({ username: 'missing' })).toBeNull();
     });
   });
 });

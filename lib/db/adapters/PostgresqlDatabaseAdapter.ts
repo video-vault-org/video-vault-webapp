@@ -1,164 +1,317 @@
-import { Client } from 'pg';
-import { DatabaseAdapter } from '@/db/types/DatabaseAdapter';
-import { DbTableDefinition } from '@/db/types/DbTableDefinition';
-import { DbValue } from '@/db/types/DbValue';
-import { DbPrimitiveValue } from '@/db/types/DbPrimitiveValue';
-import { DbItem } from '@/db/types/DbItem';
-import { PaginationParams } from '@/db/types/PaginationParams';
-import { PostgresqlDatabaseConf } from '@/db/types/PostgresqlDatabaseConf';
+import { Pool, PoolConfig, QueryResultRow } from 'pg';
+import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
+import { AttemptsCount } from '@/domain/AttemptsCount';
+import { Comment } from '@/domain/Comment';
+import { User } from '@/domain/User';
+import { Video } from '@/domain/Video';
+import { PostgresqlDatabaseConf } from '@/db/config/PostgresqlDatabaseConf';
 
-/**
- * Postgresql Database Adapter
- */
+const schema = `
+  CREATE TABLE IF NOT EXISTS users (
+    "userId" text PRIMARY KEY,
+    username text NOT NULL UNIQUE,
+    "displayName" text NOT NULL,
+    "loginHash" text NOT NULL,
+    "passwordKeySalt" text NOT NULL,
+    "userKey" text NOT NULL,
+    admin boolean NOT NULL,
+    editor boolean NOT NULL,
+    moderator boolean NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS videos (
+    "videoId" text PRIMARY KEY,
+    title text NOT NULL,
+    meta jsonb NOT NULL,
+    "videoMimeType" text NOT NULL,
+    "thumbnailMimeType" text NOT NULL,
+    "lastModified" timestamptz NOT NULL,
+    hmac text NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS comments (
+    "commentId" text COLLATE "C" PRIMARY KEY,
+    "userId" text NOT NULL,
+    "videoId" text NOT NULL,
+    content text NOT NULL,
+    created timestamptz NOT NULL,
+    "lastModified" timestamptz NOT NULL,
+    edited boolean NOT NULL,
+    deleted boolean NOT NULL,
+    hmac text NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS login_attempts (
+    username text PRIMARY KEY,
+    attempts integer NOT NULL,
+    "lastAttempt" timestamptz NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS videos_last_modified_idx ON videos ("lastModified");
+  CREATE INDEX IF NOT EXISTS comments_video_created_idx ON comments ("videoId", created DESC, "commentId");
+  CREATE INDEX IF NOT EXISTS comments_user_idx ON comments ("userId");
+`;
+
 class PostgresqlDatabaseAdapter implements DatabaseAdapter {
-  private readonly client: Client;
-  private readonly tablesWithCreated = new Set<string>();
-  private connected = false;
+  private connection?: Promise<Pool>;
+  private readonly config: PoolConfig;
 
-  /**
-   * Constructor
-   * @param host the ip or domain, postgresql shall connect to
-   * @param port the port, postgresql shall connect to
-   * @param database the name of the database, postgresql shall connect to
-   * @param user (optional) username for authorization
-   * @param password (optional) password for authorization
-   */
-  public constructor({ host, port, database, user, password }: PostgresqlDatabaseConf) {
-    this.client = new Client({ host, port, database, user, password });
-  }
-
-  public getConf(): [string, number, string, string | undefined, string | undefined] {
-    return [this.client?.host ?? '-', this.client?.port ?? -1, this.client?.database ?? '-', this.client?.user, this.client?.password];
-  }
-
-  public getClient(): Client {
-    return this.client;
-  }
-
-  public isConnected(): boolean {
-    return this.connected;
-  }
-
-  private async findOneIfExists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | undefined> {
-    const query = `SELECT * FROM ${table} WHERE "${filterKey}"=$1 LIMIT 1`;
-    const values = [filterValue];
-    const result = await this.client?.query<DbItem>(query, values);
-    if (!result || result.rowCount !== 1) {
-      return undefined;
-    }
-    return result.rows[0];
+  public constructor(conf: PostgresqlDatabaseConf) {
+    this.config = {
+      ...conf,
+      database: conf.database ?? 'video-vault-db',
+      max: 5,
+      min: 0,
+      idleTimeoutMillis: 30_000,
+      allowExitOnIdle: false
+    };
   }
 
   public async open(): Promise<void> {
-    if (this.connected) {
-      return;
+    this.connection ??= this.connect();
+    const connection = this.connection;
+    try {
+      await connection;
+    } catch (error) {
+      if (this.connection === connection) {
+        this.connection = undefined;
+      }
+      throw error;
     }
-    await this.client?.connect();
-    this.connected = true;
   }
 
   public async close(): Promise<void> {
-    if (this.connected) {
-      await this.client?.end();
-      this.connected = false;
+    const connection = this.connection;
+    if (!connection) {
+      return;
+    }
+    this.connection = undefined;
+    const pool = await connection.catch(() => undefined);
+    await pool?.end();
+  }
+
+  public async initialize(): Promise<void> {
+    const client = await (await this.pool()).connect();
+    try {
+      await client.query('BEGIN');
+      // Serialize schema creation when several instances start together.
+      await client.query('SELECT pg_advisory_xact_lock(1180075108, 1)');
+      await client.query(schema);
+      await client.query('COMMIT');
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        client.release(true);
+        throw error;
+      }
+      client.release();
+      throw error;
+    }
+    client.release();
+  }
+
+  public async createUser({ userId, username, displayName, loginHash, passwordKeySalt, userKey, admin, editor, moderator }: User): Promise<void> {
+    await this.query('INSERT INTO users ("userId", username, "displayName", "loginHash", "passwordKeySalt", "userKey", admin, editor, moderator) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
+      userId,
+      username,
+      displayName,
+      loginHash,
+      passwordKeySalt,
+      userKey,
+      admin,
+      editor,
+      moderator
+    ]);
+  }
+
+  public async changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string; displayName: string }): Promise<void> {
+    await this.query('UPDATE users SET "displayName" = $2 WHERE "userId" = $1', [userId, displayName]);
+  }
+
+  public async changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void> {
+    await this.query('UPDATE users SET username = $2 WHERE "userId" = $1', [userId, username]);
+  }
+
+  public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {
+    await this.query('UPDATE users SET "loginHash" = $2, "passwordKeySalt" = $3, "userKey" = $4 WHERE "userId" = $1', [userId, loginHash, passwordKeySalt, userKey]);
+  }
+
+  public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
+    await this.query('UPDATE users SET admin = $2 WHERE "userId" = $1', [userId, admin]);
+  }
+
+  public async changeUsersEditorRoleByUserId({ userId, editor }: { userId: string; editor: boolean }): Promise<void> {
+    await this.query('UPDATE users SET editor = $2 WHERE "userId" = $1', [userId, editor]);
+  }
+
+  public async changeUsersModeratorRoleByUserId({ userId, moderator }: { userId: string; moderator: boolean }): Promise<void> {
+    await this.query('UPDATE users SET moderator = $2 WHERE "userId" = $1', [userId, moderator]);
+  }
+
+  public async findOneUserByUserId({ userId }: { userId: string }): Promise<User | null> {
+    return (await this.query<User>('SELECT * FROM users WHERE "userId" = $1', [userId]))[0] ?? null;
+  }
+
+  public async findOneUserByUsername({ username }: { username: string }): Promise<User | null> {
+    return (await this.query<User>('SELECT * FROM users WHERE username = $1', [username]))[0] ?? null;
+  }
+
+  public async findAllUsers(): Promise<User[]> {
+    return this.query<User>('SELECT * FROM users');
+  }
+
+  public async deleteUserByUserId({ userId }: { userId: string }): Promise<void> {
+    await this.query('DELETE FROM users WHERE "userId" = $1', [userId]);
+  }
+
+  public async postVideo({ videoId, title, meta, videoMimeType, thumbnailMimeType, lastModified, hmac }: Video): Promise<void> {
+    await this.query('INSERT INTO videos ("videoId", title, meta, "videoMimeType", "thumbnailMimeType", "lastModified", hmac) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
+      videoId,
+      title,
+      JSON.stringify(meta),
+      videoMimeType,
+      thumbnailMimeType,
+      lastModified,
+      hmac
+    ]);
+  }
+
+  public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET title = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, title, lastModified, hmac]);
+  }
+
+  public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET meta = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, JSON.stringify(metadata), lastModified, hmac]);
+  }
+
+  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET "videoMimeType" = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, mimetype, lastModified, hmac]);
+  }
+
+  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET "thumbnailMimeType" = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, mimetype, lastModified, hmac]);
+  }
+
+  public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {
+    return (await this.query<Video>('SELECT * FROM videos WHERE "videoId" = $1', [videoId]))[0] ?? null;
+  }
+
+  public async findManyVideosLastModified({ since }: { since: Date }): Promise<Video[]> {
+    return this.query<Video>('SELECT * FROM videos WHERE "lastModified" >= $1', [since]);
+  }
+
+  public async findAllVideos(): Promise<Video[]> {
+    return this.query<Video>('SELECT * FROM videos');
+  }
+
+  public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
+    await this.query('DELETE FROM videos WHERE "videoId" = $1', [videoId]);
+  }
+
+  public async postComment({ commentId, userId, videoId, content, created, lastModified, edited, deleted, hmac }: Comment): Promise<void> {
+    await this.query('INSERT INTO comments ("commentId", "userId", "videoId", content, created, "lastModified", edited, deleted, hmac) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
+      commentId,
+      userId,
+      videoId,
+      content,
+      created,
+      lastModified,
+      edited,
+      deleted,
+      hmac
+    ]);
+  }
+
+  public async changeCommentsContentByCommentIdAndUserId({ commentId, userId, content, lastModified, hmac }: { commentId: string; userId: string; content: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE comments SET content = $2, "lastModified" = $3, hmac = $4, edited = true WHERE "commentId" = $1 AND "userId" = $5', [commentId, content, lastModified, hmac, userId]);
+  }
+
+  public async changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string; content: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE comments SET content = $2, "lastModified" = $3, hmac = $4, edited = true WHERE "commentId" = $1', [commentId, content, lastModified, hmac]);
+  }
+
+  public async markCommentAsDeletedByCommentId({ commentId }: { commentId: string }): Promise<void> {
+    await this.query('UPDATE comments SET deleted = true WHERE "commentId" = $1', [commentId]);
+  }
+
+  public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void> {
+    await this.query('UPDATE comments SET deleted = true WHERE "commentId" = $1 AND "userId" = $2', [commentId, userId]);
+  }
+
+  public async markCommentsAsDeletedByUserId({ userId }: { userId: string }): Promise<void> {
+    await this.query('UPDATE comments SET deleted = true WHERE "userId" = $1', [userId]);
+  }
+
+  public async deleteCommentsByVideoId({ videoId }: { videoId: string }): Promise<void> {
+    await this.query('DELETE FROM comments WHERE "videoId" = $1', [videoId]);
+  }
+
+  public async findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string; paginationCursor: string; paginationSize: number }): Promise<[Comment[], string]> {
+    if (paginationSize <= 0 || !Number.isSafeInteger(paginationSize)) {
+      return [[], ''];
+    }
+
+    const page = paginationCursor
+      ? await this.query<Comment>(
+          `SELECT comment.*
+         FROM comments AS cursor_comment
+         JOIN comments AS comment ON comment."videoId" = cursor_comment."videoId"
+         WHERE cursor_comment."videoId" = $1 AND cursor_comment."commentId" = $3
+           AND comment.created <= cursor_comment.created
+           AND (comment.created < cursor_comment.created OR comment."commentId" > cursor_comment."commentId")
+         ORDER BY comment.created DESC, comment."commentId" ASC
+         LIMIT $2`,
+          [videoId, paginationSize, paginationCursor]
+        )
+      : await this.query<Comment>('SELECT * FROM comments WHERE "videoId" = $1 ORDER BY created DESC, "commentId" ASC LIMIT $2', [videoId, paginationSize]);
+
+    return [page, page[page.length - 1]?.commentId ?? ''];
+  }
+
+  public async findOneCommentByCommentId({ commentId }: { commentId: string }): Promise<Comment | null> {
+    return (await this.query<Comment>('SELECT * FROM comments WHERE "commentId" = $1', [commentId]))[0] ?? null;
+  }
+
+  public async increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void> {
+    await this.query(
+      `INSERT INTO login_attempts (username, attempts, "lastAttempt") VALUES ($1, 1, $2)
+       ON CONFLICT (username) DO UPDATE
+       SET attempts = login_attempts.attempts + 1, "lastAttempt" = EXCLUDED."lastAttempt"`,
+      [username, lastAttempt]
+    );
+  }
+
+  public async clearAttemptsCountByUsername({ username }: { username: string }): Promise<void> {
+    await this.query('DELETE FROM login_attempts WHERE username = $1', [username]);
+  }
+
+  public async findOneAttemptsCountByUsername({ username }: { username: string }): Promise<AttemptsCount | null> {
+    return (await this.query<AttemptsCount>('SELECT * FROM login_attempts WHERE username = $1', [username]))[0] ?? null;
+  }
+
+  private async connect(): Promise<Pool> {
+    const pool = new Pool(this.config);
+    // pg emits errors for idle connections; the pool removes those connections.
+    pool.on('error', (error: Error) => console.error('Idle PostgreSQL connection failed', error));
+    try {
+      await pool.query('SELECT 1');
+      return pool;
+    } catch (error) {
+      await pool.end();
+      throw error;
     }
   }
 
-  public async init({ table, fields }: DbTableDefinition): Promise<void> {
-    const types: Record<string, string> = {
-      string: 'text',
-      number: 'integer',
-      boolean: 'Boolean',
-      object: 'JSON',
-      Date: 'timestamptz'
-    };
-    const fieldsArray: string[] = [];
-    Object.entries(fields).forEach(([name, type]) => {
-      fieldsArray.push(`"${name}" ${types[type]}`);
-    });
-    const query = `CREATE TABLE IF NOT EXISTS ${table}(${fieldsArray.join(', ')})`;
-    await this.client?.query(query);
-    if (fields.created === 'Date') {
-      this.tablesWithCreated.add(table);
+  private async pool(): Promise<Pool> {
+    if (!this.connection) {
+      throw new Error('PostgreSQL database is not open');
     }
+    return this.connection;
   }
 
-  public async add(table: string, item: DbItem): Promise<void> {
-    const valueParts: string[] = [];
-    const keys: string[] = [];
-    const values: (DbPrimitiveValue | Date)[] = [];
-    let index = 1;
-    Object.entries(item).forEach(([key, value]) => {
-      valueParts.push(`$${index++}`);
-      keys.push(`"${key}"`);
-      values.push(typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : value);
-    });
-    const query = `INSERT INTO ${table}(${keys.join(', ')}) VALUES(${valueParts.join(', ')})`;
-    await this.client?.query(query, values);
-  }
-
-  public async update(table: string, filterKey: string, filterValue: DbPrimitiveValue, update: Record<string, DbValue>): Promise<number> {
-    let index = 1;
-    const updateParts: string[] = [];
-    const updateValues: (DbPrimitiveValue | Date)[] = [];
-    Object.entries(update).forEach(([key, value]) => {
-      updateParts.push(`"${key}"=$${index++}`);
-      updateValues.push(typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : value);
-    });
-    const updater = `SET ${updateParts.join(', ')}`;
-    const values = [...updateValues, filterValue];
-    const query = `UPDATE ${table} ${updater} WHERE "${filterKey}"=$${values.length}`;
-    const result = await this.client?.query(query, values);
-    return result.rowCount ?? 0;
-  }
-
-  public async exists(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<boolean> {
-    const item = await this.findOneIfExists(table, filterKey, filterValue);
-    return !!item;
-  }
-
-  public async delete(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<number> {
-    const query = `DELETE FROM ${table} WHERE "${filterKey}"=$1`;
-    const result = await this.client.query(query, [filterValue]);
-    return result.rowCount ?? 0;
-  }
-
-  public async findOne(table: string, filterKey: string, filterValue: DbPrimitiveValue): Promise<DbItem | null> {
-    const item = await this.findOneIfExists(table, filterKey, filterValue);
-    return item ? item : null;
-  }
-
-  public async findMany(table: string, filterKey: string, filterValue: DbPrimitiveValue, pagination: PaginationParams): Promise<DbItem[]> {
-    const values = [filterValue];
-    let query = `SELECT * FROM ${table} WHERE ${this.client.escapeIdentifier(filterKey)}=$1`;
-    if (this.tablesWithCreated.has(table)) {
-      query += ' ORDER BY "created" DESC NULLS LAST';
-    }
-    if (pagination.get !== undefined) {
-      query += ` LIMIT $${values.push(pagination.get)}`;
-    }
-    if (pagination.skip !== undefined) {
-      query += ` OFFSET $${values.push(pagination.skip)}`;
-    }
-    return (await this.client.query<DbItem>(query, values)).rows;
-  }
-
-  public async findAll(table: string): Promise<DbItem[]> {
-    return (await this.client.query<DbItem>(`SELECT * FROM ${table}`)).rows;
-  }
-
-  public async findAllSince(table: string, since: Date): Promise<DbItem[]> {
-    const columnCheckQuery = `SELECT * FROM information_schema.columns WHERE table_name = '${table}' AND column_name = 'lastModified'`;
-    const checkResult = await this.client?.query(columnCheckQuery);
-    if (checkResult.rowCount === 0) {
-      return [];
-    }
-    const query = `SELECT * FROM ${table} WHERE "lastModified" >= $1`;
-    const result = await this.client?.query<DbItem>(query, [since]);
-    if (!result || result.rowCount === 0) {
-      return [];
-    }
-    return result.rows;
+  private async query<Row extends QueryResultRow>(sql: string, values: (string | number | boolean | Date)[] = []): Promise<Row[]> {
+    return (await (await this.pool()).query<Row>(sql, values)).rows;
   }
 }
 
