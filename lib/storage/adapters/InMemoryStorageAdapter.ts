@@ -22,8 +22,7 @@ class InMemoryStorageAdapter implements StorageAdapter {
     const start = from ?? 0;
     const end = to ?? data.length - 1;
 
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
-      start < 0 || end < start || end >= data.length) {
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end >= data.length) {
       throw new RangeError('Invalid byte range');
     }
 

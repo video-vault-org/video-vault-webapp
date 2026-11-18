@@ -1,12 +1,4 @@
-import {
-  S3Client,
-  S3ClientConfig,
-  PutObjectCommandInput,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-  DeleteObjectCommandInput
-} from '@aws-sdk/client-s3';
+import { S3Client, S3ClientConfig, PutObjectCommandInput, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectCommandInput } from '@aws-sdk/client-s3';
 import { StorageAdapter } from './StorageAdapter';
 import { S3StorageConf } from '@/storage/config/S3StorageConf';
 
@@ -63,12 +55,7 @@ class S3StorageAdapter implements StorageAdapter {
     if (from !== undefined || to !== undefined) {
       const start = from ?? 0;
 
-      if (
-        !Number.isSafeInteger(start) ||
-        start < 0 ||
-        (to !== undefined &&
-          (!Number.isSafeInteger(to) || to < start))
-      ) {
+      if (!Number.isSafeInteger(start) || start < 0 || (to !== undefined && (!Number.isSafeInteger(to) || to < start))) {
         throw new RangeError('Invalid byte range');
       }
 
@@ -88,18 +75,7 @@ class S3StorageAdapter implements StorageAdapter {
 
       return data ? Buffer.from(data) : null;
     } catch (error: unknown) {
-      if (
-        error instanceof Error &&
-        (
-          error.name === 'NoSuchKey' ||
-          error.name === 'NotFound' ||
-          (
-            '$metadata' in error &&
-            (error.$metadata as { httpStatusCode?: number })
-              ?.httpStatusCode === 404
-          )
-        )
-      ) {
+      if (error instanceof Error && (error.name === 'NoSuchKey' || error.name === 'NotFound' || ('$metadata' in error && (error.$metadata as { httpStatusCode?: number })?.httpStatusCode === 404))) {
         return null;
       }
 

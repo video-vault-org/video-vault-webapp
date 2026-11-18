@@ -24,11 +24,11 @@ export default [
       sourceType: 'module'
     },
     rules: {
-      indent: [
+      '@typescript-eslint/no-unused-vars': [
         'error',
-        2,
         {
-          SwitchCase: 1
+          varsIgnorePattern: '^_',
+          argsIgnorePattern: '^_'
         }
       ]
     }

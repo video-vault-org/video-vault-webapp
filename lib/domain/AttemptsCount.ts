@@ -1,7 +1,7 @@
 interface AttemptsCount {
-  username: string,
-  attempts: number,
-  lastAttempt: Date
+  username: string;
+  attempts: number;
+  lastAttempt: Date;
 }
 
 export { AttemptsCount };

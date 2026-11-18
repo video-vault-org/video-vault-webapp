@@ -87,7 +87,7 @@ function bindings(values: Parameter[]): Record<string, string | number> {
 
 class SQLiteDatabaseAdapter implements DatabaseAdapter {
   private database?: DatabaseSync;
-  private readonly config: SqliteDatabaseConf
+  private readonly config: SqliteDatabaseConf;
 
   public constructor(config: SqliteDatabaseConf) {
     this.config = config;

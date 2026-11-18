@@ -32,7 +32,7 @@ interface DatabaseAdapter {
    * @param userId The id of the user to be changed
    * @param displayName The desired new username
    */
-  changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string, displayName: string }): Promise<void>;
+  changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string; displayName: string }): Promise<void>;
 
   /**
    * Changes the users username, matched by its userId
@@ -40,7 +40,7 @@ interface DatabaseAdapter {
    * @param username The desired new username
    * @throws If another user already has the username
    */
-  changeUsersUsernameByUserId({ userId, username }: { userId: string, username: string }): Promise<void>;
+  changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void>;
 
   /**
    * Changes the users password attributes, matched by its userId
@@ -49,28 +49,28 @@ interface DatabaseAdapter {
    * @param passwordKeySalt The new passwordKeySalt
    * @param userKey The new userKey
    */
-  changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string, loginHash: string, passwordKeySalt: string, userKey: string }): Promise<void>;
+  changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void>;
 
   /**
    * Changes the users admin role flag, matched by its userId
    * @param userId The id of the user to be changed
    * @param admin The new admin role state (boolean)
    */
-  changeUsersAdminRoleByUserId({ userId, admin }: { userId: string, admin: boolean }): Promise<void>;
+  changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void>;
 
   /**
    * Changes the users editor role flag, matched by its userId
    * @param userId The id of the user to be changed
    * @param editor The new editor role state (boolean)
    */
-  changeUsersEditorRoleByUserId({ userId, editor }: { userId: string, editor: boolean }): Promise<void>;
+  changeUsersEditorRoleByUserId({ userId, editor }: { userId: string; editor: boolean }): Promise<void>;
 
   /**
    * Changes the users moderator role flag, matched by its userId
    * @param userId The id of the user to be changed
    * @param moderator The new moderator role state (boolean)
    */
-  changeUsersModeratorRoleByUserId({ userId, moderator }: { userId: string, moderator: boolean }): Promise<void>;
+  changeUsersModeratorRoleByUserId({ userId, moderator }: { userId: string; moderator: boolean }): Promise<void>;
 
   /**
    * Finds one user, matched by its userId
@@ -108,7 +108,7 @@ interface DatabaseAdapter {
    * @param lastModified The new lastModified date
    * @param hmac The new hmac
    */
-  changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string, title: string, lastModified: Date, hmac: string }): Promise<void>;
+  changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Changes a videos metadata, matched by its videoId
@@ -117,7 +117,7 @@ interface DatabaseAdapter {
    * @param lastModified The new lastModified date
    * @param hmac The new hmac
    */
-  changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string, metadata: Record<string, unknown>, lastModified: Date, hmac: string }): Promise<void>;
+  changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Changes a videos video mimetype, matched by its videoId
@@ -126,7 +126,7 @@ interface DatabaseAdapter {
    * @param lastModified The new lastModified date
    * @param hmac The new hmac
    */
-  changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string, mimetype: string, lastModified: Date, hmac: string }): Promise<void>;
+  changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Changes a videos thumbnail mimetype, matched by its videoId
@@ -135,7 +135,7 @@ interface DatabaseAdapter {
    * @param lastModified The new lastModified date
    * @param hmac The new hmac
    */
-  changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string, mimetype: string, lastModified: Date, hmac: string }): Promise<void>;
+  changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Finds one video by its videoId
@@ -174,7 +174,7 @@ interface DatabaseAdapter {
    * @param lastModified The new lastModified date
    * @param hmac The new hmac
    */
-  changeCommentsContentByCommentIdAndUserId({ commentId, userId, content, lastModified, hmac }: { commentId: string, userId: string, content: string, lastModified: Date, hmac: string }): Promise<void>;
+  changeCommentsContentByCommentIdAndUserId({ commentId, userId, content, lastModified, hmac }: { commentId: string; userId: string; content: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Changes the content of a comment, matched by commentId
@@ -183,7 +183,7 @@ interface DatabaseAdapter {
    * @param lastModified The new lastModified date
    * @param hmac The new hmac
    */
-  changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string, content: string, lastModified: Date, hmac: string }): Promise<void>;
+  changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string; content: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Sets deleted to true and content to an empty string, matched by commentId.
@@ -196,7 +196,7 @@ interface DatabaseAdapter {
    * @param commentId The id of the comment to be changed
    * @param userId The id of the user the comment belongs to
    */
-  markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string, userId: string }): Promise<void>;
+  markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void>;
 
   /**
    * Sets deleted to true and content to an empty string for all comments matched by the user's ID.
@@ -217,7 +217,7 @@ interface DatabaseAdapter {
    * @param paginationSize The desired page size
    * @returns The comments and an opaque cursor for the next page, or an empty string if there is no next page.
    */
-  findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string, paginationCursor: string, paginationSize: number }): Promise<[Comment[], string]>;
+  findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string; paginationCursor: string; paginationSize: number }): Promise<[Comment[], string]>;
 
   /**
    * Finds a comment by its id
@@ -231,7 +231,7 @@ interface DatabaseAdapter {
    * @param username The username to increase the count for
    * @param lastAttempt The date of the last failed login attempt
    */
-  increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string, lastAttempt: Date }): Promise<void>;
+  increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void>;
 
   /**
    * Clears the count of failed login attempts for a username.

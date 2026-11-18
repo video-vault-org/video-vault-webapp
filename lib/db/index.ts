@@ -21,7 +21,7 @@ const loadConfig = async function (): Promise<DatabaseConfig | null> {
       return null;
     }
     return JSON.parse(config);
-  } catch (err: unknown) {
+  } catch {
     return null;
   }
 };

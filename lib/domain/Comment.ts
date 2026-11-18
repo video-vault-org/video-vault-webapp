@@ -7,7 +7,7 @@ interface Comment {
   lastModified: Date;
   edited: boolean;
   deleted: boolean;
-  hmac: string
+  hmac: string;
 }
 
 export { Comment };

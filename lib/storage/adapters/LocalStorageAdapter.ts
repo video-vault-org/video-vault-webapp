@@ -61,14 +61,7 @@ class LocalStorageAdapter implements StorageAdapter {
       const start = from ?? 0;
       const end = to ?? size - 1;
 
-      if (
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end) ||
-        start < 0 ||
-        end < start ||
-        start >= size ||
-        end >= size
-      ) {
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size || end >= size) {
         throw new RangeError('Invalid byte range');
       }
 
@@ -78,12 +71,7 @@ class LocalStorageAdapter implements StorageAdapter {
       let bytesRead = 0;
 
       while (bytesRead < length) {
-        const result = await file.read(
-          buffer,
-          bytesRead,
-          length - bytesRead,
-          start + bytesRead
-        );
+        const result = await file.read(buffer, bytesRead, length - bytesRead, start + bytesRead);
 
         if (result.bytesRead === 0) {
           throw new Error('Unexpected end of file');
@@ -96,7 +84,7 @@ class LocalStorageAdapter implements StorageAdapter {
     } finally {
       await file.close();
     }
-  };
+  }
 
   public async delete(descriptor: string): Promise<void> {
     try {

@@ -37,7 +37,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.users.push({ ...user });
   }
 
-  public async changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string, displayName: string }): Promise<void> {
+  public async changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string; displayName: string }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -45,7 +45,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.displayName = displayName;
   }
 
-  public async changeUsersUsernameByUserId({ userId, username }: { userId: string, username: string }): Promise<void> {
+  public async changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -56,7 +56,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.username = username;
   }
 
-  public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string, loginHash: string, passwordKeySalt: string, userKey: string }): Promise<void> {
+  public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -66,7 +66,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.userKey = userKey;
   }
 
-  public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string, admin: boolean }): Promise<void> {
+  public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -74,7 +74,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.admin = admin;
   }
 
-  public async changeUsersEditorRoleByUserId({ userId, editor }: { userId: string, editor: boolean }): Promise<void> {
+  public async changeUsersEditorRoleByUserId({ userId, editor }: { userId: string; editor: boolean }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -82,7 +82,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.editor = editor;
   }
 
-  public async changeUsersModeratorRoleByUserId({ userId, moderator }: { userId: string, moderator: boolean }): Promise<void> {
+  public async changeUsersModeratorRoleByUserId({ userId, moderator }: { userId: string; moderator: boolean }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -114,7 +114,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.videos.push({ ...video });
   }
 
-  public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string, title: string, lastModified: Date, hmac: string }): Promise<void> {
+  public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void> {
     const video = this.videos.find((video) => video.videoId === videoId);
     if (!video) {
       return;
@@ -124,7 +124,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     video.hmac = hmac;
   }
 
-  public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string, metadata: Record<string, unknown>, lastModified: Date, hmac: string }): Promise<void> {
+  public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
     const video = this.videos.find((video) => video.videoId === videoId);
     if (!video) {
       return;
@@ -134,7 +134,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     video.hmac = hmac;
   }
 
-  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string, mimetype: string, lastModified: Date, hmac: string }): Promise<void> {
+  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
     const video = this.videos.find((video) => video.videoId === videoId);
     if (!video) {
       return;
@@ -144,7 +144,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     video.hmac = hmac;
   }
 
-  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string, mimetype: string, lastModified: Date, hmac: string }): Promise<void> {
+  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
     const video = this.videos.find((video) => video.videoId === videoId);
     if (!video) {
       return;
@@ -178,7 +178,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.comments.push({ ...comment });
   }
 
-  public async changeCommentsContentByCommentIdAndUserId({ commentId, userId, content, lastModified, hmac }: { commentId: string, userId: string, content: string, lastModified: Date, hmac: string }): Promise<void> {
+  public async changeCommentsContentByCommentIdAndUserId({ commentId, userId, content, lastModified, hmac }: { commentId: string; userId: string; content: string; lastModified: Date; hmac: string }): Promise<void> {
     const comment = this.comments.find((comment) => comment.commentId === commentId && comment.userId === userId);
     if (!comment) {
       return;
@@ -189,7 +189,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     comment.edited = true;
   }
 
-  public async changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string, content: string, lastModified: Date, hmac: string }): Promise<void> {
+  public async changeCommentsContentByCommentId({ commentId, content, lastModified, hmac }: { commentId: string; content: string; lastModified: Date; hmac: string }): Promise<void> {
     const comment = this.comments.find((comment) => comment.commentId === commentId);
     if (!comment) {
       return;
@@ -209,7 +209,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     comment.content = '';
   }
 
-  public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string, userId: string }): Promise<void> {
+  public async markCommentAsDeletedByCommentIdAndUserId({ commentId, userId }: { commentId: string; userId: string }): Promise<void> {
     const comment = this.comments.find((comment) => comment.commentId === commentId && comment.userId === userId);
     if (!comment) {
       return;
@@ -231,14 +231,12 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     this.comments = this.comments.filter((comment) => comment.videoId !== videoId);
   }
 
-  public async findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string, paginationCursor: string, paginationSize: number }): Promise<[Comment[], string]> {
+  public async findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string; paginationCursor: string; paginationSize: number }): Promise<[Comment[], string]> {
     if (paginationSize <= 0 || !Number.isSafeInteger(paginationSize)) {
       return [[], ''];
     }
 
-    const comments = this.comments
-      .filter((comment) => comment.videoId === videoId)
-      .sort((left, right) => right.created.getTime() - left.created.getTime() || left.commentId.localeCompare(right.commentId));
+    const comments = this.comments.filter((comment) => comment.videoId === videoId).sort((left, right) => right.created.getTime() - left.created.getTime() || left.commentId.localeCompare(right.commentId));
 
     let start = 0;
     if (paginationCursor) {
@@ -262,7 +260,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     return this.comments.find((comment) => comment.commentId === commentId) ?? null;
   }
 
-  public async increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string, lastAttempt: Date }): Promise<void> {
+  public async increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void> {
     const count = this.attempts.find((count) => count.username === username);
     if (!count) {
       this.attempts.push({ username, attempts: 1, lastAttempt });

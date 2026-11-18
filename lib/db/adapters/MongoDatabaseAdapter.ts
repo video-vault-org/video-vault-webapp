@@ -177,7 +177,11 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
       filter.$or = [{ created: { $lt: cursor.created } }, { created: cursor.created, commentId: { $gt: paginationCursor } }];
     }
 
-    const page = await comments.find<Comment>(filter, withoutId).sort({ created: -1, commentId: 1 }).limit(paginationSize + 1).toArray();
+    const page = await comments
+      .find<Comment>(filter, withoutId)
+      .sort({ created: -1, commentId: 1 })
+      .limit(paginationSize + 1)
+      .toArray();
     if (page.length <= paginationSize) {
       return [page, ''];
     }

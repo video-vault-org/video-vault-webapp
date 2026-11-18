@@ -1,5 +1,18 @@
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient, KeySchemaElement, TableDescription, waitUntilTableExists } from '@aws-sdk/client-dynamodb';
-import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, QueryCommandInput, QueryCommandOutput, ScanCommand, ScanCommandOutput, TransactWriteCommand, TransactWriteCommandInput, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  QueryCommandInput,
+  QueryCommandOutput,
+  ScanCommand,
+  ScanCommandOutput,
+  TransactWriteCommand,
+  TransactWriteCommandInput,
+  UpdateCommand
+} from '@aws-sdk/lib-dynamodb';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { DynamoDBConf } from '@/db/config/DynamoDBConf';
 import { AttemptsCount } from '@/domain/AttemptsCount';
