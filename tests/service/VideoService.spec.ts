@@ -229,4 +229,58 @@ describe('VideoService', () => {
       await expect(service.findAllVideos()).rejects.toBe(error);
     });
   });
+
+  describe('readVideoFileRange', () => {
+    test.each([
+      [0, 0],
+      [1, 3],
+      [2, undefined],
+      [undefined, 0],
+      [undefined, undefined]
+    ])('forwards inclusive bounds from %s to %s and returns the bytes unchanged', async (from, to) => {
+      const result = Buffer.from([0, 128, 255]);
+      const read = jest.spyOn(storage, 'readVideoFileRange').mockResolvedValueOnce(result);
+
+      await expect(service.readVideoFileRange({ videoId, from, to })).resolves.toBe(result);
+
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(read).toHaveBeenCalledWith({ videoId, from, to });
+    });
+
+    test('allows both bounds to be omitted and returns null for a missing file', async () => {
+      const read = jest.spyOn(storage, 'readVideoFileRange').mockResolvedValueOnce(null);
+
+      await expect(service.readVideoFileRange({ videoId })).resolves.toBeNull();
+
+      expect(read).toHaveBeenCalledWith({ videoId, from: undefined, to: undefined });
+    });
+
+    test.each([new RangeError('Invalid byte range'), new Error('Storage unavailable')])('propagates %s', async (error) => {
+      jest.spyOn(storage, 'readVideoFileRange').mockRejectedValueOnce(error);
+
+      await expect(service.readVideoFileRange({ videoId, from: 3, to: 1 })).rejects.toBe(error);
+    });
+  });
+
+  describe('readThumbnailFile', () => {
+    test.each([
+      ['binary thumbnail', Buffer.from([0, 128, 255])],
+      ['empty thumbnail', Buffer.alloc(0)],
+      ['missing thumbnail', null]
+    ] as const)('returns the %s result unchanged', async (_label, result) => {
+      const read = jest.spyOn(storage, 'readThumbnailFile').mockResolvedValueOnce(result);
+
+      await expect(service.readThumbnailFile({ videoId })).resolves.toBe(result);
+
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(read).toHaveBeenCalledWith({ videoId });
+    });
+
+    test('propagates storage errors', async () => {
+      const error = new Error('Storage unavailable');
+      jest.spyOn(storage, 'readThumbnailFile').mockRejectedValueOnce(error);
+
+      await expect(service.readThumbnailFile({ videoId })).rejects.toBe(error);
+    });
+  });
 });

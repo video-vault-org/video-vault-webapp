@@ -123,6 +123,28 @@ class VideoService {
   public async findAllVideos(): Promise<Video[]> {
     return await this.db.findAllVideos();
   }
+
+  /**
+   * Reads a byte range from a video's stored video file.
+   * @param videoId The ID of the video to read.
+   * @param from The first byte offset, inclusive; defaults to the start of the file.
+   * @param to The last byte offset, inclusive; defaults to the end of the file.
+   * @returns The requested bytes, or null if the video file does not exist.
+   * @throws If the range is invalid or the storage read fails.
+   */
+  public async readVideoFileRange({ videoId, from, to }: { videoId: string; from?: number; to?: number }): Promise<Buffer | null> {
+    return await this.storage.readVideoFileRange({ videoId, from, to });
+  }
+
+  /**
+   * Reads a video's complete stored thumbnail file.
+   * @param videoId The ID of the video whose thumbnail to read.
+   * @returns The thumbnail bytes, or null if the thumbnail file does not exist.
+   * @throws If the storage read fails.
+   */
+  public async readThumbnailFile({ videoId }: { videoId: string }): Promise<Buffer | null> {
+    return await this.storage.readThumbnailFile({ videoId });
+  }
 }
 
 export { VideoService };
