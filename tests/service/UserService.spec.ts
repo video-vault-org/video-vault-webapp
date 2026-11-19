@@ -233,28 +233,6 @@ describe('UserService', () => {
     });
   });
 
-  describe('findUserByUsername', () => {
-    test.each([
-      ['found', user],
-      ['missing', null]
-    ] as const)('returns a %s user result', async (_label, result) => {
-      const find = jest.spyOn(db, 'findOneUserByUsername').mockResolvedValueOnce(result);
-      const parameters = { username: user.username };
-
-      await expect(service.findUserByUsername(parameters)).resolves.toBe(result);
-
-      expect(find).toHaveBeenCalledTimes(1);
-      expect(find).toHaveBeenCalledWith(parameters);
-    });
-
-    test('propagates database errors', async () => {
-      const error = new Error('Database unavailable');
-      jest.spyOn(db, 'findOneUserByUsername').mockRejectedValueOnce(error);
-
-      await expect(service.findUserByUsername({ username: user.username })).rejects.toBe(error);
-    });
-  });
-
   describe('findAllUsers', () => {
     test.each([[[]], [[user, otherUser]]])('returns the database result %j', async (result) => {
       const find = jest.spyOn(db, 'findAllUsers').mockResolvedValueOnce(result);

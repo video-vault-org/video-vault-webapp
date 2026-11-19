@@ -108,16 +108,6 @@ class UserService {
   }
 
   /**
-   * Finds a user by their username.
-   * @param username The username to find.
-   * @returns The user, or null if no matching user exists.
-   * @throws If the database query fails.
-   */
-  public async findUserByUsername({ username }: { username: string }): Promise<User | null> {
-    return await this.db.findOneUserByUsername({ username });
-  }
-
-  /**
    * Finds all users without sorting or pagination.
    * @returns All users, or an empty array if no users exist.
    * @throws If the database query fails.
