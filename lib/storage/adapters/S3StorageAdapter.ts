@@ -1,4 +1,6 @@
-import { S3Client, S3ClientConfig, PutObjectCommandInput, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectCommandInput } from '@aws-sdk/client-s3';
+import { createReadStream } from 'node:fs';
+import { Upload } from '@aws-sdk/lib-storage';
+import { S3Client, S3ClientConfig, GetObjectCommand, DeleteObjectCommand, DeleteObjectCommandInput } from '@aws-sdk/client-s3';
 import { StorageAdapter } from './StorageAdapter';
 import { S3StorageConf } from '@/storage/config/S3StorageConf';
 
@@ -22,14 +24,15 @@ class S3StorageAdapter implements StorageAdapter {
     return [this.client, this.bucket];
   }
 
-  public async save(descriptor: string, data: Buffer): Promise<void> {
-    const commandInput: PutObjectCommandInput = {
-      Bucket: this.bucket,
-      Key: descriptor,
-      Body: data
-    };
-    const command = new PutObjectCommand(commandInput);
-    await this.client.send(command);
+  public async save(tmpFilePath: string, descriptor: string): Promise<void> {
+    await new Upload({
+      client: this.client,
+      params: {
+        Bucket: this.bucket,
+        Key: descriptor,
+        Body: createReadStream(tmpFilePath)
+      }
+    }).done();
   }
 
   public async read(descriptor: string): Promise<Buffer | null> {

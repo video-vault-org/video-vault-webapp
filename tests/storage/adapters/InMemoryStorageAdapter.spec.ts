@@ -1,32 +1,55 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 
 describe('InMemoryStorageAdapter', () => {
   const descriptor = 'clip.bin';
   const bytes = Buffer.from([0, 127, 128, 255, 42]);
+  let directory: string;
   let adapter: InMemoryStorageAdapter;
 
-  beforeEach(() => {
+  async function save(descriptor: string, data: Buffer): Promise<void> {
+    const source = join(directory, 'upload.tmp');
+    await writeFile(source, data);
+    await adapter.save(source, descriptor);
+  }
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'video-vault-memory-storage-'));
     adapter = new InMemoryStorageAdapter();
   });
 
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
   test('save stores binary data and replaces it when the same name is saved again', async () => {
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
     expect(await adapter.read(descriptor)).toEqual(bytes);
 
     const replacement = Buffer.from([255]);
-    await adapter.save(descriptor, replacement);
+    await save(descriptor, replacement);
     expect(await adapter.read(descriptor)).toEqual(replacement);
   });
 
+  test('save rejects a missing source without changing an existing entry', async () => {
+    await save(descriptor, bytes);
+
+    await expect(adapter.save(join(directory, 'missing.tmp'), descriptor)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    expect(await adapter.read(descriptor)).toEqual(bytes);
+  });
+
   test('read distinguishes a missing entry from an empty buffer', async () => {
-    await adapter.save('empty.bin', Buffer.alloc(0));
+    await save('empty.bin', Buffer.alloc(0));
 
     expect(await adapter.read(descriptor)).toBeNull();
     expect(await adapter.read('empty.bin')).toEqual(Buffer.alloc(0));
   });
 
   test('adapter instances have separate storage', async () => {
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
 
     expect(await new InMemoryStorageAdapter().read(descriptor)).toBeNull();
   });
@@ -39,7 +62,7 @@ describe('InMemoryStorageAdapter', () => {
     [undefined, undefined, bytes],
     [4, 4, Buffer.from([42])]
   ])('readRange returns inclusive bytes from %s to %s', async (from, to, expected) => {
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
 
     expect(await adapter.readRange(descriptor, from, to)).toEqual(expected);
   });
@@ -52,7 +75,7 @@ describe('InMemoryStorageAdapter', () => {
     [5, undefined],
     [0, 5]
   ])('readRange rejects invalid bounds from %s to %s', async (from, to) => {
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
 
     await expect(adapter.readRange(descriptor, from, to)).rejects.toThrow(RangeError);
   });
@@ -62,14 +85,14 @@ describe('InMemoryStorageAdapter', () => {
   });
 
   test('readRange rejects an empty buffer because it has no valid byte offset', async () => {
-    await adapter.save(descriptor, Buffer.alloc(0));
+    await save(descriptor, Buffer.alloc(0));
 
     await expect(adapter.readRange(descriptor)).rejects.toThrow(RangeError);
   });
 
   test('delete removes only the selected entry and succeeds when repeated', async () => {
-    await adapter.save(descriptor, Buffer.alloc(0));
-    await adapter.save('other.bin', bytes);
+    await save(descriptor, Buffer.alloc(0));
+    await save('other.bin', bytes);
 
     await expect(adapter.delete(descriptor)).resolves.toBeUndefined();
     expect(await adapter.read(descriptor)).toBeNull();

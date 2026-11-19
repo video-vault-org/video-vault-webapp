@@ -3,11 +3,12 @@
  */
 interface StorageAdapter {
   /**
-   * saves a file
-   * @param descriptor filename for file storage, object key on s3 storage
-   * @param data file content as Buffer
+   * saves a file (copies it from temporary directory into the storage)
+   * @param tmpFilePath The path of the file in the temporary directory
+   * @param descriptor The filename / object key for the file in the storage
+   * @example save('./tmp/${videoId}.video', '${videoId}.video');
    */
-  save(descriptor: string, data: Buffer): Promise<void>;
+  save(tmpFilePath: string, descriptor: string): Promise<void>;
 
   /**
    * reads a file

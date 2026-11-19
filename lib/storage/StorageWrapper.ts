@@ -2,6 +2,7 @@ import { StorageAdapter } from '@/storage/adapters/StorageAdapter';
 
 const VIDEO_EXTENSION = 'video';
 const THUMBNAIL_EXTENSION = 'thumbnail';
+const TEMPORARY_DIRECTORY = './tmp';
 
 class StorageWrapper {
   private readonly storageAdapter: StorageAdapter;
@@ -11,21 +12,21 @@ class StorageWrapper {
   }
 
   /**
-   * Saves the video file for a video
+   * Saves the video file for a video (copies it from temporary directory into the storage)
    * @param videoId The id of the video to save the video file for
-   * @param data The encrypted binary video data
    */
-  public async saveVideoFile({ videoId, data }: { videoId: string; data: Buffer }): Promise<void> {
-    await this.storageAdapter.save(`${videoId}.${VIDEO_EXTENSION}`, data);
+  public async saveVideoFile({ videoId }: { videoId: string }): Promise<void> {
+    const filename = `${videoId}.${VIDEO_EXTENSION}`;
+    await this.storageAdapter.save(`${TEMPORARY_DIRECTORY}/${filename}`, filename);
   }
 
   /**
-   * Saves the thumbnail file for a video
+   * Saves the thumbnail file for a video (copies it from temporary directory into the storage)
    * @param videoId The id of the video to save the thumbnail file for
-   * @param data The encrypted binary thumbnail data
    */
-  public async saveThumbnailFile({ videoId, data }: { videoId: string; data: Buffer }): Promise<void> {
-    await this.storageAdapter.save(`${videoId}.${THUMBNAIL_EXTENSION}`, data);
+  public async saveThumbnailFile({ videoId }: { videoId: string }): Promise<void> {
+    const filename = `${videoId}.${THUMBNAIL_EXTENSION}`;
+    await this.storageAdapter.save(`${TEMPORARY_DIRECTORY}/${filename}`, filename);
   }
 
   /**

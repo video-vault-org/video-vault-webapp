@@ -9,6 +9,12 @@ describe('LocalStorageAdapter', () => {
   let directory: string;
   let adapter: LocalStorageAdapter;
 
+  async function save(descriptor: string, data: Buffer): Promise<void> {
+    const source = join(directory, 'upload.tmp');
+    await writeFile(source, data);
+    await adapter.save(source, descriptor);
+  }
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-storage-'));
     adapter = new LocalStorageAdapter({ basePath: directory });
@@ -22,13 +28,33 @@ describe('LocalStorageAdapter', () => {
     expect(adapter.getBasePath()).toBe(directory);
   });
 
-  test('save writes to the base directory and overwrites an existing file', async () => {
+  test('save copies to the base directory and overwrites an existing file', async () => {
     const path = join(directory, descriptor);
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
     expect(await readFile(path)).toEqual(bytes);
 
-    await adapter.save(descriptor, Buffer.from([255]));
+    await save(descriptor, Buffer.from([255]));
     expect(await readFile(path)).toEqual(Buffer.from([255]));
+  });
+
+  test('save creates the storage directory and preserves the source file after copying it', async () => {
+    const source = join(directory, 'upload.tmp');
+    const target = join(directory, 'new', 'storage');
+    const storage = new LocalStorageAdapter({ basePath: target });
+    await writeFile(source, bytes);
+
+    await expect(storage.save(source, descriptor)).resolves.toBeUndefined();
+
+    expect(await readFile(join(target, descriptor))).toEqual(bytes);
+    expect(await readFile(source)).toEqual(bytes);
+  });
+
+  test('save rejects a missing source without changing the existing file', async () => {
+    await save(descriptor, bytes);
+
+    await expect(adapter.save(join(directory, 'missing.tmp'), descriptor)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    expect(await adapter.read(descriptor)).toEqual(bytes);
   });
 
   test('read returns the exact file bytes', async () => {
@@ -38,7 +64,7 @@ describe('LocalStorageAdapter', () => {
   });
 
   test('read returns null for a missing file and a buffer for an empty file', async () => {
-    await adapter.save('empty.bin', Buffer.alloc(0));
+    await save('empty.bin', Buffer.alloc(0));
 
     expect(await adapter.read('missing.bin')).toBeNull();
     expect(await adapter.read('empty.bin')).toEqual(Buffer.alloc(0));
@@ -51,7 +77,7 @@ describe('LocalStorageAdapter', () => {
     [undefined, 0, bytes.subarray(0, 1)],
     [undefined, undefined, bytes]
   ])('readRange returns inclusive bytes from %s to %s', async (from, to, expected) => {
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
 
     expect(await adapter.readRange(descriptor, from, to)).toEqual(expected);
   });
@@ -64,7 +90,7 @@ describe('LocalStorageAdapter', () => {
     [5, undefined],
     [0, 5]
   ])('readRange rejects invalid bounds from %s to %s', async (from, to) => {
-    await adapter.save(descriptor, bytes);
+    await save(descriptor, bytes);
 
     await expect(adapter.readRange(descriptor, from, to)).rejects.toThrow(RangeError);
   });
@@ -74,7 +100,7 @@ describe('LocalStorageAdapter', () => {
   });
 
   test('readRange rejects an empty file because it has no valid byte offset', async () => {
-    await adapter.save(descriptor, Buffer.alloc(0));
+    await save(descriptor, Buffer.alloc(0));
 
     await expect(adapter.readRange(descriptor)).rejects.toThrow(RangeError);
   });
@@ -88,7 +114,7 @@ describe('LocalStorageAdapter', () => {
   });
 
   test('delete removes an empty file, preserves its parent and succeeds if repeated', async () => {
-    await adapter.save(descriptor, Buffer.alloc(0));
+    await save(descriptor, Buffer.alloc(0));
 
     await expect(adapter.delete(descriptor)).resolves.toBeUndefined();
     await expect(stat(join(directory, descriptor))).rejects.toMatchObject({ code: 'ENOENT' });

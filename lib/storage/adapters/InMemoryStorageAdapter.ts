@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { StorageAdapter } from './StorageAdapter';
 
 class InMemoryStorageAdapter implements StorageAdapter {
@@ -5,8 +6,8 @@ class InMemoryStorageAdapter implements StorageAdapter {
 
   public constructor() {}
 
-  public async save(descriptor: string, data: Buffer): Promise<void> {
-    this.storage[descriptor] = data;
+  public async save(tmpFilePath: string, descriptor: string): Promise<void> {
+    this.storage[descriptor] = await readFile(tmpFilePath);
   }
 
   public async read(descriptor: string): Promise<Buffer | null> {

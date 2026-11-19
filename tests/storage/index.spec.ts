@@ -77,12 +77,13 @@ describe('storage', () => {
   });
 
   test('loadStorage writes media through the wrapper to the configured local directory', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) } });
+    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) }, './tmp': {} });
 
     const storage = await loadStorage();
 
     const bytes = Buffer.from([0, 255]);
-    await storage.saveVideoFile({ videoId: 'clip', data: bytes });
+    await writeFile('./tmp/clip.video', bytes);
+    await storage.saveVideoFile({ videoId: 'clip' });
 
     expect(await readFile('./videos/clip.video')).toEqual(bytes);
   });
@@ -102,7 +103,7 @@ describe('storage', () => {
   });
 
   test('loadStorage reuses its cached wrapper until resetStorage is called', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) } });
+    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) }, './tmp': {} });
     const [original, concurrent] = await Promise.all([loadStorage(), loadStorage()]);
     expect(concurrent).toBe(original);
     await writeFile(configPath, JSON.stringify({ type: 'local', conf: { basePath: './other' } }));
@@ -113,12 +114,13 @@ describe('storage', () => {
     const reloaded = await loadStorage();
     expect(reloaded).not.toBe(original);
     const bytes = Buffer.from([1]);
-    await reloaded.saveVideoFile({ videoId: 'clip', data: bytes });
+    await writeFile('./tmp/clip.video', bytes);
+    await reloaded.saveVideoFile({ videoId: 'clip' });
     expect(await readFile('./other/clip.video')).toEqual(bytes);
   });
 
   test('saveConfig replaces the cached wrapper with one using the new configuration', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) } });
+    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) }, './tmp': {} });
     const original = await loadStorage();
 
     await saveConfig({ type: 'local', conf: { basePath: './new' } });
@@ -126,7 +128,8 @@ describe('storage', () => {
     const reloaded = await loadStorage();
     expect(reloaded).not.toBe(original);
     const bytes = Buffer.from([2]);
-    await reloaded.saveThumbnailFile({ videoId: 'clip', data: bytes });
+    await writeFile('./tmp/clip.thumbnail', bytes);
+    await reloaded.saveThumbnailFile({ videoId: 'clip' });
     expect(await readFile('./new/clip.thumbnail')).toEqual(bytes);
   });
 });

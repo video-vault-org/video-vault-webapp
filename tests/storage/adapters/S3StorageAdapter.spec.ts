@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CreateBucketCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { MinioContainer, StartedMinioContainer } from '@testcontainers/minio';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
@@ -8,11 +11,19 @@ describe('S3StorageAdapter', () => {
   const bucket = 'video-vault-tests';
   const region = 'us-east-1';
   const bytes = Buffer.from([0, 127, 128, 255, 42]);
+  let directory: string;
   let container: StartedMinioContainer | undefined;
   let adapter: S3StorageAdapter;
   let client: S3Client | undefined;
 
+  async function save(descriptor: string, data: Buffer): Promise<void> {
+    const source = join(directory, 'upload.tmp');
+    await writeFile(source, data);
+    await adapter.save(source, descriptor);
+  }
+
   beforeAll(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'video-vault-s3-storage-'));
     container = await new MinioContainer('pgsty/silo:RELEASE.2026-11-12T00-00-00Z').withUsername('storage-test').withPassword('storage-test-password').start();
     adapter = new S3StorageAdapter({
       bucket,
@@ -29,6 +40,7 @@ describe('S3StorageAdapter', () => {
   afterAll(async () => {
     client?.destroy();
     await container?.stop();
+    await rm(directory, { recursive: true, force: true });
   });
 
   test('getConf returns the S3 client and configured bucket', async () => {
@@ -48,12 +60,31 @@ describe('S3StorageAdapter', () => {
       return Buffer.from(await result.Body!.transformToByteArray());
     };
 
-    await adapter.save(key, bytes);
+    await save(key, bytes);
     expect(await readObject()).toEqual(bytes);
 
     const replacement = Buffer.from([9, 0]);
-    await adapter.save(key, replacement);
+    await save(key, replacement);
     expect(await readObject()).toEqual(replacement);
+  });
+
+  test('save uploads a file larger than one multipart part', async () => {
+    const data = Buffer.alloc(6 * 1024 * 1024, 42);
+    data[0] = 0;
+    data[data.length - 1] = 255;
+
+    await save('videos/multipart.bin', data);
+
+    expect((await adapter.read('videos/multipart.bin'))?.equals(data)).toBe(true);
+  });
+
+  test('save rejects a missing source without overwriting an existing object', async () => {
+    const key = 'videos/missing-source.bin';
+    await save(key, bytes);
+
+    await expect(adapter.save(join(directory, 'missing.tmp'), key)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    expect(await adapter.read(key)).toEqual(bytes);
   });
 
   test('read returns exact bytes for an object written through S3', async () => {
@@ -65,7 +96,7 @@ describe('S3StorageAdapter', () => {
   });
 
   test('read returns null for a missing key and a buffer for an empty object', async () => {
-    await adapter.save('read-empty', Buffer.alloc(0));
+    await save('read-empty', Buffer.alloc(0));
 
     expect(await adapter.read('read-missing')).toBeNull();
     expect(await adapter.read('read-empty')).toEqual(Buffer.alloc(0));
@@ -76,7 +107,7 @@ describe('S3StorageAdapter', () => {
 
     beforeAll(async () => {
       if (client) {
-        await adapter.save(key, bytes);
+        await save(key, bytes);
       }
     });
 
@@ -114,7 +145,7 @@ describe('S3StorageAdapter', () => {
 
   test('delete removes an empty object and succeeds if repeated', async () => {
     const key = 'delete-empty';
-    await adapter.save(key, Buffer.alloc(0));
+    await save(key, Buffer.alloc(0));
 
     await expect(adapter.delete(key)).resolves.toBeUndefined();
     expect(await adapter.read(key)).toBeNull();

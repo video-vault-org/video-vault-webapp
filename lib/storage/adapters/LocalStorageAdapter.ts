@@ -1,6 +1,6 @@
 import { StorageAdapter } from './StorageAdapter';
-import { readFile, open, mkdir, stat, writeFile, unlink } from 'fs/promises';
-import { dirname, join } from 'path';
+import { readFile, open, mkdir, stat, copyFile, unlink } from 'fs/promises';
+import { join } from 'path';
 import { LocalStorageConf } from '@/storage/config/LocalStorageConf';
 
 /**
@@ -30,10 +30,10 @@ class LocalStorageAdapter implements StorageAdapter {
     }
   }
 
-  public async save(descriptor: string, data: Buffer): Promise<void> {
-    const path = join(this.basePath, descriptor);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, data);
+  public async save(tmpFilePath: string, descriptor: string): Promise<void> {
+    const targetPath = join(this.basePath, descriptor);
+    await mkdir(this.basePath, { recursive: true });
+    await copyFile(tmpFilePath, targetPath);
   }
 
   public async read(descriptor: string): Promise<Buffer | null> {
