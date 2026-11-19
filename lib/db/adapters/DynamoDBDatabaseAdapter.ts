@@ -424,6 +424,20 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     );
   }
 
+  public async changeAttemptsLastAttemptByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void> {
+    await this.whenMatching(() =>
+      this.documentClient().send(
+        new UpdateCommand({
+          TableName: this.table('login-attempts'),
+          Key: { username },
+          UpdateExpression: 'SET lastAttempt = :time',
+          ConditionExpression: 'attribute_exists(username)',
+          ExpressionAttributeValues: { ':time': timestamp(lastAttempt) }
+        })
+      )
+    );
+  }
+
   public async clearAttemptsCountByUsername({ username }: { username: string }): Promise<void> {
     await this.documentClient().send(new DeleteCommand({ TableName: this.table('login-attempts'), Key: { username } }));
   }

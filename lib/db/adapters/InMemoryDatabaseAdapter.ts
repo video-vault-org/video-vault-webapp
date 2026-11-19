@@ -270,6 +270,13 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     count.lastAttempt = lastAttempt;
   }
 
+  public async changeAttemptsLastAttemptByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void> {
+    const count = this.attempts.find((count) => count.username === username);
+    if (count) {
+      count.lastAttempt = lastAttempt;
+    }
+  }
+
   public async clearAttemptsCountByUsername({ username }: { username: string }): Promise<void> {
     const index = this.attempts.findIndex((count) => count.username === username);
     if (index < 0) {

@@ -1,5 +1,6 @@
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
+import { hashPassword } from '@/util/password';
 
 /**
  * Coordinates user accounts and the deletion of their comment content.
@@ -15,12 +16,12 @@ class UserService {
   }
 
   /**
-   * Creates a user with the supplied account data and roles.
-   * @param user The user to create, including the prepared password attributes.
+   * Creates a user, hashing the client-supplied Base64 loginHash with scrypt and a fresh salt.
+   * @param user The user to create; loginHash is the client's password equivalent, not a stored scrypt string.
    * @throws If the username is already in use or the database write fails.
    */
   public async createUser(user: User): Promise<void> {
-    await this.db.createUser(user);
+    await this.db.createUser({ ...user, loginHash: await hashPassword(user.loginHash) });
   }
 
   /**
@@ -56,15 +57,15 @@ class UserService {
   }
 
   /**
-   * Updates a user's prepared password attributes together.
+   * Hashes the client's new loginHash with scrypt and updates the password attributes together.
    * @param userId The ID of the user to update.
-   * @param loginHash The new login hash.
+   * @param loginHash The new Base64 loginHash from the client, not a stored scrypt string.
    * @param passwordKeySalt The new password key salt.
    * @param userKey The new encrypted user key.
    * @throws If the database update fails.
    */
   public async changeUsersPassword({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {
-    await this.db.changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey });
+    await this.db.changeUsersPasswordByUserId({ userId, loginHash: await hashPassword(loginHash), passwordKeySalt, userKey });
   }
 
   /**

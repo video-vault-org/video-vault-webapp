@@ -349,6 +349,26 @@ describe('InMemoryDatabaseAdapter', () => {
       expect(await db.findOneAttemptsCountByUsername({ username: otherUser.username })).toEqual({ username: otherUser.username, attempts: 1, lastAttempt: firstAttempt });
     });
 
+    test('changeAttemptsLastAttemptByUsername restarts only the matching counter without incrementing it', async () => {
+      const username = user.username;
+      const first = new Date(100);
+      const later = new Date(200);
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt: first });
+      await db.increaseAttemptsCountByUsername({ username, lastAttempt: first });
+      await db.increaseAttemptsCountByUsername({ username: otherUser.username, lastAttempt: first });
+
+      await db.changeAttemptsLastAttemptByUsername({ username, lastAttempt: later });
+
+      expect(await db.findOneAttemptsCountByUsername({ username })).toEqual({ username, attempts: 2, lastAttempt: later });
+      expect(await db.findOneAttemptsCountByUsername({ username: otherUser.username })).toEqual({ username: otherUser.username, attempts: 1, lastAttempt: first });
+    });
+
+    test('changeAttemptsLastAttemptByUsername does not create an unknown counter', async () => {
+      await expect(db.changeAttemptsLastAttemptByUsername({ username: 'missing-counter', lastAttempt: new Date(100) })).resolves.toBeUndefined();
+
+      expect(await db.findOneAttemptsCountByUsername({ username: 'missing-counter' })).toBeNull();
+    });
+
     test('clearAttemptsCountByUsername clears only the matching counter and can be repeated', async () => {
       await db.increaseAttemptsCountByUsername({ username, lastAttempt });
       await db.increaseAttemptsCountByUsername({ username: otherUser.username, lastAttempt });

@@ -198,6 +198,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await (await this.attempts()).updateOne({ username }, { $inc: { attempts: 1 }, $set: { lastAttempt } }, { upsert: true });
   }
 
+  public async changeAttemptsLastAttemptByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void> {
+    await (await this.attempts()).updateOne({ username }, { $set: { lastAttempt } });
+  }
+
   public async clearAttemptsCountByUsername({ username }: { username: string }): Promise<void> {
     await (await this.attempts()).deleteOne({ username });
   }

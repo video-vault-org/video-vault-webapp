@@ -2,13 +2,14 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { Comment } from '@/domain/Comment';
 import { User } from '@/domain/User';
 import { UserService } from '@/service/UserService';
+import { verifyPassword } from '@/util/password';
 
 describe('UserService', () => {
   const user: User = {
     userId: 'u1',
     username: 'alice',
     displayName: 'Alice',
-    loginHash: 'old-hash',
+    loginHash: Buffer.from('client-login-hash').toString('base64'),
     passwordKeySalt: 'old-salt',
     userKey: 'old-key',
     admin: false,
@@ -41,21 +42,25 @@ describe('UserService', () => {
   });
 
   describe('createUser', () => {
-    test('passes all account data to the database', async () => {
+    test('hashes the client loginHash and passes the remaining account data unchanged to the database', async () => {
       const create = jest.spyOn(db, 'createUser').mockResolvedValue(undefined);
 
       await expect(service.createUser(user)).resolves.toBeUndefined();
 
       expect(create).toHaveBeenCalledTimes(1);
-      expect(create).toHaveBeenCalledWith(user);
+      const stored = create.mock.calls[0][0];
+      expect(stored).toEqual({ ...user, loginHash: expect.stringMatching(/^\$scrypt\$/) });
+      expect(await verifyPassword(user.loginHash, stored.loginHash)).toBe(true);
+      expect(user.loginHash).toBe(Buffer.from('client-login-hash').toString('base64'));
     });
 
     test('rejects duplicate usernames without changing the existing user', async () => {
       await service.createUser(user);
+      const original = await service.findUser({ userId });
 
       await expect(service.createUser({ ...user, userId: 'duplicate', displayName: 'Duplicate' })).rejects.toThrow();
 
-      expect(await service.findAllUsers()).toEqual([user]);
+      expect(await service.findAllUsers()).toEqual([original]);
     });
 
     test('propagates database errors', async () => {
@@ -147,14 +152,17 @@ describe('UserService', () => {
     expect(update).toHaveBeenCalledWith(parameters);
   });
 
-  test('changeUsersPassword forwards the update to the database', async () => {
+  test('changeUsersPassword hashes the new loginHash and forwards the remaining password attributes unchanged', async () => {
     const update = jest.spyOn(db, 'changeUsersPasswordByUserId').mockResolvedValue(undefined);
-    const parameters = { userId, loginHash: 'new-hash', passwordKeySalt: 'new-salt', userKey: 'new-key' };
+    const parameters = { userId, loginHash: Buffer.from('new-client-login-hash').toString('base64'), passwordKeySalt: 'new-salt', userKey: 'new-key' };
 
     await expect(service.changeUsersPassword(parameters)).resolves.toBeUndefined();
 
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(parameters);
+    const stored = update.mock.calls[0][0];
+    expect(stored).toEqual({ ...parameters, loginHash: expect.stringMatching(/^\$scrypt\$/) });
+    expect(await verifyPassword(parameters.loginHash, stored.loginHash)).toBe(true);
+    expect(parameters.loginHash).toBe(Buffer.from('new-client-login-hash').toString('base64'));
   });
 
   test.each([true, false])('changeUsersAdminRole forwards the role flag %s', async (enabled) => {

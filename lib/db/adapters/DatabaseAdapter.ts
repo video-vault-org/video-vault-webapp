@@ -22,7 +22,7 @@ interface DatabaseAdapter {
 
   /**
    * Creates a new user
-   * @param user The user to be created
+   * @param user The user to be created, with loginHash already encoded as a salted scrypt string.
    * @throws If the username is already in use
    */
   createUser(user: User): Promise<void>;
@@ -45,7 +45,7 @@ interface DatabaseAdapter {
   /**
    * Changes the users password attributes, matched by its userId
    * @param userId The id of the user to be changed
-   * @param loginHash The new loginHash
+   * @param loginHash The new salted scrypt string; hashing is performed by UserService before calling the adapter.
    * @param passwordKeySalt The new passwordKeySalt
    * @param userKey The new userKey
    */
@@ -232,6 +232,14 @@ interface DatabaseAdapter {
    * @param lastAttempt The date of the last failed login attempt
    */
   increaseAttemptsCountByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void>;
+
+  /**
+   * Updates the time of an existing failed login attempt counter without incrementing it.
+   * Does nothing if the username has no counter.
+   * @param username The username whose lock period should restart.
+   * @param lastAttempt The time of the blocked login attempt.
+   */
+  changeAttemptsLastAttemptByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void>;
 
   /**
    * Clears the count of failed login attempts for a username.

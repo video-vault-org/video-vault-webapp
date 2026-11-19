@@ -288,6 +288,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     );
   }
 
+  public async changeAttemptsLastAttemptByUsername({ username, lastAttempt }: { username: string; lastAttempt: Date }): Promise<void> {
+    await this.query('UPDATE login_attempts SET "lastAttempt" = $2 WHERE username = $1', [username, lastAttempt]);
+  }
+
   public async clearAttemptsCountByUsername({ username }: { username: string }): Promise<void> {
     await this.query('DELETE FROM login_attempts WHERE username = $1', [username]);
   }
