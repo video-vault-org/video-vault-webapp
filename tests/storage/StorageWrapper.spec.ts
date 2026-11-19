@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { unlink, writeFile } from 'node:fs/promises';
 import mockFS from 'mock-fs';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
@@ -51,6 +51,19 @@ describe('StorageWrapper', () => {
     jest.spyOn(adapter, 'save').mockRejectedValueOnce(error);
 
     await expect(storage[method]({ videoId })).rejects.toBe(error);
+  });
+
+  test.each([
+    ['saveVideoFile', 'clip.video'],
+    ['saveThumbnailFile', 'clip.thumbnail']
+  ] as const)('%s rejects a missing temporary file without calling the adapter', async (method, filename) => {
+    await unlink(`./tmp/${filename}`);
+    const saveSpy = jest.spyOn(adapter, 'save');
+
+    await expect(storage[method]({ videoId })).rejects.toThrow('tmp file does not exist');
+
+    expect(saveSpy).not.toHaveBeenCalled();
+    expect(await adapter.read(filename)).toBeNull();
   });
 
   test('readVideoFileRange reads inclusive bounds and allows either bound to be omitted', async () => {

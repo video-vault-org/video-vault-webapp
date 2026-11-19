@@ -1,8 +1,18 @@
 import { StorageAdapter } from '@/storage/adapters/StorageAdapter';
+import fs from 'fs/promises';
 
 const VIDEO_EXTENSION = 'video';
 const THUMBNAIL_EXTENSION = 'thumbnail';
 const TEMPORARY_DIRECTORY = './tmp';
+
+const exists = async function (path: string): Promise<boolean> {
+  try {
+    await fs.stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 class StorageWrapper {
   private readonly storageAdapter: StorageAdapter;
@@ -17,7 +27,11 @@ class StorageWrapper {
    */
   public async saveVideoFile({ videoId }: { videoId: string }): Promise<void> {
     const filename = `${videoId}.${VIDEO_EXTENSION}`;
-    await this.storageAdapter.save(`${TEMPORARY_DIRECTORY}/${filename}`, filename);
+    const tmpPath = `${TEMPORARY_DIRECTORY}/${filename}`;
+    if (!(await exists(tmpPath))) {
+      throw new Error('tmp file does not exist');
+    }
+    await this.storageAdapter.save(tmpPath, filename);
   }
 
   /**
@@ -26,7 +40,11 @@ class StorageWrapper {
    */
   public async saveThumbnailFile({ videoId }: { videoId: string }): Promise<void> {
     const filename = `${videoId}.${THUMBNAIL_EXTENSION}`;
-    await this.storageAdapter.save(`${TEMPORARY_DIRECTORY}/${filename}`, filename);
+    const tmpPath = `${TEMPORARY_DIRECTORY}/${filename}`;
+    if (!(await exists(tmpPath))) {
+      throw new Error('tmp file does not exist');
+    }
+    await this.storageAdapter.save(tmpPath, filename);
   }
 
   /**
