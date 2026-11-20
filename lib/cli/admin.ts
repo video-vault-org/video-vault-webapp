@@ -1,13 +1,15 @@
-import { createCipheriv, pbkdf2, randomBytes, randomUUID } from 'node:crypto';
-import { promisify } from 'node:util';
+import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import prompts from 'prompts';
 import { z } from 'zod';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { UserService } from '@/service/UserService';
+import { deriveKey } from '@/util/deriveKey';
 
-const derive = promisify(pbkdf2);
 const value = z.string().min(1).max(4096);
-const inputSchema = z.object({ username: value, displayName: value, password: value, pepper: value }).strict();
+const inputSchema = z
+  .object({ username: value, displayName: value, password: value, pepper: value })
+  .strict()
+  .refine(({ username, pepper }) => Buffer.byteLength(pepper + username, 'utf8') >= 8, { path: ['pepper'], message: 'Pepper and username must provide at least 8 UTF-8 salt bytes' });
 
 /**
  * Prompts once for each attribute: username, display name, password and pepper.
@@ -22,7 +24,12 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
       { type: 'text', name: 'username', message: 'Username', validate },
       { type: 'text', name: 'displayName', message: 'Display name', validate },
       { type: 'password', name: 'password', message: 'Password', validate },
-      { type: 'text', name: 'pepper', message: 'Pepper', validate }
+      {
+        type: 'text',
+        name: 'pepper',
+        message: 'Pepper',
+        validate: (answer: string, answers: { username?: string }) => (validate(answer) !== true ? validate(answer) : Buffer.byteLength(answer + (answers.username ?? ''), 'utf8') >= 8 || 'Pepper and username must provide at least 8 UTF-8 salt bytes')
+      }
     ],
     {
       onCancel: () => {
@@ -35,8 +42,9 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
 
 /**
  * Creates the first admin, refusing to run if any admin already exists.
- * A UUID v4 identifies the user. LoginHash is PBKDF2-HMAC-SHA-256(password, pepper + username, 600000, 32).
- * A separate passwordKey uses the same PBKDF2 parameters with a random 32-byte passwordKeySalt.
+ * A UUID v4 identifies the user. LoginHash is Argon2id(password, pepper + username), producing 32 raw bytes.
+ * Both Argon2id derivations use v19, 19456 KiB, 2 passes and parallelism 1 (OWASP minimum profile).
+ * A separate passwordKey uses a random 32-byte passwordKeySalt.
  * A fresh random 32-byte user key is wrapped with passwordKey using RFC 3394 AES-256-KW without padding.
  * LoginHash, passwordKeySalt and the wrapped userKey are Base64-encoded; UserService additionally hashes loginHash with scrypt.
  * Password and pepper are never stored. Temporary secret buffers are cleared after use.
@@ -51,11 +59,11 @@ async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<voi
   const userId = randomUUID();
   if (await db.findOneUserByUserId({ userId })) throw new Error('User ID already exists');
   const passwordKeySalt = randomBytes(32);
-  const loginHash = await derive(password, pepper + username, 600_000, 32, 'sha256');
+  const loginHash = await deriveKey(password, pepper + username);
   let passwordKey: Buffer | undefined;
   let key: Buffer | undefined;
   try {
-    passwordKey = await derive(password, passwordKeySalt, 600_000, 32, 'sha256');
+    passwordKey = await deriveKey(password, passwordKeySalt);
     key = randomBytes(32);
     const cipher = createCipheriv('id-aes256-wrap', passwordKey, Buffer.alloc(8, 0xa6));
     const userKey = Buffer.concat([cipher.update(key), cipher.final()]);

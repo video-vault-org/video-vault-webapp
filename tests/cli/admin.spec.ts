@@ -1,4 +1,5 @@
-import crypto, { pbkdf2Sync, webcrypto } from 'node:crypto';
+import { argon2id, hash } from 'argon2';
+import crypto, { webcrypto } from 'node:crypto';
 import prompts from 'prompts';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { initializeAdmin, readAdminInput } from '@/cli/admin';
@@ -73,12 +74,12 @@ describe('interactive admin initialization', () => {
     expect(Buffer.from(saved.passwordKeySalt, 'base64')).toHaveLength(32);
     expect(Buffer.from(saved.userKey, 'base64')).toHaveLength(40);
 
-    const loginHash = pbkdf2Sync(input.password, input.pepper + input.username, 600_000, 32, 'sha256');
+    const loginHash = await hash(input.password, { salt: Buffer.from(input.pepper + input.username, 'utf8'), type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
     expect(await verifyPassword(loginHash.toString('base64'), saved.loginHash)).toBe(true);
     expect(await verifyPassword(input.password, saved.loginHash)).toBe(false);
 
     // Verify interoperability with the browser AES-KW API using an independently derived key.
-    const passwordKey = pbkdf2Sync(input.password, salt, 600_000, 32, 'sha256');
+    const passwordKey = await hash(input.password, { salt, type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
     const wrappingKey = await webcrypto.subtle.importKey('raw', Uint8Array.from(passwordKey), 'AES-KW', false, ['unwrapKey']);
     const unwrapped = await webcrypto.subtle.unwrapKey('raw', Uint8Array.from(Buffer.from(saved.userKey, 'base64')), wrappingKey, 'AES-KW', { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     expect(Buffer.from(await webcrypto.subtle.exportKey('raw', unwrapped))).toEqual(expectedKey);
@@ -113,13 +114,20 @@ describe('interactive admin initialization', () => {
     expect((await db.findAllUsers()).filter((user) => user.admin)).toHaveLength(1);
   });
 
-  test.each([{ ...input, admin: true }, { ...input, userId: 'supplied-id' }, { ...input, userKey: 'supplied-key' }, { ...input, password: '' }, { ...input, pepper: '' }, { ...input, username: '' }, { ...input, displayName: '' }, {}])(
-    'rejects invalid attributes or supplied IDs, keys and roles',
-    async (value) => {
-      await expect(initializeAdmin(db, value)).rejects.toThrow();
-      expect(await db.findAllUsers()).toEqual([]);
-    }
-  );
+  test.each([
+    { ...input, admin: true },
+    { ...input, userId: 'supplied-id' },
+    { ...input, userKey: 'supplied-key' },
+    { ...input, password: '' },
+    { ...input, pepper: '' },
+    { ...input, username: 'a', pepper: 'b' },
+    { ...input, username: '' },
+    { ...input, displayName: '' },
+    {}
+  ])('rejects invalid attributes or supplied IDs, keys and roles', async (value) => {
+    await expect(initializeAdmin(db, value)).rejects.toThrow();
+    expect(await db.findAllUsers()).toEqual([]);
+  });
 
   test('refuses a generated ID collision without replacing the existing account', async () => {
     await db.createUser(existing);
