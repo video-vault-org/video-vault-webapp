@@ -17,7 +17,10 @@ class StorageWrapper {
   private readonly storageAdapter: StorageAdapter;
   private readonly temporaryDirectory: string;
 
-  /** @param options Temporary upload directory; defaults to ./tmp. */
+  /**
+   * @param storageAdapter The storage adapter to use
+   * @param options Temporary upload directory; defaults to ./tmp.
+   */
   public constructor(storageAdapter: StorageAdapter, { temporaryDirectory = './tmp' }: { temporaryDirectory?: string } = {}) {
     this.storageAdapter = storageAdapter;
     this.temporaryDirectory = temporaryDirectory;

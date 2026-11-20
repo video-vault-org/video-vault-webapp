@@ -13,7 +13,8 @@
   "main": "built/lib/index.js",
   "bin": {
     "videovaultweb": "built/lib/index.js",
-    "videovault-admin-init": "built/lib/initialize-admin.js"
+    "videovault-admin-init": "built/lib/initialize-admin.js",
+    "videovault-config-init": "built/lib/initialize-config.js"
   },
   "scripts": {
     "audit": "better-npm-audit audit",
@@ -22,7 +23,8 @@
     "qa": "npm run lint && npm run audit && npm run test",
     "build": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
     "start": "node built/lib/index.js",
-    "admin:init": "node built/lib/initialize-admin.js"
+    "admin:init": "node built/lib/initialize-admin.js",
+    "config:init": "node built/lib/initialize-config.js"
   },
   "repository": {
     "type": "git",
