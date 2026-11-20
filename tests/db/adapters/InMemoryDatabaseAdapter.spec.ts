@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { Comment } from '@/domain/Comment';
 import { User } from '@/domain/User';
@@ -112,13 +113,13 @@ describe('InMemoryDatabaseAdapter', () => {
     });
 
     test('createUser rejects a duplicate username without changing existing users', async () => {
-      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toThrow('Username already exists');
+      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toBeInstanceOf(DatabaseConflictError);
 
       expect(await db.findAllUsers()).toEqual([user, otherUser]);
     });
 
     test('changeUsersUsernameByUserId rejects another user’s username without changing either user', async () => {
-      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toThrow('Username already exists');
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toBeInstanceOf(DatabaseConflictError);
 
       expect(await db.findAllUsers()).toEqual([user, otherUser]);
     });

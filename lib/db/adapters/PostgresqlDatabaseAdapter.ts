@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { Pool, PoolConfig, QueryResultRow } from 'pg';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { AttemptsCount } from '@/domain/AttemptsCount';
@@ -103,10 +104,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
         await client.query('ROLLBACK');
       } catch {
         client.release(true);
-        throw error;
+        this.rethrow(error);
       }
       client.release();
-      throw error;
+      this.rethrow(error);
     }
     client.release();
   }
@@ -321,7 +322,18 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
   }
 
   private async query<Row extends QueryResultRow>(sql: string, values: (string | number | boolean | Date)[] = []): Promise<Row[]> {
-    return (await (await this.pool()).query<Row>(sql, values)).rows;
+    try {
+      return (await (await this.pool()).query<Row>(sql, values)).rows;
+    } catch (error) {
+      this.rethrow(error);
+    }
+  }
+
+  private rethrow(error: unknown): never {
+    if ((error as { code?: string } | null)?.code === '23505') {
+      throw new DatabaseConflictError(undefined, { cause: error });
+    }
+    throw error;
   }
 }
 

@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient, KeySchemaElement, TableDescription, waitUntilTableExists } from '@aws-sdk/client-dynamodb';
 import {
   DeleteCommand,
@@ -518,14 +519,21 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
   }
 
   private async insert(table: Table, field: string, Item: Item): Promise<void> {
-    await this.documentClient().send(
-      new PutCommand({
-        TableName: this.table(table),
-        Item,
-        ConditionExpression: 'attribute_not_exists(#key)',
-        ExpressionAttributeNames: { '#key': field }
-      })
-    );
+    try {
+      await this.documentClient().send(
+        new PutCommand({
+          TableName: this.table(table),
+          Item,
+          ConditionExpression: 'attribute_not_exists(#key)',
+          ExpressionAttributeNames: { '#key': field }
+        })
+      );
+    } catch (error) {
+      if (isError(error, 'ConditionalCheckFailedException')) {
+        throw new DatabaseConflictError(undefined, { cause: error });
+      }
+      throw error;
+    }
   }
 
   private async update(table: Table, Key: Key, changes: Item, guard?: { field: string; value: string }): Promise<void> {
@@ -567,7 +575,20 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
   }
 
   private async transact(TransactItems: Transaction): Promise<void> {
-    await this.documentClient().send(new TransactWriteCommand({ TransactItems }));
+    try {
+      await this.documentClient().send(new TransactWriteCommand({ TransactItems }));
+    } catch (error) {
+      const reasons = (error as { CancellationReasons?: { Code?: string }[] } | null)?.CancellationReasons;
+      if (
+        isError(error, 'TransactionCanceledException') &&
+        Array.isArray(reasons) &&
+        reasons.some((reason) => reason?.Code === 'ConditionalCheckFailed') &&
+        reasons.every((reason) => reason?.Code === 'None' || reason?.Code === 'ConditionalCheckFailed')
+      ) {
+        throw new DatabaseConflictError(undefined, { cause: error });
+      }
+      throw error;
+    }
   }
 
   private reserveUsername(username: string, userId: string): Transaction[number] {

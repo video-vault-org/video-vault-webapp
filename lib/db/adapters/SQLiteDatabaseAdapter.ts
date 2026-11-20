@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { DatabaseSync } from 'node:sqlite';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { AttemptsCount } from '@/domain/AttemptsCount';
@@ -119,7 +120,7 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
-      throw error;
+      this.rethrow(error);
     }
   }
 
@@ -321,7 +322,11 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
   }
 
   private write(sql: string, values: Parameter[]): void {
-    this.connection().prepare(sql).run(bindings(values));
+    try {
+      this.connection().prepare(sql).run(bindings(values));
+    } catch (error) {
+      this.rethrow(error);
+    }
   }
 
   private findOne<Row, Item>(decode: (row: Row) => Item, sql: string, values: Parameter[]): Item | null {
@@ -332,6 +337,14 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
   private find<Row, Item>(decode: (row: Row) => Item, sql: string, values: Parameter[] = []): Item[] {
     const rows = this.connection().prepare(sql).all(bindings(values)) as Row[];
     return rows.map(decode);
+  }
+
+  private rethrow(error: unknown): never {
+    const details = error as { code?: string; errcode?: number } | null;
+    if (details?.code === 'SQLITE_CONSTRAINT_UNIQUE' || details?.code === 'SQLITE_CONSTRAINT_PRIMARYKEY' || (details?.code === 'ERR_SQLITE_ERROR' && [1555, 2067].includes(details.errcode ?? 0))) {
+      throw new DatabaseConflictError(undefined, { cause: error });
+    }
+    throw error;
   }
 }
 

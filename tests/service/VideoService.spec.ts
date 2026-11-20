@@ -255,7 +255,10 @@ describe('VideoService', () => {
       expect(read).toHaveBeenCalledWith({ videoId, from: undefined, to: undefined });
     });
 
-    test.each([new RangeError('Invalid byte range'), new Error('Storage unavailable')])('propagates %s', async (error) => {
+    test.each([
+      { name: 'invalid byte range', error: new RangeError('Invalid byte range') },
+      { name: 'storage failure', error: new Error('Storage unavailable') }
+    ])('propagates $name', async ({ error }) => {
       jest.spyOn(storage, 'readVideoFileRange').mockRejectedValueOnce(error);
 
       await expect(service.readVideoFileRange({ videoId, from: 3, to: 1 })).rejects.toBe(error);

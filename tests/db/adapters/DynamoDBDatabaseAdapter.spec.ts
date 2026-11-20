@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, DynamoDBDocumentClient, QueryCommand, ScanCommand, ScanCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
@@ -192,8 +193,8 @@ describe('DynamoDBDatabaseAdapter', () => {
     });
 
     test('duplicate usernames are rejected without changing the existing user', async () => {
-      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ name: 'TransactionCanceledException' });
-      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ name: 'TransactionCanceledException' });
+      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { name: 'TransactionCanceledException' } });
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { name: 'TransactionCanceledException' } });
 
       expect(await db.findOneUserByUsername({ username })).toEqual(user);
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
@@ -273,6 +274,12 @@ describe('DynamoDBDatabaseAdapter', () => {
       await db.postVideo(otherVideo);
     });
 
+    test('postVideo reports duplicate IDs as a database conflict without modifying the existing record', async () => {
+      await expect(db.postVideo({ ...video, title: 'Replacement' })).rejects.toBeInstanceOf(DatabaseConflictError);
+
+      expect(await db.findOneVideoByVideoId({ videoId: video.videoId })).toEqual(video);
+    });
+
     test('postVideo persists video metadata as JSON', async () => {
       const input = { ...video, videoId: 'v3', meta: { tracks: ['video', 'audio'], dimensions: { width: 1920 } } };
       await db.postVideo(input);
@@ -333,6 +340,12 @@ describe('DynamoDBDatabaseAdapter', () => {
       await db.postComment(comment);
       await db.postComment(forOtherVideo);
       await db.postComment(byOtherUser);
+    });
+
+    test('postComment reports duplicate IDs as a database conflict without modifying the existing record', async () => {
+      await expect(db.postComment({ ...comment, content: 'Replacement' })).rejects.toBeInstanceOf(DatabaseConflictError);
+
+      expect(await db.findOneCommentByCommentId({ commentId: comment.commentId })).toEqual(comment);
     });
 
     test('postComment persists the supplied comment', async () => {
@@ -629,5 +642,59 @@ describe('DynamoDBDatabaseAdapter service pagination', () => {
 
     expect(await adapter.findAllUsers()).toEqual([{ userId: 'a' }, { userId: 'b' }]);
     expect(send.mock.calls[1][0].input.ExclusiveStartKey).toEqual({ userId: 'a' });
+  });
+});
+
+describe('DynamoDBDatabaseAdapter error translation', () => {
+  const user: User = { userId: 'u1', username: 'alice', displayName: 'Alice', loginHash: 'hash', passwordKeySalt: 'salt', userKey: 'key', admin: false, editor: false, moderator: false };
+  const video: Video = { videoId: 'v1', title: 'Video', meta: {}, lastModified: new Date(100), videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', hmac: 'hmac' };
+  let db: DynamoDBDatabaseAdapter;
+  let send: jest.SpyInstance;
+
+  beforeEach(async () => {
+    db = new DynamoDBDatabaseAdapter({ region: 'us-east-1' });
+    await db.open();
+    send = jest.spyOn(DynamoDBDocumentClient.prototype, 'send');
+  });
+
+  afterEach(async () => {
+    send.mockRestore();
+    await db.close();
+  });
+
+  test('translates a duplicate insert condition and retains its cause', async () => {
+    const error = Object.assign(new Error('private'), { name: 'ConditionalCheckFailedException' });
+    send.mockRejectedValueOnce(error);
+    await expect(db.postVideo(video)).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: error });
+  });
+
+  test('translates a transaction cancelled only because of failed conditions', async () => {
+    const error = Object.assign(new Error('private'), { name: 'TransactionCanceledException', CancellationReasons: [{ Code: 'None' }, { Code: 'ConditionalCheckFailed' }] });
+    send.mockRejectedValueOnce(error);
+    await expect(db.createUser(user)).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: error });
+  });
+
+  test.each([
+    { name: 'capacity failure', reasons: [{ Code: 'ProvisionedThroughputExceeded' }] },
+    { name: 'mixed capacity and condition failure', reasons: [{ Code: 'ConditionalCheckFailed' }, { Code: 'ProvisionedThroughputExceeded' }] },
+    { name: 'transaction contention', reasons: [{ Code: 'TransactionConflict' }] },
+    { name: 'missing reasons', reasons: undefined },
+    { name: 'empty reasons', reasons: [] },
+    { name: 'malformed reasons', reasons: [{ Code: 'ConditionalCheckFailed' }, null] }
+  ])('preserves $name as the original error', async ({ reasons }) => {
+    const error = Object.assign(new Error('private'), { name: 'TransactionCanceledException', CancellationReasons: reasons });
+    send.mockRejectedValueOnce(error);
+    await expect(db.createUser(user)).rejects.toBe(error);
+  });
+
+  test('preserves unknown insert errors unchanged', async () => {
+    const error = new Error('Network unavailable');
+    send.mockRejectedValueOnce(error);
+    await expect(db.postVideo(video)).rejects.toBe(error);
+  });
+
+  test('still treats a failed guarded update as a no-op, rather than a conflict', async () => {
+    send.mockRejectedValueOnce(Object.assign(new Error('Condition failed'), { name: 'ConditionalCheckFailedException' }));
+    await expect(db.changeUsersDisplayNameByUserId({ userId: 'missing', displayName: 'Name' })).resolves.toBeUndefined();
   });
 });

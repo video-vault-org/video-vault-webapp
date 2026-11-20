@@ -3,6 +3,10 @@ import { Video } from '@/domain/Video';
 import { Comment } from '@/domain/Comment';
 import { AttemptsCount } from '@/domain/AttemptsCount';
 
+/**
+ * Database operations expose recognized uniqueness and conditional-write conflicts as DatabaseConflictError.
+ * Driver-backed conflicts retain the original exception as cause; unrelated errors propagate unchanged.
+ */
 interface DatabaseAdapter {
   /**
    * Opens the database connection.
@@ -23,7 +27,7 @@ interface DatabaseAdapter {
   /**
    * Creates a new user
    * @param user The user to be created, with loginHash already encoded as a salted scrypt string.
-   * @throws If the username is already in use
+   * @throws DatabaseConflictError if the username is already in use or another uniqueness constraint is violated.
    */
   createUser(user: User): Promise<void>;
 
@@ -38,7 +42,7 @@ interface DatabaseAdapter {
    * Changes the users username, matched by its userId
    * @param userId The id of the user to be changed
    * @param username The desired new username
-   * @throws If another user already has the username
+   * @throws DatabaseConflictError if another user already has the username or a conditional write conflicts.
    */
   changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void>;
 
@@ -98,6 +102,7 @@ interface DatabaseAdapter {
   /**
    * Posts a new video
    * @param video The video to be posted
+   * @throws DatabaseConflictError if an adapter's uniqueness constraint is violated.
    */
   postVideo(video: Video): Promise<void>;
 
@@ -163,6 +168,7 @@ interface DatabaseAdapter {
   /**
    * Posts a comment
    * @param comment The comment to be posted
+   * @throws DatabaseConflictError if an adapter's uniqueness constraint is violated.
    */
   postComment(comment: Comment): Promise<void>;
 

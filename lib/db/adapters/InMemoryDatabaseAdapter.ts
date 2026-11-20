@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
 import { Video } from '@/domain/Video';
@@ -32,7 +33,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
 
   public async createUser(user: User): Promise<void> {
     if (this.users.some((existing) => existing.username === user.username)) {
-      throw new Error('Username already exists');
+      throw new DatabaseConflictError('Username already exists');
     }
     this.users.push({ ...user });
   }
@@ -51,7 +52,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
       return;
     }
     if (this.users.some((existing) => existing !== user && existing.username === username)) {
-      throw new Error('Username already exists');
+      throw new DatabaseConflictError('Username already exists');
     }
     user.username = username;
   }

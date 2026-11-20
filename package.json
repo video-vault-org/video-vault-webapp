@@ -12,14 +12,17 @@
   "type": "module",
   "main": "built/lib/index.js",
   "bin": {
-    "videovaultweb": "built/lib/index.js"
+    "videovaultweb": "built/lib/index.js",
+    "videovault-admin-init": "built/lib/initialize-admin.js"
   },
   "scripts": {
     "audit": "better-npm-audit audit",
     "lint": "eslint '**/*.ts'",
     "test": "jest --runInBand --verbose --detectOpenHandles --forceExit",
     "qa": "npm run lint && npm run audit && npm run test",
-    "build": "rimraf ./built && tsc && tsc-alias"
+    "build": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
+    "start": "node built/lib/index.js",
+    "admin:init": "node built/lib/initialize-admin.js"
   },
   "repository": {
     "type": "git",
@@ -41,11 +44,15 @@
     "@testcontainers/minio": "^11.14.0",
     "@testcontainers/mongodb": "^11.10.0",
     "@testcontainers/postgresql": "^11.10.0",
+    "@types/express": "^5.0.6",
     "@types/jest": "29.5.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/mock-fs": "^4.13.4",
+    "@types/multer": "^2.3.0",
     "@types/node": "22.7.7",
     "@types/pg": "^8.16.0",
+    "@types/prompts": "^2.4.9",
+    "@types/supertest": "^7.2.1",
     "@typescript-eslint/eslint-plugin": "8.10.0",
     "@typescript-eslint/parser": "8.10.0",
     "better-npm-audit": "^3.11.0",
@@ -57,6 +64,7 @@
     "mock-fs": "^5.5.0",
     "prettier": "3.3.3",
     "rimraf": "^6.0.1",
+    "supertest": "^7.3.2",
     "testcontainers": "^11.14.0",
     "ts-jest": "29.2.5",
     "ts-node": "10.9.2",
@@ -68,8 +76,12 @@
     "@aws-sdk/client-s3": "^3.948.0",
     "@aws-sdk/lib-dynamodb": "^3.1170.0",
     "@aws-sdk/lib-storage": "^3.1172.0",
+    "express": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.0.0",
-    "pg": "^8.16.3"
+    "multer": "^2.5.0",
+    "pg": "^8.16.3",
+    "prompts": "^2.4.2",
+    "zod": "^4.6.7"
   }
 }

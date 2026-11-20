@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Pool } from 'pg';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
@@ -168,9 +169,13 @@ describe('PostgresqlDatabaseAdapter', () => {
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
+    test('preserves non-unique constraint errors unchanged', async () => {
+      await expect(db.createUser({ ...otherUser, userId: 'u3', username: null as unknown as string })).rejects.toMatchObject({ code: '23502' });
+    });
+
     test('duplicate usernames are rejected without changing the existing user', async () => {
-      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ code: '23505' });
-      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ code: '23505' });
+      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: '23505' } });
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: '23505' } });
 
       expect(await db.findOneUserByUsername({ username })).toEqual(user);
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
@@ -237,6 +242,12 @@ describe('PostgresqlDatabaseAdapter', () => {
       await db.postVideo(otherVideo);
     });
 
+    test('postVideo reports duplicate IDs as a database conflict without modifying the existing record', async () => {
+      await expect(db.postVideo({ ...video, title: 'Replacement' })).rejects.toBeInstanceOf(DatabaseConflictError);
+
+      expect(await db.findOneVideoByVideoId({ videoId: video.videoId })).toEqual(video);
+    });
+
     test('postVideo persists video metadata as JSON', async () => {
       const input = { ...video, videoId: 'v3', meta: { tracks: ['video', 'audio'], dimensions: { width: 1920 } } };
       await db.postVideo(input);
@@ -297,6 +308,12 @@ describe('PostgresqlDatabaseAdapter', () => {
       await db.postComment(comment);
       await db.postComment(forOtherVideo);
       await db.postComment(byOtherUser);
+    });
+
+    test('postComment reports duplicate IDs as a database conflict without modifying the existing record', async () => {
+      await expect(db.postComment({ ...comment, content: 'Replacement' })).rejects.toBeInstanceOf(DatabaseConflictError);
+
+      expect(await db.findOneCommentByCommentId({ commentId: comment.commentId })).toEqual(comment);
     });
 
     test('postComment persists the supplied comment', async () => {

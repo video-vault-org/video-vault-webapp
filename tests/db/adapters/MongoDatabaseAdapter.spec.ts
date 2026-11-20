@@ -1,3 +1,4 @@
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { MongoDBContainer, StartedMongoDBContainer } from '@testcontainers/mongodb';
 import * as os from 'node:os';
 import mongoose from 'mongoose';
@@ -177,9 +178,19 @@ describe('MongoDatabaseAdapter', () => {
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
+    test('preserves unknown driver write errors unchanged', async () => {
+      const error = new Error('Driver failure');
+      const write = jest.spyOn(mongoose.mongo.Collection.prototype, 'insertOne').mockRejectedValueOnce(error);
+      try {
+        await expect(db.createUser({ ...otherUser, userId: 'u3', username: 'new-user' })).rejects.toBe(error);
+      } finally {
+        write.mockRestore();
+      }
+    });
+
     test('duplicate usernames are rejected without changing the existing user', async () => {
-      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ code: 11000 });
-      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ code: 11000 });
+      await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: 11000 } });
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: 11000 } });
 
       expect(await db.findOneUserByUsername({ username })).toEqual(user);
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
@@ -246,6 +257,12 @@ describe('MongoDatabaseAdapter', () => {
       await db.postVideo(otherVideo);
     });
 
+    test('postVideo reports duplicate IDs as a database conflict without modifying the existing record', async () => {
+      await expect(db.postVideo({ ...video, title: 'Replacement' })).rejects.toBeInstanceOf(DatabaseConflictError);
+
+      expect(await db.findOneVideoByVideoId({ videoId: video.videoId })).toEqual(video);
+    });
+
     test('postVideo persists nested video metadata and dates', async () => {
       const input = { ...video, videoId: 'v3', meta: { tracks: ['video', 'audio'], dimensions: { width: 1920 } } };
       await db.postVideo(input);
@@ -306,6 +323,12 @@ describe('MongoDatabaseAdapter', () => {
       await db.postComment(comment);
       await db.postComment(forOtherVideo);
       await db.postComment(byOtherUser);
+    });
+
+    test('postComment reports duplicate IDs as a database conflict without modifying the existing record', async () => {
+      await expect(db.postComment({ ...comment, content: 'Replacement' })).rejects.toBeInstanceOf(DatabaseConflictError);
+
+      expect(await db.findOneCommentByCommentId({ commentId: comment.commentId })).toEqual(comment);
     });
 
     test('postComment persists the supplied comment', async () => {

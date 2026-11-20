@@ -2,3 +2,4 @@ node_modules
 built
 /jwtkeys
 /tmp
+/conf
