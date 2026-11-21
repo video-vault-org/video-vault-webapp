@@ -75,11 +75,11 @@ describe('cleanupTemporaryFiles', () => {
     expect(await cleanupTemporaryFiles({ directory, now })).toBe(2);
   });
 
-  test('deletes old busy files by their own ctime', async () => {
+  test('preserves busy files even when their ctime is older than 24 hours', async () => {
     await writeFile(join(directory, '.abandoned.busy'), '');
     await age(join(directory, '.abandoned.busy'));
-    expect(await cleanupTemporaryFiles({ directory, now })).toBe(1);
-    expect(await readdir(directory)).toEqual([]);
+    expect(await cleanupTemporaryFiles({ directory, now })).toBe(0);
+    expect(await readdir(directory)).toEqual(['.abandoned.busy']);
   });
 
   test('ignores subdirectories and symbolic links without inspecting their contents', async () => {

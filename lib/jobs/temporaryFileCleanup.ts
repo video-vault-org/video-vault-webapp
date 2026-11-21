@@ -9,7 +9,7 @@ const hour = 60 * 60 * 1000;
 /**
  * Deletes regular files directly inside the temporary directory when their ctime is more than 24 hours old.
  * Video and thumbnail files are checked independently and skipped while .<videoId>.busy exists.
- * Subdirectories and symbolic links are ignored. A missing directory or concurrently removed file is harmless.
+ * Busy files, subdirectories and symbolic links are ignored. A missing directory or concurrently removed file is harmless.
  * @returns The number of deleted files.
  * @throws If filesystem access fails for reasons other than a missing file.
  */
@@ -26,7 +26,7 @@ async function cleanupTemporaryFiles({ directory = './tmp', now = Date.now() }: 
   let deleted = 0;
 
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
+    if (!entry.isFile() || entry.name.endsWith('.busy')) continue;
     const upload = /^(.+)\.(video|thumbnail)$/.exec(entry.name);
     if (upload) {
       try {
