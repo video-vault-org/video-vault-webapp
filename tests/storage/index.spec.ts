@@ -1,5 +1,6 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import mockFS from 'mock-fs';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { loadConfig, loadStorage, resetStorage, saveConfig } from '@/storage';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
@@ -9,20 +10,32 @@ import { StorageConfig } from '@/storage/config/StorageConfig';
 
 describe('storage', () => {
   const configPath = './conf/storage.json';
+  const originalDirectory = process.cwd();
+  let directory: string;
   const localConfig: StorageConfig = { type: 'local', conf: { basePath: './videos' } };
   const s3Config: StorageConfig = {
     type: 's3',
     conf: { region: 'us-east-1', bucket: 'video-vault', accessKeyId: 'test-user', secretAccessKey: 'test-password' }
   };
 
-  afterEach(() => {
-    resetStorage();
-    mockFS.restore();
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'video-vault-storage-config-'));
+    // The module intentionally uses ./conf and ./tmp; isolate that working directory for each test.
+    process.chdir(directory);
   });
 
-  test('saveConfig creates the configuration directory and writes JSON', async () => {
-    mockFS({});
+  afterEach(async () => {
+    resetStorage();
+    process.chdir(originalDirectory);
+    await rm(directory, { recursive: true, force: true });
+  });
 
+  async function configure(config: StorageConfig): Promise<void> {
+    await mkdir('./conf');
+    await writeFile(configPath, JSON.stringify(config));
+  }
+
+  test('saveConfig creates the configuration directory and writes JSON', async () => {
     await saveConfig(localConfig);
 
     expect(JSON.parse(await readFile(configPath, 'utf8'))).toEqual(localConfig);
@@ -33,7 +46,7 @@ describe('storage', () => {
     [localConfig, LocalStorageAdapter],
     [s3Config, S3StorageAdapter]
   ] satisfies [StorageConfig, typeof InMemoryStorageAdapter | typeof LocalStorageAdapter | typeof S3StorageAdapter][])('loads configuration and wraps the matching adapter for %j', async (config, expectedAdapter) => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(config) } });
+    await configure(config);
 
     expect(await loadConfig()).toEqual(config);
     const storage = await loadStorage();
@@ -49,19 +62,19 @@ describe('storage', () => {
   });
 
   test('loadConfig returns null when the configuration is missing', async () => {
-    mockFS({ './conf': {} });
+    await mkdir('./conf');
 
     expect(await loadConfig()).toBeNull();
   });
 
   test('loadConfig propagates filesystem errors other than a missing file', async () => {
-    mockFS({ './conf': 'not a directory' });
+    await writeFile('./conf', 'not a directory');
 
     await expect(loadConfig()).rejects.toMatchObject({ code: 'ENOTDIR' });
   });
 
   test('loadStorage wraps an in-memory adapter when the configuration is missing', async () => {
-    mockFS({ './conf': {} });
+    await mkdir('./conf');
 
     const storage = await loadStorage();
 
@@ -70,14 +83,16 @@ describe('storage', () => {
   });
 
   test('loadConfig and loadStorage report malformed JSON', async () => {
-    mockFS({ './conf': { 'storage.json': '{' } });
+    await mkdir('./conf');
+    await writeFile(configPath, '{');
 
     await expect(loadConfig()).rejects.toThrow(SyntaxError);
     await expect(loadStorage()).rejects.toThrow(SyntaxError);
   });
 
   test('loadStorage writes media through the wrapper to the configured local directory', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) }, './tmp': {} });
+    await configure(localConfig);
+    await mkdir('./tmp');
 
     const storage = await loadStorage();
 
@@ -89,7 +104,7 @@ describe('storage', () => {
   });
 
   test('loadStorage builds an S3 adapter from its configuration', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(s3Config) } });
+    await configure(s3Config);
 
     const storage = await loadStorage();
     const adapter = storage['storageAdapter'] as S3StorageAdapter;
@@ -103,7 +118,8 @@ describe('storage', () => {
   });
 
   test('loadStorage reuses its cached wrapper until resetStorage is called', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) }, './tmp': {} });
+    await configure(localConfig);
+    await mkdir('./tmp');
     const [original, concurrent] = await Promise.all([loadStorage(), loadStorage()]);
     expect(concurrent).toBe(original);
     await writeFile(configPath, JSON.stringify({ type: 'local', conf: { basePath: './other' } }));
@@ -120,7 +136,8 @@ describe('storage', () => {
   });
 
   test('saveConfig replaces the cached wrapper with one using the new configuration', async () => {
-    mockFS({ './conf': { 'storage.json': JSON.stringify(localConfig) }, './tmp': {} });
+    await configure(localConfig);
+    await mkdir('./tmp');
     const original = await loadStorage();
 
     await saveConfig({ type: 'local', conf: { basePath: './new' } });

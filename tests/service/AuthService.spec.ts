@@ -3,7 +3,6 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import jwt, { SignOptions } from 'jsonwebtoken';
-import mockFS from 'mock-fs';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { User } from '@/domain/User';
 import { AuthService } from '@/service/AuthService';
@@ -133,12 +132,13 @@ describe('AuthService', () => {
     });
 
     test('uses ./jwtkeys by default', async () => {
-      mockFS({});
+      const originalDirectory = process.cwd();
+      process.chdir(directory);
       try {
         await new AuthService(db).initialize();
         expect(await readdir('./jwtkeys')).toHaveLength(10);
       } finally {
-        mockFS.restore();
+        process.chdir(originalDirectory);
       }
     });
   });
