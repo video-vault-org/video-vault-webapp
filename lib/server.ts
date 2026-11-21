@@ -47,6 +47,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
     return {
       server,
       close: () => {
+        if (!closing) app.log.info('Server shutdown started...');
         closing ??= app
           .close()
           .finally(async () => {
