@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthService } from '@/service/AuthService';
 import { VideoService } from '@/service/VideoService';
-import { authorization, currentUser } from '../middleware';
+import { authorization } from '../middleware';
 import { HttpError } from '../errors';
 import { UploadStore } from '../uploads';
 import { id, text, video, videoChange, sinceDate } from '../validation';
@@ -17,19 +17,19 @@ function videoRoutes(videos: VideoService, auth: AuthService, uploads: UploadSto
     return item;
   };
 
-  /** POST /api/video/upload/:videoId — Editors only. Multipart fields: video and thumbnail. Files are staged for their uploader. */
+  /** POST /api/video/upload/:videoId — Editors only. Multipart fields: video and thumbnail. Files are staged by video ID. */
   router.post('/upload/:videoId', editor, async (request, response) => {
     const videoId = id.parse(request.params.videoId);
     if (await videos.findVideo({ videoId })) throw new HttpError(409, 'Video already exists');
-    await uploads.receive(request, response, videoId, currentUser(response).userId);
+    await uploads.receive(request, response, videoId);
     response.status(201).json({ videoId });
   });
 
-  /** POST /api/video/submit — Editors only. JSON Video metadata; requires this user's completed upload with the same videoId. */
+  /** POST /api/video/submit — Editors only. JSON Video metadata; requires temporary video and thumbnail files with the same videoId. */
   router.post('/submit', editor, async (request, response) => {
     const item = video.parse(request.body);
     if (await videos.findVideo({ videoId: item.videoId })) throw new HttpError(409, 'Video already exists');
-    await uploads.submit(item.videoId, currentUser(response).userId, () => videos.submitVideo(item));
+    await uploads.submit(item.videoId, () => videos.submitVideo(item));
     response.status(201).json(item);
   });
 
