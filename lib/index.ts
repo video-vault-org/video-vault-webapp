@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { startServer } from './server';
 
+/** Server bootstrap creates ./.pepper before initializing adapters. */
 startServer().then(
   ({ close }) => {
     const shutdown = () => {

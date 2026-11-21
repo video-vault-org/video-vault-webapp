@@ -4,32 +4,23 @@ import { z } from 'zod';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { UserService } from '@/service/UserService';
 import { deriveKey } from '@/util/deriveKey';
+import { ensurePepper } from '@/util/pepper';
 
 const value = z.string().min(1).max(4096);
-const inputSchema = z
-  .object({ username: value, displayName: value, password: value, pepper: value })
-  .strict()
-  .refine(({ username, pepper }) => Buffer.byteLength(pepper + username, 'utf8') >= 8, { path: ['pepper'], message: 'Pepper and username must provide at least 8 UTF-8 salt bytes' });
+const inputSchema = z.object({ username: value.min(3), displayName: value, password: value }).strict();
 
 /**
- * Prompts once for each attribute: username, display name, password and pepper.
- * Password is rendered as asterisks; pepper is visible. Cancelling rejects without returning partial credentials.
- * @returns The four entered attributes, preserving their exact text for key derivation.
- * @throws If the user cancels or the responses are invalid.
+ * Prompts once for username (3–4096 characters), display name and password.
+ * Password is rendered as asterisks. Pepper is loaded from ./.pepper during initialization.
+ * @throws If cancelled or the answers are invalid.
  */
-async function readAdminInput(): Promise<{ username: string; displayName: string; password: string; pepper: string }> {
+async function readAdminInput(): Promise<{ username: string; displayName: string; password: string }> {
   const validate = (answer: string) => (answer.length >= 1 && answer.length <= 4096 ? true : 'Please enter 1 to 4096 characters');
   const answers = await prompts(
     [
-      { type: 'text', name: 'username', message: 'Username', validate },
+      { type: 'text', name: 'username', message: 'Username', validate: (answer: string) => (answer.length >= 3 && answer.length <= 4096) || 'Please enter 3 to 4096 characters' },
       { type: 'text', name: 'displayName', message: 'Display name', validate },
-      { type: 'password', name: 'password', message: 'Password', validate },
-      {
-        type: 'text',
-        name: 'pepper',
-        message: 'Pepper',
-        validate: (answer: string, answers: { username?: string }) => (validate(answer) !== true ? validate(answer) : Buffer.byteLength(answer + (answers.username ?? ''), 'utf8') >= 8 || 'Pepper and username must provide at least 8 UTF-8 salt bytes')
-      }
+      { type: 'password', name: 'password', message: 'Password', validate }
     ],
     {
       onCancel: () => {
@@ -47,17 +38,18 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
  * A separate passwordKey uses a random 32-byte passwordKeySalt.
  * A fresh random 32-byte user key is wrapped with passwordKey using RFC 3394 AES-256-KW without padding.
  * LoginHash, passwordKeySalt and the wrapped userKey are Base64-encoded; UserService additionally hashes loginHash with scrypt.
- * Password and pepper are never stored. Temporary secret buffers are cleared after use.
+ * Password is never stored. Pepper is read from ./.pepper (created if absent). Temporary secret buffers are cleared after use.
  * The initial user has only the admin role.
  * @param db An opened and initialized database adapter.
- * @param input The entered username, displayName, password and pepper; IDs, keys and roles cannot be supplied.
+ * @param input The entered username, displayName and password; IDs, keys and roles cannot be supplied.
  * @throws If validation, key derivation or the database operation fails, or an admin already exists.
  */
 async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<void> {
-  const { username, displayName, password, pepper } = inputSchema.parse(input);
+  const { username, displayName, password } = inputSchema.parse(input);
   if ((await db.findAllUsers()).some((existing) => existing.admin)) throw new Error('An admin already exists');
   const userId = randomUUID();
   if (await db.findOneUserByUserId({ userId })) throw new Error('User ID already exists');
+  const pepper = await ensurePepper();
   const passwordKeySalt = randomBytes(32);
   const loginHash = await deriveKey(password, pepper + username);
   let passwordKey: Buffer | undefined;

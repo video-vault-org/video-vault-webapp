@@ -7,9 +7,10 @@ import { VideoService } from '@/service/VideoService';
 import { CommentService } from '@/service/CommentService';
 import { createApp, createHttpServer } from '@/http/app';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
+import { ensurePepper } from '@/util/pepper';
 
 /**
- * Initializes configured adapters and one AuthService, then starts the HTTP server.
+ * Ensures ./.pepper exists, initializes configured adapters and one AuthService, then starts the HTTP server.
  * PORT defaults to 3000; HOST to 0.0.0.0; STATIC_DIRECTORY to ./public.
  * VIDEO_UPLOAD_LIMIT_BYTES and THUMBNAIL_UPLOAD_LIMIT_BYTES override the 2 GiB and 20 MiB defaults.
  * JWT_TTL_SECONDS overrides the default one-hour token lifetime.
@@ -24,6 +25,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
 }> {
   const app = createHttpServer();
   try {
+    await ensurePepper();
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
     const db = await loadDb();
     const storage = await loadStorage();

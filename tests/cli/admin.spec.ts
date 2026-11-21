@@ -4,11 +4,14 @@ import prompts from 'prompts';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { initializeAdmin, readAdminInput } from '@/cli/admin';
 import { verifyPassword } from '@/util/password';
+import { ensurePepper } from '@/util/pepper';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 
 jest.mock('prompts', () => jest.fn());
+jest.mock('@/util/pepper', () => ({ ensurePepper: jest.fn() }));
+const pepper = 'ab'.repeat(32);
 
-const input = { username: 'alice', displayName: 'Alice', password: 'p\u00e4ssword-\ud83d\udd10', pepper: 'application-pepper-' };
+const input = { username: 'alice', displayName: 'Alice', password: 'p\u00e4ssword-\ud83d\udd10' };
 const uuid = '5eaef793-3886-49b1-8947-5216b6746fb3';
 const existing = { userId: uuid, username: 'existing', displayName: 'Existing', loginHash: 'unused', passwordKeySalt: 'unused', userKey: 'unused', admin: false, editor: false, moderator: false };
 
@@ -18,12 +21,13 @@ describe('interactive admin initialization', () => {
   beforeEach(() => {
     db = new InMemoryDatabaseAdapter();
     jest.mocked(prompts).mockReset();
+    jest.mocked(ensurePepper).mockReset().mockResolvedValue(pepper);
   });
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  test('asks once for each attribute, masks the password and leaves pepper visible', async () => {
+  test('asks for three attributes, masks the password and never prompts for pepper', async () => {
     jest.mocked(prompts).mockResolvedValueOnce(input);
     await expect(readAdminInput()).resolves.toEqual(input);
     expect(prompts).toHaveBeenCalledTimes(1);
@@ -31,8 +35,7 @@ describe('interactive admin initialization', () => {
     expect(questions.map(({ name, type }) => ({ name, type }))).toEqual([
       { name: 'username', type: 'text' },
       { name: 'displayName', type: 'text' },
-      { name: 'password', type: 'password' },
-      { name: 'pepper', type: 'text' }
+      { name: 'password', type: 'password' }
     ]);
   });
 
@@ -69,12 +72,12 @@ describe('interactive admin initialization', () => {
     expect(saved).not.toHaveProperty('password');
     expect(saved).not.toHaveProperty('pepper');
     expect(JSON.stringify(saved)).not.toContain(input.password);
-    expect(JSON.stringify(saved)).not.toContain(input.pepper);
+    expect(JSON.stringify(saved)).not.toContain(pepper);
     expect(saved.passwordKeySalt).toBe(salt.toString('base64'));
     expect(Buffer.from(saved.passwordKeySalt, 'base64')).toHaveLength(32);
     expect(Buffer.from(saved.userKey, 'base64')).toHaveLength(40);
 
-    const loginHash = await hash(input.password, { salt: Buffer.from(input.pepper + input.username, 'utf8'), type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
+    const loginHash = await hash(input.password, { salt: Buffer.from(pepper + input.username, 'utf8'), type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
     expect(await verifyPassword(loginHash.toString('base64'), saved.loginHash)).toBe(true);
     expect(await verifyPassword(input.password, saved.loginHash)).toBe(false);
 
@@ -119,8 +122,9 @@ describe('interactive admin initialization', () => {
     { ...input, userId: 'supplied-id' },
     { ...input, userKey: 'supplied-key' },
     { ...input, password: '' },
-    { ...input, pepper: '' },
-    { ...input, username: 'a', pepper: 'b' },
+    { ...input, pepper: 'supplied-pepper' },
+    { ...input, username: 'ab' },
+    { ...input, username: 'a' },
     { ...input, username: '' },
     { ...input, displayName: '' },
     {}
@@ -149,6 +153,23 @@ describe('interactive admin initialization', () => {
     await expect(initializeAdmin(db, input)).rejects.toBe(error);
     expect(random.mock.results[1].value).toEqual(Buffer.alloc(32));
     expect(await db.findAllUsers()).toEqual([]);
+  });
+
+  test('does not create the admin if reading the pepper fails', async () => {
+    const error = new Error('Pepper is unreadable');
+    jest.mocked(ensurePepper).mockRejectedValueOnce(error);
+    await expect(initializeAdmin(db, input)).rejects.toBe(error);
+    expect(await db.findAllUsers()).toEqual([]);
+  });
+
+  test('accepts a username of exactly three characters and validates the prompt consistently', async () => {
+    await initializeAdmin(db, { ...input, username: 'abc' });
+    expect((await db.findAllUsers())[0].username).toBe('abc');
+    jest.mocked(prompts).mockResolvedValueOnce(input);
+    await readAdminInput();
+    const question = (jest.mocked(prompts).mock.calls[0][0] as prompts.PromptObject[])[0];
+    expect(await question.validate!('ab', {}, question)).toBe('Please enter 3 to 4096 characters');
+    expect(await question.validate!('abc', {}, question)).toBe(true);
   });
 
   test('propagates database read errors', async () => {

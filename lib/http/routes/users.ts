@@ -5,7 +5,7 @@ import { AuthService } from '@/service/AuthService';
 import { UserService } from '@/service/UserService';
 import { authorization, currentUser } from '../middleware';
 import { HttpError } from '../errors';
-import { Type, object, id, text, password, passwordProperties, user as userSchema, errorResponses, noContent } from '../validation';
+import { Type, object, id, text, username, password, passwordProperties, user as userSchema, errorResponses, noContent } from '../validation';
 
 function publicUser({ loginHash: _loginHash, ...user }: User): Omit<User, 'loginHash'> {
   return user;
@@ -16,7 +16,7 @@ function userRoutes(app: FastifyInstance, users: UserService, auth: AuthService)
   const router = app.withTypeProvider<TypeBoxTypeProvider>();
   const admin = authorization(auth, ['admin']);
   const userParams = object({ userId: id });
-  const creation = object({ ...passwordProperties, userId: id, username: text, displayName: text, admin: Type.Boolean({ default: false }), editor: Type.Boolean({ default: false }), moderator: Type.Boolean({ default: false }) });
+  const creation = object({ ...passwordProperties, userId: id, username, displayName: text, admin: Type.Boolean({ default: false }), editor: Type.Boolean({ default: false }), moderator: Type.Boolean({ default: false }) });
   const requireUser = async (userId: string) => {
     const user = await users.findUser({ userId });
     if (!user) throw new HttpError(404, 'User not found');
@@ -54,14 +54,14 @@ function userRoutes(app: FastifyInstance, users: UserService, auth: AuthService)
   });
 
   /** PATCH /api/user/change/username/:userId/:username — Admins only. Changes another user's username. */
-  router.patch('/change/username/:userId/:username', { onRequest: admin, schema: { params: object({ userId: id, username: text }), response: noContent } }, async (request, reply) => {
+  router.patch('/change/username/:userId/:username', { onRequest: admin, schema: { params: object({ userId: id, username }), response: noContent } }, async (request, reply) => {
     await requireUser(request.params.userId);
     await users.changeUsersUsername(request.params);
     return reply.code(204).send(null);
   });
 
   /** PATCH /api/user/change/username/:username — Any authenticated user. Changes their own username. */
-  router.patch('/change/username/:username', { schema: { params: object({ username: text }), response: noContent } }, async (request, reply) => {
+  router.patch('/change/username/:username', { schema: { params: object({ username }), response: noContent } }, async (request, reply) => {
     await users.changeUsersUsername({ userId: currentUser(request).userId, username: request.params.username });
     return reply.code(204).send(null);
   });

@@ -34,7 +34,7 @@ describe('compiled Fastify request and response schemas', () => {
   });
   const headers = { authorization: 'Bearer token' };
 
-  test.each([{ username: 'alice', loginHash: 123 }, { username: 'alice', loginHash: 'hash', admin: true }, { username: '', loginHash: 'hash' }, { username: 'alice' }])(
+  test.each([{ username: 'alice', loginHash: 123 }, { username: 'alice', loginHash: 'hash', admin: true }, { username: '', loginHash: 'hash' }, { username: 'ab', loginHash: 'hash' }, { username: 'alice' }])(
     'rejects invalid login bodies without calling the service (%j)',
     async (payload) => {
       const login = jest.spyOn(auth, 'login');
@@ -44,6 +44,26 @@ describe('compiled Fastify request and response schemas', () => {
       expect(login).not.toHaveBeenCalled();
     }
   );
+
+  test('rejects usernames shorter than three characters when creating or renaming accounts', async () => {
+    const create = jest.spyOn(users, 'createUser');
+    const rename = jest.spyOn(users, 'changeUsersUsername');
+    const invalid = { ...account, userId: 'new-user', username: 'ab' };
+    expect((await app.inject({ method: 'POST', url: '/api/user/add', headers, payload: invalid })).statusCode).toBe(400);
+    for (const url of ['/api/user/change/username/ab', '/api/user/change/username/admin/ab']) {
+      expect((await app.inject({ method: 'PATCH', url, headers })).statusCode).toBe(400);
+    }
+    expect(create).not.toHaveBeenCalled();
+    expect(rename).not.toHaveBeenCalled();
+  });
+
+  test('accepts three-character usernames in both own and admin rename routes', async () => {
+    await db.createUser(account);
+    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/abc', headers })).statusCode).toBe(204);
+    expect((await db.findOneUserByUserId({ userId: account.userId }))?.username).toBe('abc');
+    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/admin/xyz', headers })).statusCode).toBe(204);
+    expect((await db.findOneUserByUserId({ userId: account.userId }))?.username).toBe('xyz');
+  });
 
   test('rejects boolean strings and unknown request fields instead of coercing or discarding them', async () => {
     const change = jest.spyOn(users, 'changeUsersAdminRole');

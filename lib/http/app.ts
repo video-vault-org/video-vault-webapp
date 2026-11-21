@@ -16,7 +16,7 @@ import { UploadStore } from './uploads';
 import { userRoutes } from './routes/users';
 import { videoRoutes } from './routes/videos';
 import { commentRoutes } from './routes/comments';
-import { object, text, errorResponses } from './validation';
+import { object, text, username, errorResponses } from './validation';
 import { loggingOptions, HttpLogController } from './logging';
 import { registerDocumentation } from './documentation';
 
@@ -65,7 +65,7 @@ function createApp(
 
   app.register(async (router) => {
     /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
-    router.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username: text, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
+    router.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
       const token = await auth.login(request.body);
       if (!token) throw new HttpError(401, 'Invalid credentials or account locked');
       return { token };

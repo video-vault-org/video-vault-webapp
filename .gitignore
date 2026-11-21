@@ -5,3 +5,6 @@ built
 /conf
 /storage
 video-vault.db
+
+/.pepper
+/.pepper.*.tmp
