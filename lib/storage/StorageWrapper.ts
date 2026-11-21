@@ -53,13 +53,14 @@ class StorageWrapper {
   }
 
   /**
-   * Deletes a video's temporary video and thumbnail files from the configured temporary directory.
+   * Deletes selected temporary files from the configured directory; defaults to both video and thumbnail.
    * Missing files are ignored; stored video files are unaffected.
    * @param videoId The ID identifying both temporary files.
+   * @param files Files to be deleted (['video'], ['thumbnail'] or ['video', 'thumbnail'] (default: both))
    * @throws If a temporary file cannot be deleted for reasons other than being absent.
    */
-  public async deleteTemporaryFiles({ videoId }: { videoId: string }): Promise<void> {
-    await Promise.all([VIDEO_EXTENSION, THUMBNAIL_EXTENSION].map((extension) => fs.rm(`${this.temporaryDirectory}/${videoId}.${extension}`, { force: true })));
+  public async deleteTemporaryFiles({ videoId, files = [VIDEO_EXTENSION, THUMBNAIL_EXTENSION] }: { videoId: string; files?: ('video' | 'thumbnail')[] }): Promise<void> {
+    await Promise.all(files.map((extension) => fs.rm(`${this.temporaryDirectory}/${videoId}.${extension}`, { force: true })));
   }
 
   /**

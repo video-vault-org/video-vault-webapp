@@ -41,6 +41,13 @@ describe('StorageWrapper', () => {
     await expect(storage.deleteTemporaryFiles({ videoId })).resolves.toBeUndefined();
   });
 
+  test.each(['video', 'thumbnail'] as const)('deleteTemporaryFiles can remove only the selected %s file', async (file) => {
+    await storage.deleteTemporaryFiles({ videoId, files: [file] });
+    await expect(access(`./tmp/clip.${file}`)).rejects.toMatchObject({ code: 'ENOENT' });
+    const other = file === 'video' ? 'thumbnail' : 'video';
+    expect(await readFile(`./tmp/clip.${other}`)).toEqual(other === 'video' ? video : thumbnail);
+  });
+
   test('deleteTemporaryFiles propagates deletion errors and attempts both files', async () => {
     const error = new Error('Permission denied');
     const remove = jest.spyOn(fs, 'rm').mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);

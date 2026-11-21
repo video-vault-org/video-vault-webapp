@@ -186,12 +186,14 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     await this.query('UPDATE videos SET meta = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, JSON.stringify(metadata), lastModified, hmac]);
   }
 
-  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.query('UPDATE videos SET "videoMimeType" = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, mimetype, lastModified, hmac]);
-  }
-
-  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.query('UPDATE videos SET "thumbnailMimeType" = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, mimetype, lastModified, hmac]);
+  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET "videoMimeType" = COALESCE($2, "videoMimeType"), "thumbnailMimeType" = COALESCE($3, "thumbnailMimeType"), "lastModified" = $4, hmac = $5 WHERE "videoId" = $1', [
+      videoId,
+      videoMimeType ?? null,
+      thumbnailMimeType ?? null,
+      lastModified,
+      hmac
+    ]);
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {
@@ -321,7 +323,7 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     return this.connection;
   }
 
-  private async query<Row extends QueryResultRow>(sql: string, values: (string | number | boolean | Date)[] = []): Promise<Row[]> {
+  private async query<Row extends QueryResultRow>(sql: string, values: (string | number | boolean | Date | null)[] = []): Promise<Row[]> {
     try {
       return (await (await this.pool()).query<Row>(sql, values)).rows;
     } catch (error) {

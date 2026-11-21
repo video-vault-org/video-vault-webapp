@@ -24,11 +24,11 @@ function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthServi
     return item;
   };
 
-  /** POST /api/video/upload/:videoId — Editors only. Streams exactly one video and thumbnail to the temporary directory. */
+  /** POST /api/video/upload/:videoId — Editors only. New videos require both files; existing videos accept a video, thumbnail or both. */
   router.post('/upload/:videoId', { onRequest: editor, schema: { params, response: { 201: object({ videoId: id }), ...errorResponses } } }, async (request, reply) => {
     const { videoId } = request.params;
-    if (await videos.findVideo({ videoId })) throw new HttpError(409, 'Video already exists');
-    await uploads.receive(request, videoId);
+    const existing = await videos.findVideo({ videoId });
+    await uploads.receive(request, videoId, { allowPartial: existing !== null });
     return reply.code(201).send({ videoId });
   });
 
@@ -54,19 +54,29 @@ function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthServi
     return reply.code(204).send(null);
   });
 
-  /** PATCH /api/video/change/video-mimetype/:videoId — Editors only. Updates video MIME type, modification time and HMAC. */
-  router.patch('/change/video-mimetype/:videoId', { onRequest: editor, schema: { params, body: object({ ...videoChange, mimetype: text }), response: noContent } }, async (request, reply) => {
-    await requireVideo(request.params.videoId);
-    await videos.changeVideosVideoMimetype({ ...request.params, ...request.body, lastModified: new Date(request.body.lastModified) });
-    return reply.code(204).send(null);
-  });
-
-  /** PATCH /api/video/change/thumbnail-mimetype/:videoId — Editors only. Updates thumbnail MIME type, modification time and HMAC. */
-  router.patch('/change/thumbnail-mimetype/:videoId', { onRequest: editor, schema: { params, body: object({ ...videoChange, mimetype: text }), response: noContent } }, async (request, reply) => {
-    await requireVideo(request.params.videoId);
-    await videos.changeVideosThumbnailMimetype({ ...request.params, ...request.body, lastModified: new Date(request.body.lastModified) });
-    return reply.code(204).send(null);
-  });
+  /**
+   * PATCH /api/video/change/files/:videoId — Editors only. Replaces exactly the files whose MIME types are supplied.
+   * Requires lastModified, hmac and at least one of videoMimeType/thumbnailMimeType. Other metadata is preserved.
+   * Files must be staged through /api/video/upload/:videoId first. Failures may leave partial Storage replacements.
+   */
+  router.patch(
+    '/change/files/:videoId',
+    {
+      onRequest: editor,
+      schema: {
+        params,
+        body: { ...object({ ...videoChange, videoMimeType: Type.Optional(text), thumbnailMimeType: Type.Optional(text) }), minProperties: 3 },
+        response: noContent
+      }
+    },
+    async (request, reply) => {
+      const { videoId } = request.params;
+      await requireVideo(videoId);
+      const files = (['video', 'thumbnail'] as const).filter((file) => request.body[`${file}MimeType`] !== undefined);
+      await uploads.submit(videoId, () => videos.changeVideosFiles({ videoId, ...request.body, lastModified: new Date(request.body.lastModified) }), { files });
+      return reply.code(204).send(null);
+    }
+  );
 
   /** DELETE /api/video/delete/:videoId — Editors only. Deletes metadata, comments and stored files. */
   router.delete('/delete/:videoId', { onRequest: editor, schema: { params, response: noContent } }, async (request, reply) => {

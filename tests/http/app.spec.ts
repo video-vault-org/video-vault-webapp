@@ -46,8 +46,8 @@ const protectedRoutes = [
   ['get', '/api/video/find/v1', 'editor', undefined, 200],
   ['patch', '/api/video/change/title/v1', 'editor', { ...change, title: 'Changed' }, 204],
   ['patch', '/api/video/change/metadata/v1', 'editor', { ...change, metadata: { duration: 20 } }, 204],
-  ['patch', '/api/video/change/video-mimetype/v1', 'editor', { ...change, mimetype: 'video/webm' }, 204],
-  ['patch', '/api/video/change/thumbnail-mimetype/v1', 'editor', { ...change, mimetype: 'image/webp' }, 204],
+  ['post', '/api/video/upload/v1', 'editor', undefined, 400],
+  ['patch', '/api/video/change/files/v1', 'editor', { ...change, videoMimeType: 'video/webm' }, 404],
   ['delete', '/api/video/delete/v1', 'editor', undefined, 204],
   ['get', '/api/video/0', 'any', undefined, 200],
   ['get', '/api/video/file/v1', 'any', undefined, 200],
@@ -363,12 +363,122 @@ describe('Fastify backend', () => {
     expect(await readdir(temporaryDirectory)).toEqual([]);
   });
 
-  test('rejects duplicate uploads and existing videos without overwriting files', async () => {
+  test('rejects duplicate staged uploads without overwriting files', async () => {
     expect((await upload()).status).toBe(201);
     expect((await upload()).status).toBe(409);
-    expect((await upload('v1')).status).toBe(409);
     await request(app.server).post('/api/video/upload/..%2Fescape').set(headers('editor')).expect(400);
     expect(await readFile(join(temporaryDirectory, 'upload.video'))).toEqual(Buffer.from([0, 128, 255]));
+  });
+
+  async function replacementUpload(files: ('video' | 'thumbnail')[], videoId = 'v1') {
+    let pending = request(app.server).post(`/api/video/upload/${videoId}`).set(headers('editor'));
+    for (const file of files) pending = pending.attach(file, Buffer.from(`new-${file}`), `${file}.bin`);
+    return pending;
+  }
+
+  test.each([
+    { files: ['video'] as ('video' | 'thumbnail')[], changes: { videoMimeType: 'video/webm' } },
+    { files: ['thumbnail'] as ('video' | 'thumbnail')[], changes: { thumbnailMimeType: 'image/webp' } },
+    { files: ['video', 'thumbnail'] as ('video' | 'thumbnail')[], changes: { videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' } }
+  ])('stages and submits a $files replacement while preserving unrelated metadata and files', async ({ files, changes }) => {
+    expect((await replacementUpload(files)).status).toBe(201);
+    expect(await videos.readVideoFileRange({ videoId: 'v1' })).toEqual(Buffer.from([0, 1, 128, 255]));
+    expect(await videos.readThumbnailFile({ videoId: 'v1' })).toEqual(Buffer.from([0, 1, 128, 255]));
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor2'))
+      .send({ ...change, ...changes })
+      .expect(204);
+    expect(await db.findOneVideoByVideoId({ videoId: 'v1' })).toEqual({ ...video, ...changes, lastModified: new Date(change.lastModified), hmac: change.hmac });
+    const videoResponse = await request(app.server).get('/api/video/file/v1').set(headers()).expect(200);
+    expect(videoResponse.body).toEqual(files.includes('video') ? Buffer.from('new-video') : Buffer.from([0, 1, 128, 255]));
+    const thumbnailResponse = await request(app.server).get('/api/video/thumbnail/v1').set(headers()).expect(200);
+    expect(thumbnailResponse.body).toEqual(files.includes('thumbnail') ? Buffer.from('new-thumbnail') : Buffer.from([0, 1, 128, 255]));
+    expect(await readdir(temporaryDirectory)).toEqual([]);
+  });
+
+  test('submitting only the video leaves a staged thumbnail available for a later submit', async () => {
+    expect((await replacementUpload(['video', 'thumbnail'])).status).toBe(201);
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor'))
+      .send({ ...change, videoMimeType: 'video/webm' })
+      .expect(204);
+    expect(await readdir(temporaryDirectory)).toEqual(['v1.thumbnail']);
+    expect((await db.findOneVideoByVideoId({ videoId: 'v1' }))?.thumbnailMimeType).toBe(video.thumbnailMimeType);
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor'))
+      .send({ ...change, thumbnailMimeType: 'image/webp' })
+      .expect(204);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
+  });
+
+  test('replacement requires the selected staged files and an existing video', async () => {
+    const replace = jest.spyOn(videos, 'changeVideosFiles');
+    expect((await replacementUpload(['thumbnail'])).status).toBe(201);
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor'))
+      .send({ ...change, videoMimeType: 'video/webm' })
+      .expect(404);
+    await request(app.server)
+      .patch('/api/video/change/files/missing')
+      .set(headers('editor'))
+      .send({ ...change, thumbnailMimeType: 'image/webp' })
+      .expect(404);
+    expect(replace).not.toHaveBeenCalled();
+    expect(await readdir(temporaryDirectory)).toEqual(['v1.thumbnail']);
+  });
+
+  test.each([{ ...change }, { ...change, videoMimeType: '' }, { ...change, videoMimeType: null }, { ...change, videoMimeType: 'video/webm', meta: {} }])('rejects invalid replacement metadata %j', async (body) => {
+    await request(app.server).patch('/api/video/change/files/v1').set(headers('editor')).send(body).expect(400);
+  });
+
+  test.each(['video-mimetype', 'thumbnail-mimetype'])('removes the old MIME-only route %s', async (path) => {
+    await request(app.server)
+      .patch(`/api/video/change/${path}/v1`)
+      .set(headers('editor'))
+      .send({ ...change, mimetype: 'unused/type' })
+      .expect(404);
+  });
+
+  test('a failed second copy leaves the first replacement in storage and keeps temp files for retry', async () => {
+    expect((await replacementUpload(['video', 'thumbnail'])).status).toBe(201);
+    const save = jest.spyOn(StorageWrapper.prototype, 'saveThumbnailFile').mockRejectedValueOnce(new Error('Storage unavailable'));
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor'))
+      .send({ ...change, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' })
+      .expect(500);
+    expect(await videos.readVideoFileRange({ videoId: 'v1' })).toEqual(Buffer.from('new-video'));
+    expect(await videos.readThumbnailFile({ videoId: 'v1' })).toEqual(Buffer.from([0, 1, 128, 255]));
+    expect(await db.findOneVideoByVideoId({ videoId: 'v1' })).toEqual(video);
+    expect((await readdir(temporaryDirectory)).sort()).toEqual(['v1.thumbnail', 'v1.video']);
+    save.mockRestore();
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor'))
+      .send({ ...change, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' })
+      .expect(204);
+  });
+
+  test('a replacement database failure preserves copied files and temporary files without rollback', async () => {
+    expect((await replacementUpload(['video'])).status).toBe(201);
+    jest.spyOn(db, 'changeVideosFileAttributesByVideoId').mockRejectedValueOnce(new Error('Database unavailable'));
+    await request(app.server)
+      .patch('/api/video/change/files/v1')
+      .set(headers('editor'))
+      .send({ ...change, videoMimeType: 'video/webm' })
+      .expect(500);
+    expect(await videos.readVideoFileRange({ videoId: 'v1' })).toEqual(Buffer.from('new-video'));
+    expect(await db.findOneVideoByVideoId({ videoId: 'v1' })).toEqual(video);
+    expect(await readdir(temporaryDirectory)).toEqual(['v1.video']);
+  });
+
+  test.each(['video', 'thumbnail'] as const)('new videos still require both files when only %s is uploaded', async (file) => {
+    expect((await replacementUpload([file], 'new-video')).status).toBe(400);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
   });
 
   test('failed submit preserves temporary files for retry, without leaving the busy marker behind', async () => {

@@ -291,12 +291,8 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     await this.update('videos', { videoPartition, videoId }, { meta: metadata, lastModified: timestamp(lastModified), hmac });
   }
 
-  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { videoMimeType: mimetype, lastModified: timestamp(lastModified), hmac });
-  }
-
-  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { thumbnailMimeType: mimetype, lastModified: timestamp(lastModified), hmac });
+  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.update('videos', { videoPartition, videoId }, { lastModified: timestamp(lastModified), hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) });
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {

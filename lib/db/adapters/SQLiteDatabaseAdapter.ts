@@ -57,7 +57,7 @@ type UserRow = Omit<User, 'admin' | 'editor' | 'moderator'> & { admin: number; e
 type VideoRow = Omit<Video, 'meta' | 'lastModified'> & { meta: string; lastModified: number };
 type CommentRow = Omit<Comment, 'created' | 'lastModified' | 'edited' | 'deleted'> & { created: number; lastModified: number; edited: number; deleted: number };
 type AttemptsRow = Omit<AttemptsCount, 'lastAttempt'> & { lastAttempt: number };
-type Parameter = string | number | boolean | Date;
+type Parameter = string | number | boolean | Date | null;
 
 const toUser = ({ admin, editor, moderator, ...user }: UserRow): User => ({ ...user, admin: admin === 1, editor: editor === 1, moderator: moderator === 1 });
 const toVideo = ({ meta, lastModified, ...video }: VideoRow): Video => ({ ...video, meta: JSON.parse(meta), lastModified: new Date(lastModified) });
@@ -70,7 +70,7 @@ const toComment = ({ created, lastModified, edited, deleted, ...comment }: Comme
 });
 const toAttempts = ({ lastAttempt, ...count }: AttemptsRow): AttemptsCount => ({ ...count, lastAttempt: new Date(lastAttempt) });
 
-function bindings(values: Parameter[]): Record<string, string | number> {
+function bindings(values: Parameter[]): Record<string, string | number | null> {
   return Object.fromEntries(
     values.map((value, index) => {
       const key = '$' + (index + 1);
@@ -198,12 +198,14 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
     this.write('UPDATE videos SET meta = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, JSON.stringify(metadata), lastModified, hmac]);
   }
 
-  public async changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    this.write('UPDATE videos SET "videoMimeType" = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, mimetype, lastModified, hmac]);
-  }
-
-  public async changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    this.write('UPDATE videos SET "thumbnailMimeType" = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, mimetype, lastModified, hmac]);
+  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+    this.write('UPDATE videos SET "videoMimeType" = COALESCE($2, "videoMimeType"), "thumbnailMimeType" = COALESCE($3, "thumbnailMimeType"), "lastModified" = $4, hmac = $5 WHERE "videoId" = $1', [
+      videoId,
+      videoMimeType ?? null,
+      thumbnailMimeType ?? null,
+      lastModified,
+      hmac
+    ]);
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {

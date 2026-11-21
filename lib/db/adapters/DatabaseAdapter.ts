@@ -125,22 +125,10 @@ interface DatabaseAdapter {
   changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
-   * Changes a videos video mimetype, matched by its videoId
-   * @param videoId The id of the video to be changed
-   * @param mimetype The new mimetype
-   * @param lastModified The new lastModified date
-   * @param hmac The new hmac
+   * Atomically updates the selected file MIME types, lastModified and hmac for an existing video.
+   * Omitted MIME types and unrelated metadata are preserved. Missing videos are left unchanged.
    */
-  changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void>;
-
-  /**
-   * Changes a videos thumbnail mimetype, matched by its videoId
-   * @param videoId The id of the video to be changed
-   * @param mimetype The new mimetype
-   * @param lastModified The new lastModified date
-   * @param hmac The new hmac
-   */
-  changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void>;
+  changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Finds one video by its videoId

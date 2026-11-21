@@ -21,8 +21,8 @@ class UploadStore {
     this.maxThumbnailBytes = maxThumbnailBytes;
   }
 
-  /** Receives exactly one video and one thumbnail via Fastify's multipart streams, enforcing individual size limits. */
-  public async receive(request: FastifyRequest, videoId: string): Promise<void> {
+  /** Receives bounded multipart files. New videos require both files; replacements may upload either file or both. */
+  public async receive(request: FastifyRequest, videoId: string, { allowPartial = false }: { allowPartial?: boolean } = {}): Promise<void> {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(videoId)) throw new HttpError(400, 'Invalid video ID');
     if (!request.isMultipart()) throw new HttpError(400, 'Video and thumbnail are required');
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -50,7 +50,7 @@ class UploadStore {
         await pipeline(part.file, limit, output);
         if (part.file.truncated) throw new HttpError(413, 'Upload too large');
       }
-      if (received.size !== 2) throw new HttpError(400, 'Video and thumbnail are required');
+      if (received.size === 0 || (!allowPartial && received.size !== 2)) throw new HttpError(400, allowPartial ? 'Video or thumbnail is required' : 'Video and thumbnail are required');
     } catch (error) {
       await Promise.all([...created].map((path) => rm(path, { force: true })));
       if ((error as NodeJS.ErrnoException)?.code === 'EEXIST') throw new HttpError(409, 'Temporary file already exists');
@@ -60,7 +60,7 @@ class UploadStore {
   }
 
   /** Submits staged files once at a time using an exclusive .<videoId>.busy file in the temporary directory. */
-  public async submit(videoId: string, action: () => Promise<void>): Promise<void> {
+  public async submit(videoId: string, action: () => Promise<void>, { files = ['video', 'thumbnail'] }: { files?: ('video' | 'thumbnail')[] } = {}): Promise<void> {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(videoId)) throw new HttpError(400, 'Invalid video ID');
     const busy = join(this.directory, `.${videoId}.busy`);
 
@@ -74,8 +74,7 @@ class UploadStore {
 
     try {
       try {
-        await access(join(this.directory, `${videoId}.video`));
-        await access(join(this.directory, `${videoId}.thumbnail`));
+        await Promise.all(files.map((extension) => access(join(this.directory, `${videoId}.${extension}`))));
       } catch (error) {
         if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') throw new HttpError(404, 'Upload files not found');
         throw error;

@@ -161,31 +161,68 @@ describe('VideoService', () => {
     expect(update).toHaveBeenCalledWith(parameters);
   });
 
-  test('changeVideosVideoMimetype forwards the video MIME type, modification date and HMAC', async () => {
-    const update = jest.spyOn(db, 'changeVideosVideoMimetypeByVideoId').mockResolvedValue(undefined);
-    const parameters = { videoId, mimetype: 'video/webm', lastModified, hmac };
+  describe('changeVideosFiles', () => {
+    test.each([
+      { changes: { videoMimeType: 'video/webm' }, files: ['video'] as ('video' | 'thumbnail')[] },
+      { changes: { thumbnailMimeType: 'image/webp' }, files: ['thumbnail'] as ('video' | 'thumbnail')[] },
+      { changes: { videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' }, files: ['video', 'thumbnail'] as ('video' | 'thumbnail')[] }
+    ])('copies selected files, updates attributes once and cleans only those files: $files', async ({ changes, files }) => {
+      await db.postVideo(video);
+      const saveVideo = jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
+      const saveThumbnail = jest.spyOn(storage, 'saveThumbnailFile').mockResolvedValue(undefined);
+      const update = jest.spyOn(db, 'changeVideosFileAttributesByVideoId');
+      const removeStored = jest.spyOn(storage, 'deleteFiles');
+      await service.changeVideosFiles({ videoId, ...changes, lastModified, hmac });
+      expect(saveVideo).toHaveBeenCalledTimes(files.includes('video') ? 1 : 0);
+      expect(saveThumbnail).toHaveBeenCalledTimes(files.includes('thumbnail') ? 1 : 0);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith({ videoId, ...changes, lastModified, hmac, videoMimeType: changes.videoMimeType, thumbnailMimeType: changes.thumbnailMimeType });
+      for (const copy of [saveVideo, saveThumbnail]) if (copy.mock.calls.length) expect(copy.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
+      expect(storage.deleteTemporaryFiles).toHaveBeenCalledWith({ videoId, files });
+      expect(jest.mocked(storage.deleteTemporaryFiles).mock.invocationCallOrder[0]).toBeGreaterThan(update.mock.invocationCallOrder[0]);
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual({ ...video, ...changes, lastModified, hmac });
+      expect(removeStored).not.toHaveBeenCalled();
+    });
 
-    await expect(service.changeVideosVideoMimetype(parameters)).resolves.toBeUndefined();
+    test('rejects an empty replacement without copying or updating', async () => {
+      const save = jest.spyOn(storage, 'saveVideoFile');
+      const update = jest.spyOn(db, 'changeVideosFileAttributesByVideoId');
+      await expect(service.changeVideosFiles({ videoId, lastModified, hmac })).rejects.toThrow('At least one file MIME type');
+      expect(save).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(storage.deleteTemporaryFiles).not.toHaveBeenCalled();
+    });
 
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(parameters);
-  });
+    test.each(['video', 'thumbnail', 'database'] as const)('propagates a %s failure without rollback or temp cleanup', async (step) => {
+      await db.postVideo(video);
+      const failure = new Error('Replacement failed');
+      const saveVideo = jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
+      const saveThumbnail = jest.spyOn(storage, 'saveThumbnailFile').mockResolvedValue(undefined);
+      const update = jest.spyOn(db, 'changeVideosFileAttributesByVideoId');
+      const remove = jest.spyOn(storage, 'deleteFiles');
+      ({ video: saveVideo, thumbnail: saveThumbnail, database: update })[step].mockRejectedValueOnce(failure);
+      await expect(service.changeVideosFiles({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', lastModified, hmac })).rejects.toBe(failure);
+      if (step !== 'database') expect(update).not.toHaveBeenCalled();
+      if (step === 'video') expect(saveThumbnail).not.toHaveBeenCalled();
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(video);
+      expect(remove).not.toHaveBeenCalled();
+      expect(storage.deleteTemporaryFiles).not.toHaveBeenCalled();
+    });
 
-  test('changeVideosThumbnailMimetype forwards the thumbnail MIME type, modification date and HMAC', async () => {
-    const update = jest.spyOn(db, 'changeVideosThumbnailMimetypeByVideoId').mockResolvedValue(undefined);
-    const parameters = { videoId, mimetype: 'image/webp', lastModified, hmac };
-
-    await expect(service.changeVideosThumbnailMimetype(parameters)).resolves.toBeUndefined();
-
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(parameters);
+    test('keeps a successful replacement when temporary cleanup fails and logs a warning', async () => {
+      await db.postVideo(video);
+      jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
+      const failure = new Error('Cannot delete temp file');
+      jest.mocked(storage.deleteTemporaryFiles).mockRejectedValueOnce(failure);
+      await expect(service.changeVideosFiles({ videoId, videoMimeType: 'video/webm', lastModified, hmac })).resolves.toBeUndefined();
+      expect((await db.findOneVideoByVideoId({ videoId }))?.videoMimeType).toBe('video/webm');
+      expect(logger.warn).toHaveBeenCalledWith({ err: failure, videoId }, 'Temporary video files could not be deleted');
+    });
   });
 
   test.each([
     ['changeVideosTitle', 'changeVideosTitleByVideoId'],
-    ['changeVideosMetadata', 'changeVideosMetadataByVideoId'],
-    ['changeVideosVideoMimetype', 'changeVideosVideoMimetypeByVideoId'],
-    ['changeVideosThumbnailMimetype', 'changeVideosThumbnailMimetypeByVideoId']
+    ['changeVideosMetadata', 'changeVideosMetadataByVideoId']
   ] as const)('%s propagates database errors', async (method, dbMethod) => {
     const error = new Error('Database unavailable');
     jest.spyOn(db, dbMethod).mockRejectedValueOnce(error);

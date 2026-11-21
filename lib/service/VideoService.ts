@@ -80,27 +80,23 @@ class VideoService {
   }
 
   /**
-   * Updates a video's video MIME type, modification date and HMAC.
-   * @param videoId The ID of the video to update.
-   * @param mimetype The new video MIME type.
-   * @param lastModified The new modification date.
-   * @param hmac The HMAC for the updated video metadata.
-   * @throws If the database update fails.
+   * Replaces the staged video, thumbnail or both, then atomically updates their MIME types, lastModified and hmac.
+   * Only files with a supplied MIME type are copied and cleaned up. Other files and metadata are preserved.
+   * Storage writes are not rolled back: on failure, partial file replacements are possible and temporary files remain for retry.
+   * Cleanup failures after a successful replacement are logged without failing the operation.
+   * @throws If no MIME type is supplied, a staged file is missing, copying fails or the database update fails.
    */
-  public async changeVideosVideoMimetype({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.db.changeVideosVideoMimetypeByVideoId({ videoId, mimetype, lastModified, hmac });
-  }
-
-  /**
-   * Updates a video's thumbnail MIME type, modification date and HMAC.
-   * @param videoId The ID of the video to update.
-   * @param mimetype The new thumbnail MIME type.
-   * @param lastModified The new modification date.
-   * @param hmac The HMAC for the updated video metadata.
-   * @throws If the database update fails.
-   */
-  public async changeVideosThumbnailMimetype({ videoId, mimetype, lastModified, hmac }: { videoId: string; mimetype: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.db.changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype, lastModified, hmac });
+  public async changeVideosFiles({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+    const files: ('video' | 'thumbnail')[] = [];
+    if (videoMimeType !== undefined) files.push('video');
+    if (thumbnailMimeType !== undefined) files.push('thumbnail');
+    if (files.length === 0) throw new RangeError('At least one file MIME type is required');
+    if (videoMimeType !== undefined) await this.storage.saveVideoFile({ videoId });
+    if (thumbnailMimeType !== undefined) await this.storage.saveThumbnailFile({ videoId });
+    await this.db.changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac });
+    await this.storage.deleteTemporaryFiles({ videoId, files }).catch((error: unknown) => {
+      this.logger.warn({ err: error instanceof Error ? error : new Error('Unknown temporary file cleanup error'), videoId }, 'Temporary video files could not be deleted');
+    });
   }
 
   /**

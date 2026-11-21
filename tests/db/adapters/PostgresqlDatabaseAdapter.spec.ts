@@ -258,8 +258,13 @@ describe('PostgresqlDatabaseAdapter', () => {
     test.each([
       { field: 'title', changes: { title: 'New title' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosTitleByVideoId({ videoId, title: 'New title', ...modified }) },
       { field: 'metadata', changes: { meta: { duration: 30 } }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosMetadataByVideoId({ videoId, metadata: { duration: 30 }, ...modified }) },
-      { field: 'video MIME type', changes: { videoMimeType: 'video/webm' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosVideoMimetypeByVideoId({ videoId, mimetype: 'video/webm', ...modified }) },
-      { field: 'thumbnail MIME type', changes: { thumbnailMimeType: 'image/webp' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosThumbnailMimetypeByVideoId({ videoId, mimetype: 'image/webp', ...modified }) }
+      { field: 'video file attributes', changes: { videoMimeType: 'video/webm' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosFileAttributesByVideoId({ videoId, videoMimeType: 'video/webm', ...modified }) },
+      { field: 'thumbnail file attributes', changes: { thumbnailMimeType: 'image/webp' }, change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosFileAttributesByVideoId({ videoId, thumbnailMimeType: 'image/webp', ...modified }) },
+      {
+        field: 'both file attributes',
+        changes: { videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' },
+        change: (db: PostgresqlDatabaseAdapter, videoId: string) => db.changeVideosFileAttributesByVideoId({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', ...modified })
+      }
     ])('changes the $field, lastModified and hmac for the matching video', async ({ changes, change }) => {
       await change(db, 'missing');
       await change(db, videoId);
