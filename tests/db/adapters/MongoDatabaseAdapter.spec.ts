@@ -273,12 +273,12 @@ describe('MongoDatabaseAdapter', () => {
     test.each([
       { field: 'title', changes: { title: 'New title' }, change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosTitleByVideoId({ videoId, title: 'New title', ...modified }) },
       { field: 'metadata', changes: { meta: { duration: 30 } }, change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosMetadataByVideoId({ videoId, metadata: { duration: 30 }, ...modified }) },
-      { field: 'video file attributes', changes: { videoMimeType: 'video/webm' }, change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosFileAttributesByVideoId({ videoId, videoMimeType: 'video/webm', ...modified }) },
-      { field: 'thumbnail file attributes', changes: { thumbnailMimeType: 'image/webp' }, change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosFileAttributesByVideoId({ videoId, thumbnailMimeType: 'image/webp', ...modified }) },
+      { field: 'video file attributes', changes: { videoMimeType: 'video/webm' }, change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, videoMimeType: 'video/webm', ...modified }) },
+      { field: 'thumbnail file attributes', changes: { thumbnailMimeType: 'image/webp' }, change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, thumbnailMimeType: 'image/webp', ...modified }) },
       {
         field: 'both file attributes',
         changes: { videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' },
-        change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosFileAttributesByVideoId({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', ...modified })
+        change: (db: MongoDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', ...modified })
       }
     ])('changes the $field, lastModified and hmac for the matching video', async ({ changes, change }) => {
       await change(db, 'missing');

@@ -465,7 +465,7 @@ describe('Fastify backend', () => {
 
   test('a replacement database failure preserves copied files and temporary files without rollback', async () => {
     expect((await replacementUpload(['video'])).status).toBe(201);
-    jest.spyOn(db, 'changeVideosFileAttributesByVideoId').mockRejectedValueOnce(new Error('Database unavailable'));
+    jest.spyOn(db, 'changeVideosMimetypesByVideoId').mockRejectedValueOnce(new Error('Database unavailable'));
     await request(app.server)
       .patch('/api/video/change/files/v1')
       .set(headers('editor'))

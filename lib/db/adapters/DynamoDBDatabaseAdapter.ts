@@ -291,7 +291,7 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     await this.update('videos', { videoPartition, videoId }, { meta: metadata, lastModified: timestamp(lastModified), hmac });
   }
 
-  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+  public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
     await this.update('videos', { videoPartition, videoId }, { lastModified: timestamp(lastModified), hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) });
   }
 

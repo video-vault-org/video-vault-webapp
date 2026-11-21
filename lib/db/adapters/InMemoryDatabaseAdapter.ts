@@ -135,7 +135,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     video.hmac = hmac;
   }
 
-  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+  public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
     const video = this.videos.find((item) => item.videoId === videoId);
     if (!video) return;
     if (videoMimeType !== undefined) video.videoMimeType = videoMimeType;

@@ -170,7 +170,7 @@ describe('VideoService', () => {
       await db.postVideo(video);
       const saveVideo = jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
       const saveThumbnail = jest.spyOn(storage, 'saveThumbnailFile').mockResolvedValue(undefined);
-      const update = jest.spyOn(db, 'changeVideosFileAttributesByVideoId');
+      const update = jest.spyOn(db, 'changeVideosMimetypesByVideoId');
       const removeStored = jest.spyOn(storage, 'deleteFiles');
       await service.changeVideosFiles({ videoId, ...changes, lastModified, hmac });
       expect(saveVideo).toHaveBeenCalledTimes(files.includes('video') ? 1 : 0);
@@ -186,7 +186,7 @@ describe('VideoService', () => {
 
     test('rejects an empty replacement without copying or updating', async () => {
       const save = jest.spyOn(storage, 'saveVideoFile');
-      const update = jest.spyOn(db, 'changeVideosFileAttributesByVideoId');
+      const update = jest.spyOn(db, 'changeVideosMimetypesByVideoId');
       await expect(service.changeVideosFiles({ videoId, lastModified, hmac })).rejects.toThrow('At least one file MIME type');
       expect(save).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe('VideoService', () => {
       const failure = new Error('Replacement failed');
       const saveVideo = jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
       const saveThumbnail = jest.spyOn(storage, 'saveThumbnailFile').mockResolvedValue(undefined);
-      const update = jest.spyOn(db, 'changeVideosFileAttributesByVideoId');
+      const update = jest.spyOn(db, 'changeVideosMimetypesByVideoId');
       const remove = jest.spyOn(storage, 'deleteFiles');
       ({ video: saveVideo, thumbnail: saveThumbnail, database: update })[step].mockRejectedValueOnce(failure);
       await expect(service.changeVideosFiles({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', lastModified, hmac })).rejects.toBe(failure);

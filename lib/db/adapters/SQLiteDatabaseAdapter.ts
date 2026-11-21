@@ -198,7 +198,7 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
     this.write('UPDATE videos SET meta = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, JSON.stringify(metadata), lastModified, hmac]);
   }
 
-  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+  public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
     this.write('UPDATE videos SET "videoMimeType" = COALESCE($2, "videoMimeType"), "thumbnailMimeType" = COALESCE($3, "thumbnailMimeType"), "lastModified" = $4, hmac = $5 WHERE "videoId" = $1', [
       videoId,
       videoMimeType ?? null,

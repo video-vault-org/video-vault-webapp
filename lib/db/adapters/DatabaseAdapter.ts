@@ -128,7 +128,7 @@ interface DatabaseAdapter {
    * Atomically updates the selected file MIME types, lastModified and hmac for an existing video.
    * Omitted MIME types and unrelated metadata are preserved. Missing videos are left unchanged.
    */
-  changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void>;
+  changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Finds one video by its videoId

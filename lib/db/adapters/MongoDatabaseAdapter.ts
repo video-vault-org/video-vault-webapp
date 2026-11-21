@@ -113,7 +113,7 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: { meta: metadata, lastModified, hmac } }));
   }
 
-  public async changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
+  public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
     const changes = { lastModified, hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) };
     await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: changes }));
   }

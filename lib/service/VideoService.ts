@@ -93,7 +93,7 @@ class VideoService {
     if (files.length === 0) throw new RangeError('At least one file MIME type is required');
     if (videoMimeType !== undefined) await this.storage.saveVideoFile({ videoId });
     if (thumbnailMimeType !== undefined) await this.storage.saveThumbnailFile({ videoId });
-    await this.db.changeVideosFileAttributesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac });
+    await this.db.changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac });
     await this.storage.deleteTemporaryFiles({ videoId, files }).catch((error: unknown) => {
       this.logger.warn({ err: error instanceof Error ? error : new Error('Unknown temporary file cleanup error'), videoId }, 'Temporary video files could not be deleted');
     });
