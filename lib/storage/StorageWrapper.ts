@@ -53,6 +53,16 @@ class StorageWrapper {
   }
 
   /**
+   * Deletes a video's temporary video and thumbnail files from the configured temporary directory.
+   * Missing files are ignored; stored video files are unaffected.
+   * @param videoId The ID identifying both temporary files.
+   * @throws If a temporary file cannot be deleted for reasons other than being absent.
+   */
+  public async deleteTemporaryFiles({ videoId }: { videoId: string }): Promise<void> {
+    await Promise.all([VIDEO_EXTENSION, THUMBNAIL_EXTENSION].map((extension) => fs.rm(`${this.temporaryDirectory}/${videoId}.${extension}`, { force: true })));
+  }
+
+  /**
    * Reads the desired range from the video file for a video
    * @param videoId The id of the video to read the video file range for
    * @param from The byte position where the range starts, if undefined it starts with first file byte

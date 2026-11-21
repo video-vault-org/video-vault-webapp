@@ -3,6 +3,7 @@ import { Video } from '@/domain/Video';
 import { VideoService } from '@/service/VideoService';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
+import { logger } from '@/http/logging';
 
 describe('VideoService', () => {
   const video: Video = {
@@ -25,6 +26,7 @@ describe('VideoService', () => {
     storage = new StorageWrapper(new InMemoryStorageAdapter());
     db = new InMemoryDatabaseAdapter();
     service = new VideoService(storage, db);
+    jest.spyOn(storage, 'deleteTemporaryFiles').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -32,7 +34,7 @@ describe('VideoService', () => {
   });
 
   describe('submitVideo', () => {
-    test('saves both files before posting the video metadata', async () => {
+    test('saves both files, posts metadata, then deletes the temporary files', async () => {
       const saveVideo = jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
       const saveThumbnail = jest.spyOn(storage, 'saveThumbnailFile').mockResolvedValue(undefined);
       const postVideo = jest.spyOn(db, 'postVideo').mockResolvedValue(undefined);
@@ -49,6 +51,8 @@ describe('VideoService', () => {
       expect(saveVideo.mock.invocationCallOrder[0]).toBeLessThan(saveThumbnail.mock.invocationCallOrder[0]);
       expect(saveThumbnail.mock.invocationCallOrder[0]).toBeLessThan(postVideo.mock.invocationCallOrder[0]);
       expect(cleanup).not.toHaveBeenCalled();
+      expect(storage.deleteTemporaryFiles).toHaveBeenCalledWith({ videoId });
+      expect(jest.mocked(storage.deleteTemporaryFiles).mock.invocationCallOrder[0]).toBeGreaterThan(postVideo.mock.invocationCallOrder[0]);
     });
 
     test.each(['video', 'thumbnail', 'metadata'] as const)('cleans up stored files and propagates a failure saving %s', async (step) => {
@@ -62,6 +66,7 @@ describe('VideoService', () => {
 
       await expect(service.submitVideo(video)).rejects.toBe(error);
 
+      expect(storage.deleteTemporaryFiles).not.toHaveBeenCalled();
       expect(cleanup).toHaveBeenCalledTimes(1);
       expect(cleanup).toHaveBeenCalledWith({ videoId });
       expect(failingOperation.mock.invocationCallOrder[0]).toBeLessThan(cleanup.mock.invocationCallOrder[0]);
@@ -71,6 +76,19 @@ describe('VideoService', () => {
       if (step !== 'metadata') {
         expect(postVideo).not.toHaveBeenCalled();
       }
+    });
+
+    test('logs a warning without rolling back a saved video when deleting temporary files fails', async () => {
+      const error = new Error('Cannot delete temporary files');
+      jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
+      jest.spyOn(storage, 'saveThumbnailFile').mockResolvedValue(undefined);
+      const cleanup = jest.spyOn(storage, 'deleteFiles');
+      jest.mocked(storage.deleteTemporaryFiles).mockRejectedValueOnce(error);
+      const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      await expect(service.submitVideo(video)).resolves.toBeUndefined();
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(video);
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith({ err: error, videoId }, 'Temporary video files could not be deleted');
     });
 
     test('propagates a cleanup failure if deleting files after a failed submit also fails', async () => {

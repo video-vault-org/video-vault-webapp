@@ -1,6 +1,7 @@
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { Video } from '@/domain/Video';
+import { logger } from '@/http/logging';
 
 /**
  * Coordinates video metadata in the database and video files in storage.
@@ -20,7 +21,8 @@ class VideoService {
 
   /**
    * Copies the temporary video and thumbnail files into storage, then saves the video metadata.
-   * If any step fails, attempts to delete both stored files before propagating the error.
+   * Removes temporary files after saving; cleanup failures are logged as warnings and do not fail the submitting.
+   * If saving fails, attempts to delete both stored files before propagating the error.
    * @param video The video metadata to save; its ID identifies both temporary files.
    * @throws If saving the files or metadata fails
    */
@@ -29,6 +31,9 @@ class VideoService {
       await this.storage.saveVideoFile({ videoId: video.videoId });
       await this.storage.saveThumbnailFile({ videoId: video.videoId });
       await this.db.postVideo(video);
+      await this.storage.deleteTemporaryFiles({ videoId: video.videoId }).catch((error: unknown) => {
+        logger.warn({ err: error instanceof Error ? error : new Error('Unknown temporary file cleanup error'), videoId: video.videoId }, 'Temporary video files could not be deleted');
+      });
     } catch (err: unknown) {
       await this.storage.deleteFiles({ videoId: video.videoId });
       throw err as Error;

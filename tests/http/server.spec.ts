@@ -5,12 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { startServer } from '@/server';
+import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 import { loadDb, resetDb } from '@/db';
 import { loadStorage, resetStorage } from '@/storage';
 import { AuthService } from '@/service/AuthService';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
+
+jest.mock('@/jobs/temporaryFileCleanup', () => ({ startTemporaryFileCleanup: jest.fn() }));
 
 jest.mock('@/db', () => ({ loadDb: jest.fn(), resetDb: jest.fn() }));
 jest.mock('@/storage', () => ({ loadStorage: jest.fn(), resetStorage: jest.fn() }));
@@ -27,6 +30,7 @@ describe('startServer', () => {
     jest.mocked(loadDb).mockResolvedValue(new InMemoryDatabaseAdapter());
     jest.mocked(loadStorage).mockResolvedValue(new StorageWrapper(new InMemoryStorageAdapter()));
     jest.mocked(resetDb).mockResolvedValue(undefined);
+    jest.mocked(startTemporaryFileCleanup).mockReset().mockReturnValue(jest.fn().mockResolvedValue(undefined));
     jest.spyOn(AuthService.prototype, 'initialize').mockResolvedValue(undefined);
   });
 
@@ -56,6 +60,8 @@ describe('startServer', () => {
     expect(resetDb).toHaveBeenCalledTimes(1);
     expect(resetStorage).toHaveBeenCalledTimes(1);
     expect(running.server.listening).toBe(false);
+    expect(startTemporaryFileCleanup).toHaveBeenCalledWith();
+    expect(jest.mocked(startTemporaryFileCleanup).mock.results[0].value).toHaveBeenCalledTimes(1);
   });
 
   test('loads port, host and static directory from the environment', async () => {
@@ -70,6 +76,7 @@ describe('startServer', () => {
   test.each([-1, 65536, 1.5, NaN])('rejects invalid port %s before initializing adapters', async (port) => {
     await expect(startServer({ port })).rejects.toThrow(RangeError);
     expect(loadDb).not.toHaveBeenCalled();
+    expect(startTemporaryFileCleanup).not.toHaveBeenCalled();
   });
 
   test.each(['db', 'storage', 'auth'] as const)('cleans up resources after %s initialization fails', async (step) => {
@@ -82,6 +89,7 @@ describe('startServer', () => {
 
     expect(resetDb).toHaveBeenCalledTimes(1);
     expect(resetStorage).toHaveBeenCalledTimes(1);
+    expect(startTemporaryFileCleanup).not.toHaveBeenCalled();
   });
 
   test('keeps the startup error if database cleanup also fails', async () => {

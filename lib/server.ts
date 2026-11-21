@@ -6,14 +6,16 @@ import { UserService } from '@/service/UserService';
 import { VideoService } from '@/service/VideoService';
 import { CommentService } from '@/service/CommentService';
 import { createApp } from '@/http/app';
+import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 
 /**
  * Initializes configured adapters and one AuthService, then starts the HTTP server.
  * PORT defaults to 3000; HOST to 0.0.0.0; STATIC_DIRECTORY to ./public.
  * VIDEO_UPLOAD_LIMIT_BYTES and THUMBNAIL_UPLOAD_LIMIT_BYTES override the 2 GiB and 20 MiB defaults.
  * JWT_TTL_SECONDS overrides the default one-hour token lifetime.
+ * Temporary files with ctime older than 24 hours are cleaned on startup and hourly.
  * Requires ./conf/db.json; JWT keys are loaded or created under ./jwtkeys.
- * @returns The listening server and an idempotent close function that closes the database.
+ * @returns The listening server and an idempotent close function that stops temporary-file cleanup and closes the database.
  * @throws If configuration, initialization or listening fails; initialized resources are closed on failure.
  */
 async function startServer({ port = Number(process.env.PORT ?? 3000), host = process.env.HOST ?? '0.0.0.0', staticDirectory = process.env.STATIC_DIRECTORY ?? './public' }: { port?: number; host?: string; staticDirectory?: string } = {}): Promise<{
@@ -42,11 +44,13 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
         resolve();
       });
     });
+    const stopCleanup = startTemporaryFileCleanup();
     let closing: Promise<void> | undefined;
     return {
       server,
       close: () => {
         closing ??= new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))).finally(async () => {
+          await stopCleanup();
           resetStorage();
           await resetDb();
         });

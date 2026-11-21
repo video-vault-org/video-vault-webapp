@@ -1,6 +1,6 @@
 import { Express } from 'express';
 import request from 'supertest';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
@@ -311,8 +311,7 @@ describe('Express backend', () => {
       .expect(201);
     expect(result.body.videoId).toBe('upload');
     expect(await db.findOneVideoByVideoId({ videoId: 'upload' })).toMatchObject({ videoId: 'upload' });
-    expect(await readdir(temporaryDirectory)).toEqual(['.uploads']);
-    expect(await readdir(join(temporaryDirectory, '.uploads'))).toEqual([]);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
     const downloaded = await request(app).get('/api/video/file/upload').set(headers()).expect(200);
     expect(downloaded.body).toEqual(Buffer.from([0, 128, 255]));
     const thumbnail = await request(app).get('/api/video/thumbnail/upload').set(headers()).expect(200);
@@ -324,17 +323,12 @@ describe('Express backend', () => {
       .expect(409);
   });
 
-  test('a staged upload survives rebuilding the app and remains tied to its owner', async () => {
+  test('a staged upload survives rebuilding the app and can be submitted by another editor', async () => {
     expect((await upload()).status).toBe(201);
     app = createApp({ auth, users, videos, comments }, { staticDirectory, temporaryDirectory });
     await request(app)
       .post('/api/video/submit')
       .set(headers('editor2'))
-      .send({ ...video, videoId: 'upload' })
-      .expect(403);
-    await request(app)
-      .post('/api/video/submit')
-      .set(headers('editor'))
       .send({ ...video, videoId: 'upload' })
       .expect(201);
   });
@@ -349,18 +343,20 @@ describe('Express backend', () => {
       .send({ ...video, videoId: 'upload' })
       .expect(404);
     expect(submit).not.toHaveBeenCalled();
+    expect(await readdir(temporaryDirectory)).toEqual(['upload.video']);
   });
 
-  test('forbids another editor from submitting or replacing the upload', async () => {
+  test('another editor cannot overwrite existing temporary files, but can submit them', async () => {
     expect((await upload()).status).toBe(201);
+    expect((await upload('upload', 'editor2', Buffer.from('replacement'))).status).toBe(409);
+    expect(await readFile(join(temporaryDirectory, 'upload.video'))).toEqual(Buffer.from([0, 128, 255]));
+    expect((await readdir(temporaryDirectory)).sort()).toEqual(['upload.thumbnail', 'upload.video']);
     await request(app)
       .post('/api/video/submit')
       .set(headers('editor2'))
       .send({ ...video, videoId: 'upload' })
-      .expect(403);
-    expect((await upload('upload', 'editor2')).status).toBe(409);
-    expect(await db.findOneVideoByVideoId({ videoId: 'upload' })).toBeNull();
-    expect(await readFile(join(temporaryDirectory, 'upload.video'))).toEqual(Buffer.from([0, 128, 255]));
+      .expect(201);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
   });
 
   test('rejects duplicate uploads and existing videos without overwriting files', async () => {
@@ -379,11 +375,25 @@ describe('Express backend', () => {
       .set(headers('editor'))
       .send({ ...video, videoId: 'upload' })
       .expect(500);
+    expect((await readdir(temporaryDirectory)).sort()).toEqual(['upload.thumbnail', 'upload.video']);
     await request(app)
       .post('/api/video/submit')
       .set(headers('editor'))
       .send({ ...video, videoId: 'upload' })
       .expect(201);
+  });
+
+  test('an existing busy file rejects submit without removing the other submit lock', async () => {
+    expect((await upload()).status).toBe(201);
+    await writeFile(join(temporaryDirectory, '.upload.busy'), 'existing-lock');
+    const submit = jest.spyOn(videos, 'submitVideo');
+    await request(app)
+      .post('/api/video/submit')
+      .set(headers('editor2'))
+      .send({ ...video, videoId: 'upload' })
+      .expect(409);
+    expect(submit).not.toHaveBeenCalled();
+    expect(await readFile(join(temporaryDirectory, '.upload.busy'), 'utf8')).toBe('existing-lock');
   });
 
   test('concurrent submissions execute the storage/database operation at most once', async () => {
@@ -406,6 +416,8 @@ describe('Express backend', () => {
       .send({ ...video, videoId: 'upload' })
       .then((result) => result);
     await started;
+    expect((await lstat(join(temporaryDirectory, '.upload.busy'))).isFile()).toBe(true);
+    expect(await readFile(join(temporaryDirectory, '.upload.busy'), 'utf8')).toBe('');
     await request(app)
       .post('/api/video/submit')
       .set(headers('editor'))
@@ -414,21 +426,20 @@ describe('Express backend', () => {
     release();
     expect((await first).status).toBe(201);
     expect(submit).toHaveBeenCalledTimes(1);
+    expect(await readdir(temporaryDirectory)).not.toContain('.upload.busy');
   });
 
   test.each(['video', 'thumbnail'])('rejects an oversized %s and removes partial uploads', async (field) => {
     const result = await upload('large', 'editor', Buffer.alloc(field === 'video' ? 1025 : 3), Buffer.alloc(field === 'thumbnail' ? 17 : 1));
     expect(result.status).toBe(413);
-    expect(await readdir(temporaryDirectory)).toEqual(['.uploads']);
-    expect(await readdir(join(temporaryDirectory, '.uploads'))).toEqual([]);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
   });
 
   test('rejects missing, duplicate and unexpected upload fields and removes partial files', async () => {
     await request(app).post('/api/video/upload/missing').set(headers('editor')).attach('video', Buffer.from('x'), 'video').expect(400);
     await request(app).post('/api/video/upload/extra').set(headers('editor')).attach('unexpected', Buffer.from('x'), 'file').expect(400);
     await request(app).post('/api/video/upload/duplicate').set(headers('editor')).attach('video', Buffer.from('x'), 'one').attach('video', Buffer.from('y'), 'two').expect(400);
-    expect(await readdir(temporaryDirectory)).toEqual(['.uploads']);
-    expect(await readdir(join(temporaryDirectory, '.uploads'))).toEqual([]);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
   });
 
   test('does not remove an unrelated preexisting temporary file on a failed upload', async () => {
@@ -437,9 +448,9 @@ describe('Express backend', () => {
     expect(await readFile(join(temporaryDirectory, 'collision.video'), 'utf8')).toBe('keep');
   });
 
-  test('rejects malformed multipart input and clears its reservation', async () => {
+  test('rejects malformed multipart input and removes partial files', async () => {
     await request(app).post('/api/video/upload/malformed').set(headers('editor')).set('Content-Type', 'multipart/form-data; boundary=broken').send('--broken\r\n').expect(400);
-    expect(await readdir(join(temporaryDirectory, '.uploads'))).toEqual([]);
+    expect(await readdir(temporaryDirectory)).toEqual([]);
   });
 
   test('deleting a video also deletes its comments and both stored files', async () => {

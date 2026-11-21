@@ -1,5 +1,6 @@
-import { unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import mockFS from 'mock-fs';
+import fs from 'fs/promises';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 
@@ -17,6 +18,7 @@ describe('StorageWrapper', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     mockFS.restore();
   });
 
@@ -25,6 +27,38 @@ describe('StorageWrapper', () => {
     await writeFile(source, data);
     await adapter.save(source, descriptor);
   }
+
+  test('deleteTemporaryFiles removes both temporary files and preserves stored and unrelated files', async () => {
+    await storage.saveVideoFile({ videoId });
+    await storage.saveThumbnailFile({ videoId });
+    await writeFile('./tmp/other.video', 'unrelated');
+    await storage.deleteTemporaryFiles({ videoId });
+    await expect(access('./tmp/clip.video')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access('./tmp/clip.thumbnail')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile('./tmp/other.video', 'utf8')).toBe('unrelated');
+    expect(await adapter.read('clip.video')).toEqual(video);
+    expect(await adapter.read('clip.thumbnail')).toEqual(thumbnail);
+    await expect(storage.deleteTemporaryFiles({ videoId })).resolves.toBeUndefined();
+  });
+
+  test('deleteTemporaryFiles propagates deletion errors and attempts both files', async () => {
+    const error = new Error('Permission denied');
+    const remove = jest.spyOn(fs, 'rm').mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
+    await expect(storage.deleteTemporaryFiles({ videoId })).rejects.toBe(error);
+    expect(remove).toHaveBeenCalledWith('./tmp/clip.video', { force: true });
+    expect(remove).toHaveBeenCalledWith('./tmp/clip.thumbnail', { force: true });
+  });
+
+  test('deleteTemporaryFiles respects the configured temporary directory', async () => {
+    await mkdir('./custom-tmp');
+    await writeFile('./custom-tmp/clip.video', video);
+    await writeFile('./custom-tmp/clip.thumbnail', thumbnail);
+    const custom = new StorageWrapper(adapter, { temporaryDirectory: './custom-tmp' });
+    await custom.deleteTemporaryFiles({ videoId });
+    await expect(access('./custom-tmp/clip.video')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access('./custom-tmp/clip.thumbnail')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile('./tmp/clip.video')).toEqual(video);
+  });
 
   test('saveVideoFile stores the video under its video descriptor', async () => {
     const saveSpy = jest.spyOn(adapter, 'save');
