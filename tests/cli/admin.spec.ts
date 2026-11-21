@@ -58,13 +58,15 @@ describe('interactive admin initialization', () => {
     await expect(readAdminInput()).rejects.toThrow();
   });
 
-  test('creates a UUID v4, derives the loginHash and wraps a random key with a separately salted passwordKey', async () => {
+  test('creates a UUID v4, derives the loginHash and wraps independent AES and HMAC keys with a separately salted passwordKey', async () => {
     const salt = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
-    const expectedKey = Buffer.from(Array.from({ length: 32 }, (_, index) => index + 32));
+    const expectedAesKey = Buffer.from(Array.from({ length: 32 }, (_, index) => index + 32));
+    const expectedHmacKey = Buffer.from(Array.from({ length: 32 }, (_, index) => index + 64));
     const random = jest
       .spyOn(crypto, 'randomBytes')
       .mockImplementationOnce(() => Buffer.from(salt))
-      .mockImplementationOnce(() => Buffer.from(expectedKey));
+      .mockImplementationOnce(() => Buffer.from(expectedAesKey))
+      .mockImplementationOnce(() => Buffer.from(expectedHmacKey));
     await initializeAdmin(db, input);
     const [saved] = await db.findAllUsers();
     expect(saved.userId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -75,7 +77,11 @@ describe('interactive admin initialization', () => {
     expect(JSON.stringify(saved)).not.toContain(pepper);
     expect(saved.passwordKeySalt).toBe(salt.toString('base64'));
     expect(Buffer.from(saved.passwordKeySalt, 'base64')).toHaveLength(32);
-    expect(Buffer.from(saved.userKey, 'base64')).toHaveLength(40);
+    const wrappedKeys = Buffer.from(saved.userKey, 'base64');
+    expect(wrappedKeys).toHaveLength(80);
+    const wrappedAesKey = wrappedKeys.subarray(0, 40);
+    const wrappedHmacKey = wrappedKeys.subarray(40);
+    expect(wrappedAesKey).not.toEqual(wrappedHmacKey);
 
     const loginHash = await hash(input.password, { salt: Buffer.from(pepper + input.username, 'utf8'), type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
     expect(await verifyPassword(loginHash.toString('base64'), saved.loginHash)).toBe(true);
@@ -84,13 +90,18 @@ describe('interactive admin initialization', () => {
     // Verify interoperability with the browser AES-KW API using an independently derived key.
     const passwordKey = await hash(input.password, { salt, type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
     const wrappingKey = await webcrypto.subtle.importKey('raw', Uint8Array.from(passwordKey), 'AES-KW', false, ['unwrapKey']);
-    const unwrapped = await webcrypto.subtle.unwrapKey('raw', Uint8Array.from(Buffer.from(saved.userKey, 'base64')), wrappingKey, 'AES-KW', { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
-    expect(Buffer.from(await webcrypto.subtle.exportKey('raw', unwrapped))).toEqual(expectedKey);
+    const unwrapped = await webcrypto.subtle.unwrapKey('raw', Uint8Array.from(wrappedAesKey), wrappingKey, 'AES-KW', { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    expect(Buffer.from(await webcrypto.subtle.exportKey('raw', unwrapped))).toEqual(expectedAesKey);
+    const unwrappedHmac = await webcrypto.subtle.unwrapKey('raw', Uint8Array.from(wrappedHmacKey), wrappingKey, 'AES-KW', { name: 'HMAC', hash: 'SHA-256' }, true, ['sign', 'verify']);
+    expect(Buffer.from(await webcrypto.subtle.exportKey('raw', unwrappedHmac))).toEqual(expectedHmacKey);
     const wrongKey = await webcrypto.subtle.importKey('raw', Uint8Array.from(loginHash), 'AES-KW', false, ['unwrapKey']);
-    await expect(webcrypto.subtle.unwrapKey('raw', Uint8Array.from(Buffer.from(saved.userKey, 'base64')), wrongKey, 'AES-KW', { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])).rejects.toThrow();
+    await expect(webcrypto.subtle.unwrapKey('raw', Uint8Array.from(wrappedAesKey), wrongKey, 'AES-KW', { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])).rejects.toThrow();
+    await expect(webcrypto.subtle.unwrapKey('raw', Uint8Array.from(wrappedHmacKey), wrongKey, 'AES-KW', { name: 'HMAC', hash: 'SHA-256' }, true, ['sign', 'verify'])).rejects.toThrow();
     expect(random).toHaveBeenNthCalledWith(1, 32);
     expect(random).toHaveBeenNthCalledWith(2, 32);
+    expect(random).toHaveBeenNthCalledWith(3, 32);
     expect(random.mock.results[1].value).toEqual(Buffer.alloc(32));
+    expect(random.mock.results[2].value).toEqual(Buffer.alloc(32));
   });
 
   test('generates fresh IDs, salts and wrapped keys for independent initializations', async () => {
@@ -146,12 +157,13 @@ describe('interactive admin initialization', () => {
     expect(await db.findAllUsers()).toEqual([{ ...existing, username: input.username }]);
   });
 
-  test('clears the temporary random key if database creation fails', async () => {
+  test('clears both temporary random keys if database creation fails', async () => {
     const error = new Error('Write failed');
     const random = jest.spyOn(crypto, 'randomBytes');
     jest.spyOn(db, 'createUser').mockRejectedValueOnce(error);
     await expect(initializeAdmin(db, input)).rejects.toBe(error);
     expect(random.mock.results[1].value).toEqual(Buffer.alloc(32));
+    expect(random.mock.results[2].value).toEqual(Buffer.alloc(32));
     expect(await db.findAllUsers()).toEqual([]);
   });
 

@@ -36,8 +36,9 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
  * A UUID v4 identifies the user. LoginHash is Argon2id(password, pepper + username), producing 32 raw bytes.
  * Both Argon2id derivations use v19, 19456 KiB, 2 passes and parallelism 1 (OWASP minimum profile).
  * A separate passwordKey uses a random 32-byte passwordKeySalt.
- * A fresh random 32-byte user key is wrapped with passwordKey using RFC 3394 AES-256-KW without padding.
- * LoginHash, passwordKeySalt and the wrapped userKey are Base64-encoded; UserService additionally hashes loginHash with scrypt.
+ * Independent random 32-byte AES and HMAC keys are each wrapped with passwordKey using RFC 3394 AES-256-KW without padding.
+ * userKey is the Base64-encoded concatenation of the wrapped AES key followed by the wrapped HMAC key (40 bytes each).
+ * LoginHash and passwordKeySalt are also Base64-encoded; UserService additionally hashes loginHash with scrypt.
  * Password is never stored. Pepper is read from ./.pepper (created if absent). Temporary secret buffers are cleared after use.
  * The initial user has only the admin role.
  * @param db An opened and initialized database adapter.
@@ -53,12 +54,17 @@ async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<voi
   const passwordKeySalt = randomBytes(32);
   const loginHash = await deriveKey(password, pepper + username);
   let passwordKey: Buffer | undefined;
-  let key: Buffer | undefined;
+  let aesKey: Buffer | undefined;
+  let hmacKey: Buffer | undefined;
   try {
     passwordKey = await deriveKey(password, passwordKeySalt);
-    key = randomBytes(32);
-    const cipher = createCipheriv('id-aes256-wrap', passwordKey, Buffer.alloc(8, 0xa6));
-    const userKey = Buffer.concat([cipher.update(key), cipher.final()]);
+    aesKey = randomBytes(32);
+    const aesCipher = createCipheriv('id-aes256-wrap', passwordKey, Buffer.alloc(8, 0xa6));
+    const wrappedAesKey = Buffer.concat([aesCipher.update(aesKey), aesCipher.final()]);
+    hmacKey = randomBytes(32);
+    const hmacCipher = createCipheriv('id-aes256-wrap', passwordKey, Buffer.alloc(8, 0xa6));
+    const wrappedHmacKey = Buffer.concat([hmacCipher.update(hmacKey), hmacCipher.final()]);
+    const userKey = Buffer.concat([wrappedAesKey, wrappedHmacKey]);
     await new UserService(db).createUser({
       userId,
       username,
@@ -73,7 +79,8 @@ async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<voi
   } finally {
     loginHash.fill(0);
     passwordKey?.fill(0);
-    key?.fill(0);
+    aesKey?.fill(0);
+    hmacKey?.fill(0);
   }
 }
 
