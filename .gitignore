@@ -8,3 +8,5 @@ video-vault.db
 
 /.pepper
 /.pepper.*.tmp
+
+AGENTS.md

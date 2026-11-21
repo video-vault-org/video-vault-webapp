@@ -1,0 +1,1435 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="VideoVault security architecture: end-to-end encryption, key management, authentication and integrity. Deutsch / English." />
+    <title>VideoVault · Sicherheitsarchitektur</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172d39;
+        --muted: #536875;
+        --accent: #096e67;
+        --line: #d9e4e7;
+        --paper: #fff;
+        --tint: #eff6f5;
+        --amber: #fff6df;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f4f7f7;
+        color: var(--ink);
+        font:
+          16px/1.65 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      header {
+        background: #122f3a;
+        color: #fff;
+        padding: 54px max(24px, calc((100vw - 1100px) / 2)) 36px;
+      }
+      .eyebrow {
+        font-size: 0.78rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #9bddd0;
+      }
+      h1 {
+        font-size: clamp(2rem, 4.5vw, 3.1rem);
+        line-height: 1.15;
+        max-width: 850px;
+        margin: 12px 0 20px;
+      }
+      header p {
+        max-width: 780px;
+        color: #d2e3e8;
+        margin: 0;
+      }
+      .tabs {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+        padding: 12px max(24px, calc((100vw - 1100px) / 2));
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: 1px solid #c3d5d8;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        padding: 8px 22px;
+      }
+      button[aria-selected='true'] {
+        color: white;
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #e9a33d;
+        outline-offset: 4px;
+      }
+      main {
+        max-width: 1150px;
+        margin: 28px auto 64px;
+        padding: 0 24px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 205px minmax(0, 1fr);
+        gap: 32px;
+      }
+      nav {
+        align-self: start;
+        position: sticky;
+        top: 86px;
+        font-size: 0.9rem;
+      }
+      nav a {
+        display: block;
+        padding: 7px 0;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      nav a:hover {
+        color: var(--accent);
+      }
+      article {
+        min-width: 0;
+      }
+      section {
+        scroll-margin-top: 90px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 28px;
+        margin-bottom: 20px;
+      }
+      h2 {
+        font-size: 1.5rem;
+        line-height: 1.3;
+        margin: 0 0 18px;
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 24px 0 8px;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: #076d79;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      code {
+        font-size: 0.87em;
+        background: #edf3f4;
+        border-radius: 4px;
+        padding: 2px 5px;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: #142f3a;
+        color: #e4f4f1;
+        border-radius: 9px;
+        padding: 18px;
+        font-size: 0.82rem;
+        line-height: 1.7;
+      }
+      pre code {
+        background: none;
+        color: inherit;
+        padding: 0;
+      }
+      .note {
+        padding: 14px 17px;
+        border-left: 4px solid #108f80;
+        background: var(--tint);
+        border-radius: 0 7px 7px 0;
+        margin: 18px 0;
+      }
+      .open {
+        border-color: #b47b14;
+        background: var(--amber);
+      }
+      .badge {
+        font-size: 0.72rem;
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 20px;
+        background: var(--tint);
+        color: #09695d;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        margin-bottom: 12px;
+      }
+      .planned {
+        background: var(--amber);
+        color: #855b10;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        margin: 16px 0;
+      }
+      th,
+      td {
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f0f5f5;
+      }
+      td:first-child {
+        font-weight: 600;
+      }
+      ul,
+      ol {
+        padding-left: 23px;
+      }
+      li {
+        padding: 3px 0;
+      }
+      figure {
+        margin: 22px 0;
+        padding: 16px;
+        background: #f5f9f9;
+        border-radius: 10px;
+        overflow-x: auto;
+      }
+      figcaption {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 480px;
+      }
+      svg text {
+        font-family: system-ui, sans-serif;
+        fill: #18343f;
+        font-size: 14px;
+      }
+      svg .small {
+        font-size: 12px;
+        fill: #45616a;
+      }
+      svg .box {
+        fill: #fff;
+        stroke: #97b9bd;
+        stroke-width: 1.5;
+      }
+      svg .secret {
+        fill: #ddf2e9;
+        stroke: #4a9a87;
+        stroke-width: 1.5;
+      }
+      svg .server {
+        fill: #e7eef7;
+        stroke: #859ebc;
+        stroke-width: 1.5;
+      }
+      svg .line {
+        fill: none;
+        stroke: #65868d;
+        stroke-width: 2;
+      }
+      .foot {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 800px) {
+        .layout {
+          display: block;
+        }
+        nav {
+          position: static;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px 18px;
+          margin-bottom: 22px;
+        }
+        nav a {
+          padding: 3px 0;
+        }
+        section {
+          padding: 20px;
+        }
+        main {
+          padding: 0 14px;
+        }
+        header {
+          padding: 36px 24px;
+        }
+        .tabs {
+          padding: 10px 24px;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+      @media print {
+        body {
+          background: #fff;
+          font-size: 10pt;
+        }
+        header {
+          background: #fff;
+          color: #172d39;
+          padding: 10px 0;
+        }
+        header p,
+        .eyebrow {
+          color: #536875;
+        }
+        .tabs,
+        nav {
+          display: none;
+        }
+        .layout {
+          display: block;
+        }
+        main {
+          max-width: none;
+          padding: 0;
+          margin: 12px 0;
+        }
+        section {
+          border: 0;
+          border-radius: 0;
+          padding: 12px 0;
+          break-inside: auto;
+        }
+        figure,
+        table,
+        pre {
+          break-inside: avoid;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+        a {
+          color: inherit;
+        }
+        svg {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="eyebrow">VideoVault / Architecture</div>
+      <div data-header-lang="de">
+        <h1>Sicherheitsarchitektur</h1>
+        <p>Vom Passwort zum verschlüsselten Video: Vertrauensgrenzen, Schlüsselhierarchie und Integrität im Überblick.</p>
+      </div>
+      <div data-header-lang="en" hidden>
+        <h1>Security architecture</h1>
+        <p>From password to encrypted video: trust boundaries, key hierarchy and integrity at a glance.</p>
+      </div>
+    </header>
+    <div class="tabs" role="tablist" aria-label="Language / Sprache">
+      <button type="button" id="tab-de" role="tab" data-lang="de" aria-selected="true" aria-controls="panel-de">Deutsch</button
+      ><button type="button" id="tab-en" role="tab" data-lang="en" aria-selected="false" aria-controls="panel-en" tabindex="-1">English</button>
+    </div>
+    <main>
+      <div id="panel-de" role="tabpanel" aria-labelledby="tab-de" lang="de">
+        <div class="layout">
+          <nav aria-label="Inhalt">
+            <a href="#de-overview">01 · Ziel und Vertrauensgrenzen</a><a href="#de-keys">02 · Schlüssel und Aufgaben</a><a href="#de-bootstrap">03 · Erstinitialisierung und Passwortableitung</a
+            ><a href="#de-envelope">04 · userKey: Verpackung und Entpacken</a><a href="#de-login">05 · Anmeldung und Serverzugriff</a><a href="#de-lifecycle">06 · Nutzer hinzufügen und Passwort ändern</a
+            ><a href="#de-files">07 · Dateien: Verschlüsselung und Binärformat</a><a href="#de-text">08 · Videotitel und Kommentar-Inhalte</a><a href="#de-metadata">09 · Metadaten-Integrität und Tombstones</a
+            ><a href="#de-limits">10 · Schutzwirkung und Grenzen</a><a href="#de-implementation">11 · Umsetzungsstand und Referenzen</a>
+          </nav>
+          <article>
+            <section id="de-overview" aria-labelledby="de-overview-title">
+              <h2 id="de-overview-title">01 · Ziel und Vertrauensgrenzen</h2>
+              <p>
+                VideoVault schützt private Videos durch Ende-zu-Ende-Verschlüsselung. Video- und Thumbnail-Dateien, Videotitel und Kommentar-Inhalte werden vor der Übertragung im Client verschlüsselt. Die Master-Schlüssel liegen serverseitig
+                ausschließlich gewrappt vor. Der Server übernimmt Anmeldung, Rollenprüfung und Speicherung.
+              </p>
+              <figure>
+                <svg viewBox="0 0 760 180" role="img" aria-label="Vertrauensgrenzen">
+                  <title>Vertrauensgrenzen</title>
+                  <desc>Klartext und Master-Schlüssel bleiben im Client. Das Backend authentifiziert; Datenbank und Storage speichern verschlüsselte Inhalte.</desc>
+                  <defs>
+                    <marker id="marker-de-trust" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M235 87 L275 87" class="line" marker-end="url(#marker-de-trust)" />
+                  <path d="M480 87 L520 87" class="line" marker-end="url(#marker-de-trust)" />
+                  <rect x="10" y="25" width="225" height="125" rx="10" class="secret" />
+                  <text x="122.5" y="54" text-anchor="middle">Client</text>
+                  <text x="122.5" y="76" text-anchor="middle" class="small">Passwort · Klartext</text>
+                  <text x="122.5" y="95" text-anchor="middle" class="small">masterEncryptionKey</text>
+                  <text x="122.5" y="114" text-anchor="middle" class="small">masterAuthKey</text>
+                  <rect x="275" y="25" width="205" height="125" rx="10" class="server" />
+                  <text x="377.5" y="54" text-anchor="middle">Backend</text>
+                  <text x="377.5" y="76" text-anchor="middle" class="small">loginHash prüfen</text>
+                  <text x="377.5" y="95" text-anchor="middle" class="small">JWT · Rollen · Uploads</text>
+                  <rect x="520" y="25" width="230" height="125" rx="10" class="box" />
+                  <text x="635.0" y="54" text-anchor="middle">Datenbank / Storage</text>
+                  <text x="635.0" y="76" text-anchor="middle" class="small">Ciphertext · Metadaten</text>
+                  <text x="635.0" y="95" text-anchor="middle" class="small">userKey · scrypt-Hash</text>
+                </svg>
+                <figcaption>Webbetrieb: Über TLS fließen Login-Nachweis, verschlüsselte Daten und sichtbare Metadaten.</figcaption>
+              </figure>
+              <div class="note">
+                „Zero-Knowledge“ bezeichnet hier das Ziel, dass der Server im regulären Webbetrieb weder das Klartext-Passwort noch entschlüsselte Inhalte oder ungeschützte Master-Schlüssel benötigt. Es handelt sich nicht um ein
+                Zero-Knowledge-Beweisprotokoll.
+              </div>
+              <p>Die lokale Admin-CLI ist die bewusste Bootstrap-Ausnahme: Sie verarbeitet das erste Passwort und erzeugt die ursprünglichen Schlüssel auf dem Rechner der ausführenden Person.</p>
+              <p>Diese Doku unterscheidet den vorhandenen Backend-Stand von der festgelegten Client-Architektur. Beschriebene Client-Verfahren sind dadurch noch nicht implementiert oder unabhängig auditiert.</p>
+            </section>
+            <section id="de-keys" aria-labelledby="de-keys-title">
+              <h2 id="de-keys-title">02 · Schlüssel und Aufgaben</h2>
+              <figure>
+                <svg viewBox="0 0 760 340" role="img" aria-label="Schlüsselhierarchie">
+                  <title>Schlüsselhierarchie</title>
+                  <desc>Das Passwort leitet den passwordKey ab. Dieser schützt zwei getrennte Master-Schlüssel. Der Encryption-Key schützt Dateischlüssel, der Auth-Key authentisiert Metadaten.</desc>
+                  <defs>
+                    <marker id="marker-de-keys" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M330 77 L180 120" class="line" marker-end="url(#marker-de-keys)" />
+                  <path d="M430 77 L580 120" class="line" marker-end="url(#marker-de-keys)" />
+                  <path d="M180 198 L180 245" class="line" marker-end="url(#marker-de-keys)" />
+                  <path d="M580 198 L580 245" class="line" marker-end="url(#marker-de-keys)" />
+                  <rect x="255" y="5" width="250" height="72" rx="10" class="box" />
+                  <text x="380.0" y="34" text-anchor="middle">Passwort + Salt</text>
+                  <text x="380.0" y="56" text-anchor="middle" class="small">Argon2id → passwordKey</text>
+                  <rect x="10" y="120" width="340" height="78" rx="10" class="secret" />
+                  <text x="180.0" y="149" text-anchor="middle">masterEncryptionKey</text>
+                  <text x="180.0" y="171" text-anchor="middle" class="small">32 Bytes · zufällig</text>
+                  <rect x="410" y="120" width="340" height="78" rx="10" class="secret" />
+                  <text x="580.0" y="149" text-anchor="middle">masterAuthKey</text>
+                  <text x="580.0" y="171" text-anchor="middle" class="small">32 Bytes · zufällig</text>
+                  <rect x="10" y="245" width="340" height="78" rx="10" class="box" />
+                  <text x="180.0" y="274" text-anchor="middle">Dateischlüssel → AES-256-GCM</text>
+                  <text x="180.0" y="296" text-anchor="middle" class="small">AES-KW · Dateien und Texte</text>
+                  <rect x="410" y="245" width="340" height="78" rx="10" class="box" />
+                  <text x="580.0" y="274" text-anchor="middle">HMAC-SHA-256</text>
+                  <text x="580.0" y="296" text-anchor="middle" class="small">Integrität der Metadaten</text>
+                </svg>
+                <figcaption>Pfeile zeigen die Schutzbeziehung, keine Ableitung der Master-Schlüssel aus dem Passwort.</figcaption>
+              </figure>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Wert</th>
+                    <th scope="col">Erzeugung und Zweck</th>
+                    <th scope="col">Ablage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>masterEncryptionKey</code></td>
+                    <td>32 zufällige Bytes; wrappt individuelle Dateischlüssel.</td>
+                    <td>Klartext nur im vertrauenswürdigen Client; gewrappt im userKey.</td>
+                  </tr>
+                  <tr>
+                    <td><code>masterAuthKey</code></td>
+                    <td>Unabhängige 32 zufällige Bytes; HMAC-SHA-256 für Metadaten.</td>
+                    <td>Klartext nur im Client; separat gewrappt im userKey.</td>
+                  </tr>
+                  <tr>
+                    <td><code>passwordKey</code></td>
+                    <td>Argon2id aus Passwort und individuellem passwordKeySalt; 32 Bytes.</td>
+                    <td>Nur während der lokalen Schlüsselverarbeitung.</td>
+                  </tr>
+                  <tr>
+                    <td><code>fileKey</code></td>
+                    <td>Neue 32 zufällige Bytes pro Verschlüsselung einer Datei oder eines Textes.</td>
+                    <td>Gewrappt am Anfang des verschlüsselten Objekts.</td>
+                  </tr>
+                  <tr>
+                    <td><code>loginHash</code></td>
+                    <td>Base64-kodierte Argon2id-Ausgabe für die Anmeldung.</td>
+                    <td>Übertragung an das Backend; dort als zusätzlicher scrypt-Hash gespeichert.</td>
+                  </tr>
+                  <tr>
+                    <td>JWT-Signaturschlüssel</td>
+                    <td>Separate serverseitige HMAC-Schlüssel; keine Inhalts- oder Metadatenschlüssel.</td>
+                    <td><code>./jwtkeys</code></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                Alle berechtigten Nutzer teilen dieselben beiden Master-Schlüssel. Individuell sind das Passwort, der <code>passwordKeySalt</code>, der daraus abgeleitete <code>passwordKey</code> und die gewrappte Darstellung <code>userKey</code>.
+                Alle Zufallswerte benötigen einen kryptografisch sicheren Zufallszahlengenerator.
+              </p>
+            </section>
+            <section id="de-bootstrap" aria-labelledby="de-bootstrap-title">
+              <span class="badge">Backend implementiert</span>
+              <h2 id="de-bootstrap-title">03 · Erstinitialisierung und Passwortableitung</h2>
+              <p>
+                Die Startdateien für Server, Konfigurations-CLI und Admin-CLI stellen sicher, dass <code>./.pepper</code> existiert. Bei der ersten Erzeugung entstehen 32 zufällige Bytes, gespeichert als genau 64 Hex-Zeichen. Vorhandene Werte werden
+                wiederverwendet; ungültige oder unlesbare Dateien führen zu einem Fehler. Neue Dateien erhalten Modus <code>0600</code> und werden atomar veröffentlicht.
+              </p>
+              <p>
+                Die Admin-CLI fragt Benutzername (mindestens 3 Zeichen), Anzeigename und maskiertes Passwort ab. Sie liest den Instanzwert aus <code>./.pepper</code>, vergibt eine UUID v4 und verweigert eine weitere Erstinitialisierung, sobald ein
+                Admin vorhanden ist.
+              </p>
+              <pre><code>A(P, S) = Argon2id(password=UTF8(P), salt=S,
+                     version=0x13, memory=19456 KiB,
+                     timeCost=2, parallelism=1, output=32 bytes)
+
+loginHash       = Base64(A(password, UTF8(pepperHex + username)))
+passwordKeySalt = CSPRNG(32 bytes)
+passwordKey     = A(password, passwordKeySalt)</code></pre>
+              <p>
+                <code>0x13</code> bedeutet Argon2-Version 1.3 (dezimal 19). Die Speichergröße beträgt 19 MiB. Das Profil entspricht dem
+                <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP-Mindestprofil für Argon2id</a>. Passwort und Salt-Strings werden als UTF-8 verarbeitet, ohne automatische Unicode-Normalisierung. Für den
+                Login-Salt wird der gespeicherte Hex-Text verwendet, nicht dessen dekodierte 32-Byte-Darstellung.
+              </p>
+              <p>
+                Die CLI erzeugt die beiden ursprünglichen Master-Schlüssel unabhängig, wrappt sie und legt den ersten Nutzer nur mit der Admin-Rolle an. Temporäre Klartext-Schlüsselbuffer werden im <code>finally</code>-Block überschrieben; das ist
+                keine Garantie, dass jede Kopie eines JavaScript-Strings aus dem Speicher verschwindet.
+              </p>
+              <div class="note">
+                Der Wert in <code>./.pepper</code> ist für diese Architektur eine <strong>öffentliche, stabile Instanz-Salt</strong>, kein geheimer Pepper im kryptografischen Sinne. Der Client benötigt exakt den gespeicherten Hex-Text für die
+                Login-Ableitung. Eine spätere öffentliche Bootstrap-Route soll ihn bereitstellen; diese Route ist im aktuellen Backend noch nicht implementiert. Der Wert wird bei einem Neustart nicht rotiert und muss bei einer Wiederherstellung
+                erhalten bleiben.
+              </div>
+            </section>
+            <section id="de-envelope" aria-labelledby="de-envelope-title">
+              <span class="badge">Backend implementiert</span>
+              <h2 id="de-envelope-title">04 · userKey: Verpackung und Entpacken</h2>
+              <figure>
+                <svg viewBox="0 0 760 230" role="img" aria-label="Binärformat des userKey">
+                  <title>Binärformat des userKey</title>
+                  <desc>Zwei separat gewrappte Schlüssel von je 40 Bytes werden zu 80 Bytes verbunden und danach gemeinsam Base64-kodiert.</desc>
+                  <defs>
+                    <marker id="marker-de-envelope" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M185 95 L300 145" class="line" marker-end="url(#marker-de-envelope)" />
+                  <path d="M575 95 L460 145" class="line" marker-end="url(#marker-de-envelope)" />
+                  <rect x="10" y="15" width="350" height="80" rx="10" class="secret" />
+                  <text x="185.0" y="44" text-anchor="middle">wrappedMasterEncryptionKey</text>
+                  <text x="185.0" y="66" text-anchor="middle" class="small">40 bytes · [0, 40)</text>
+                  <rect x="400" y="15" width="350" height="80" rx="10" class="secret" />
+                  <text x="575.0" y="44" text-anchor="middle">wrappedMasterAuthKey</text>
+                  <text x="575.0" y="66" text-anchor="middle" class="small">40 bytes · [40, 80)</text>
+                  <rect x="185" y="145" width="390" height="72" rx="10" class="box" />
+                  <text x="380.0" y="174" text-anchor="middle">userKey</text>
+                  <text x="380.0" y="196" text-anchor="middle" class="small">80 Bytes → Base64 → 108 Zeichen</text>
+                </svg>
+                <figcaption>Erst die Buffer verbinden, dann Base64 kodieren; nicht zwei Base64-Strings aneinanderhängen.</figcaption>
+              </figure>
+              <pre><code>wrappedMasterEncryptionKey = AES-256-KW(passwordKey, masterEncryptionKey)
+wrappedMasterAuthKey       = AES-256-KW(passwordKey, masterAuthKey)
+userKey = Base64(wrappedMasterEncryptionKey || wrappedMasterAuthKey)</code></pre>
+              <p>
+                Verwendet wird <a href="https://www.rfc-editor.org/rfc/rfc3394">AES-Key-Wrap nach RFC 3394</a> ohne Padding mit dem definierten Initialwert <code>A6A6A6A6A6A6A6A6</code>. Ein 32-Byte-Schlüssel wird zu 40 Bytes. Beide Wrap-Vorgänge
+                sind eigenständig; erst die Ergebnisse werden verbunden.
+              </p>
+              <pre><code>bytes = Base64Decode(userKey)        // exakt 80 Bytes
+wrappedEncryption = bytes.subarray(0, 40)
+wrappedAuth       = bytes.subarray(40, 80)
+masterEncryptionKey = AES-256-KW-Unwrap(passwordKey, wrappedEncryption)
+masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
+              <p>
+                Für das Aufteilen eignet sich <code>Buffer.subarray()</code> bzw. <code>Uint8Array.subarray()</code>; ein Node-Buffer besitzt keine <code>splice()</code>-Methode. Base64 wird mit dem Standardalphabet und Padding nach RFC 4648
+                verwendet. Vor der Verwendung sind die dekodierte Länge und beide Unwrap-Ergebnisse zu prüfen. Ein Fehler bricht das Entsperren ab.
+              </p>
+            </section>
+            <section id="de-login" aria-labelledby="de-login-title">
+              <span class="badge">Backend implementiert</span>
+              <h2 id="de-login-title">05 · Anmeldung und Serverzugriff</h2>
+              <ol>
+                <li>Der Client erzeugt den <code>loginHash</code> lokal nach der beschriebenen Argon2id-Ableitung und sendet Benutzername und diesen Base64-String über TLS.</li>
+                <li>
+                  Das Backend behandelt den Base64-String als Passwort, ohne ihn vorher zu dekodieren. In der Datenbank liegt davon ein scrypt-String mit eigenem 16-Byte-Salt: <code>N=2¹⁵, r=8, p=3</code>, Ausgabe 32 Bytes. Der Vergleich erfolgt mit
+                  <code>timingSafeEqual</code>.
+                </li>
+                <li>
+                  Bei Erfolg wird ein HS256-JWT mit einem zufällig gewählten der zehn serverseitigen 32-Byte-Signaturschlüssel erstellt. Standardlaufzeit: eine Stunde. Prüfung umfasst Algorithmus, Signatur, Key-ID, Issuer, Audience und Ablaufzeit.
+                </li>
+                <li>Pro Anfrage wird der aktuelle Nutzer aus der Datenbank geladen. Rollen werden aus seinen aktuellen Flags gelesen, nicht aus dem Token übernommen. API-Antworten lassen <code>loginHash</code> aus.</li>
+              </ol>
+              <p>
+                Nach dem fünften Fehlversuch je Benutzername beginnt eine Sperre von 15 Sekunden. Weitere Fehlversuche nach Ablauf verdoppeln sie bis maximal 15 Minuten. Versuche während der Sperre starten deren Dauer neu, ohne den Zähler zu erhöhen.
+                Erfolg entfernt den Zähler. Gleichzeitige Versuche desselben Namens werden innerhalb der einen AuthService-Instanz serialisiert.
+              </p>
+              <div class="note">
+                Der übertragene loginHash ist ein wiederverwendbares Anmeldegeheimnis. Sein Besitz ermöglicht eine Anmeldung, auch ohne Kenntnis des ursprünglichen Passworts. Er darf ebenso wenig wie Tokens oder Passwörter geloggt werden. TLS bleibt
+                erforderlich.
+              </div>
+              <p>
+                Admins verwalten Nutzer, Editors verwalten Videos, Moderators bearbeiten fremde Kommentare. Alle angemeldeten Nutzer dürfen Inhalte abrufen und eigene Kommentare verwalten. Diese API-Rechte sind von den gemeinsamen kryptografischen
+                Schlüsseln getrennt.
+              </p>
+            </section>
+            <section id="de-lifecycle" aria-labelledby="de-lifecycle-title">
+              <span class="badge planned">Client-Architektur</span>
+              <h2 id="de-lifecycle-title">06 · Nutzer hinzufügen und Passwort ändern</h2>
+              <h3>Weiteren Nutzer anlegen</h3>
+              <p>
+                Der aktuelle, berechtigte Nutzer entsperrt seinen <code>userKey</code> lokal. Für den neuen Nutzer werden mit dessen Passwort ein neuer <code>loginHash</code>, ein frischer 32-Byte-<code>passwordKeySalt</code> und ein neuer
+                <code>passwordKey</code> erzeugt. Die bereits vorhandenen Master-Schlüssel werden getrennt mit diesem neuen passwordKey gewrappt und als neuer userKey gespeichert. Es entsteht kein neues Master-Schlüsselpaar.
+              </p>
+              <p>
+                In diesem Verfahren verarbeitet der anlegende Client vorübergehend auch das anfängliche Passwort des neuen Nutzers. Eine Übergabe über Einladungsprotokolle oder öffentliche Schlüssel ist nicht Bestandteil dieser Architektur. Das
+                Backend empfängt die fertigen Passwortattribute; es übernimmt nicht das Entschlüsseln oder Neu-Wrappen.
+              </p>
+              <h3>Passwort ändern</h3>
+              <p>
+                Der Client entschlüsselt die bestehenden Master-Schlüssel mit dem bisherigen passwordKey. Mit dem neuen Passwort und einem frischen passwordKeySalt leitet er einen neuen passwordKey ab und wrappt beide Master-Schlüssel neu.
+                Gleichzeitig berechnet er den neuen loginHash. Das Backend hasht diesen mit scrypt und aktualisiert <code>loginHash</code>, <code>passwordKeySalt</code> und <code>userKey</code> zusammen.
+              </p>
+              <p>
+                Die Master-Schlüssel und vorhandenen Inhaltsverschlüsselungen bleiben dabei dieselben. Ein vergessenes Passwort kann ohne bereits entsperrte Schlüssel oder Hilfe eines anderen Schlüsselinhabers nicht zum Entschlüsseln des bisherigen
+                userKey verwendet werden. Passwortänderungen widerrufen aktuell keine bereits ausgestellten JWTs.
+              </p>
+              <div class="note open">
+                Ein Benutzername ist Teil des Login-Salts. Eine Umbenennung benötigt daher einen passend neu abgeleiteten loginHash. Die aktuelle reine Username-Änderungsroute koordiniert das noch nicht; sie allein reicht für einen konsistenten
+                Passwort-Login nicht aus.
+              </div>
+            </section>
+            <section id="de-files" aria-labelledby="de-files-title">
+              <span class="badge planned">Client-Architektur</span>
+              <h2 id="de-files-title">07 · Dateien: Verschlüsselung und Binärformat</h2>
+              <p>
+                Für jede neue Verschlüsselung einer Video- oder Thumbnail-Datei erzeugt der Client einen frischen, zufälligen 32-Byte-<code>fileKey</code>. Er wrappt ihn mit dem <code>masterEncryptionKey</code> mittels AES-256-KW. Auch bei einem
+                Dateiaustausch wird ein neuer fileKey erzeugt.
+              </p>
+              <p>
+                Der Klartext wird in Chunks von höchstens <strong>34 KiB = 34.816 Bytes</strong> geteilt. Jeder Chunk wird mit AES-256-GCM und demselben fileKey, aber eigener <strong>12-Byte-IV</strong> verschlüsselt. Pro fileKey darf eine IV niemals
+                wiederverwendet werden. IVs werden kryptografisch zufällig erzeugt; eine Wiederholung innerhalb derselben Datei muss ausgeschlossen werden. Jeder Chunk besitzt einen <strong>16-Byte-GCM-Tag</strong>.
+              </p>
+              <figure>
+                <svg viewBox="0 0 760 230" role="img" aria-label="Dateiformat und Chunk-Aufbau">
+                  <title>Dateiformat und Chunk-Aufbau</title>
+                  <desc>Die Datei beginnt mit einem 40-Byte-gewrappten Dateischlüssel. Danach folgen Chunks mit 12-Byte-IV, Ciphertext und 16-Byte-GCM-Tag.</desc>
+                  <defs>
+                    <marker id="marker-de-chunks" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M230 48 L250 48" class="line" marker-end="url(#marker-de-chunks)" />
+                  <path d="M400 48 L420 48" class="line" marker-end="url(#marker-de-chunks)" />
+                  <path d="M570 48 L590 48" class="line" marker-end="url(#marker-de-chunks)" />
+                  <rect x="10" y="10" width="220" height="75" rx="10" class="secret" />
+                  <text x="120.0" y="39" text-anchor="middle">wrappedFileKey</text>
+                  <text x="120.0" y="61" text-anchor="middle" class="small">40 bytes</text>
+                  <rect x="250" y="10" width="150" height="75" rx="10" class="box" />
+                  <text x="325.0" y="39" text-anchor="middle">chunk 0</text>
+                  <text x="325.0" y="61" text-anchor="middle" class="small">IV + C₀ + tag</text>
+                  <rect x="420" y="10" width="150" height="75" rx="10" class="box" />
+                  <text x="495.0" y="39" text-anchor="middle">chunk 1</text>
+                  <text x="495.0" y="61" text-anchor="middle" class="small">IV + C₁ + tag</text>
+                  <rect x="590" y="10" width="160" height="75" rx="10" class="box" />
+                  <text x="670.0" y="39" text-anchor="middle">… chunk N−1</text>
+                  <text x="670.0" y="61" text-anchor="middle" class="small">letzter Chunk</text>
+                  <rect x="70" y="140" width="140" height="75" rx="10" class="server" />
+                  <text x="140.0" y="169" text-anchor="middle">IV</text>
+                  <text x="140.0" y="191" text-anchor="middle" class="small">12 bytes</text>
+                  <rect x="230" y="140" width="340" height="75" rx="10" class="secret" />
+                  <text x="400.0" y="169" text-anchor="middle">encryptedChunkContent</text>
+                  <text x="400.0" y="191" text-anchor="middle" class="small">0 … 34,816 bytes</text>
+                  <rect x="590" y="140" width="140" height="75" rx="10" class="server" />
+                  <text x="660.0" y="169" text-anchor="middle">GCM tag / MAC</text>
+                  <text x="660.0" y="191" text-anchor="middle" class="small">16 bytes</text>
+                </svg>
+                <figcaption>Ein voller Chunk hat 34.844 Bytes. Der GCM-Tag ist vom Metadaten-HMAC zu unterscheiden.</figcaption>
+              </figure>
+              <pre><code>wrappedFileKey = AES-256-KW(masterEncryptionKey, fileKey)
+chunk[i]       = IV[i] || encryptedChunkContent[i] || GCMtag[i]
+encryptedFile  = wrappedFileKey || chunk[0] || … || chunk[N−1]</code></pre>
+              <h3>Additional Authenticated Data (AAD)</h3>
+              <p>Die AAD ist UTF-8-kodiertes kanonisches JSON nach RFC 8785 mit genau diesen Feldern:</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Feld</th>
+                    <th scope="col">Bedeutung</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>version</code></td>
+                    <td>Die Zahl <code>1</code> für dieses Protokollprofil.</td>
+                  </tr>
+                  <tr>
+                    <td><code>context</code></td>
+                    <td><code>video</code>, <code>thumbnail</code>, <code>title</code> oder <code>comment</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>identity</code></td>
+                    <td>Bei Dateien der exakte Storage-Name <code>&lt;videoId&gt;.video</code> bzw. <code>&lt;videoId&gt;.thumbnail</code>; bei Texten die Video- bzw. Kommentar-ID.</td>
+                  </tr>
+                  <tr>
+                    <td><code>chunkIndex</code></td>
+                    <td>Ganzzahl ab <code>0</code> für die Position dieses Chunks.</td>
+                  </tr>
+                  <tr>
+                    <td><code>chunkCount</code></td>
+                    <td>Gesamtzahl der Chunks; mindestens <code>1</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <pre><code>{&quot;chunkCount&quot;:2,&quot;chunkIndex&quot;:0,&quot;context&quot;:&quot;video&quot;,&quot;identity&quot;:&quot;&lt;videoId&gt;.video&quot;,&quot;version&quot;:1}</code></pre>
+              <p>
+                Die Klartext-Gesamtlänge ist ausdrücklich <strong>kein AAD-Feld</strong>. Identitäten werden unverändert verwendet, ohne Unicode-Normalisierung oder Umdeutung in lokale Pfade. AAD wird authentisiert, aber nicht verschlüsselt und nicht
+                zusätzlich im Binärformat abgelegt. Der Client rekonstruiert sie aus dem bekannten Objektkontext und der Chunk-Struktur. Für Version 1 gelten die hier festgelegten Größen; eine zukünftige Version benötigt eine explizite
+                Protokollvereinbarung.
+              </p>
+              <h3>Grenzen, Vollständigkeit und Range-Zugriff</h3>
+              <p>
+                Alle Chunks außer dem letzten enthalten exakt 34.816 Klartext-Bytes. Der letzte enthält 1 bis 34.816 Bytes; nur eine leere Datei erhält genau einen leeren, authentisierten Chunk. Damit hat eine leere verschlüsselte Datei 68 Bytes. Ein
+                voller Chunk belegt 34.844 Bytes.
+              </p>
+              <pre><code>C = 34816                      // maximale Klartext-Bytes pro Chunk
+B = C + 12 + 16 = 34844         // volle verschlüsselte Chunk-Größe
+L = Klartextlänge in Bytes
+N = max(1, ceil(L / C))
+F = 40 + L + 28 × N             // gesamte verschlüsselte Dateigröße
+offset(i) = 40 + i × B</code></pre>
+              <p>
+                Bei einer vollständigen Datei lässt sich die Zahl der Chunks als <code>N = ceil((F − 40) / B)</code> bestimmen. Der Parser prüft mindestens 68 Gesamtbytes, gültige Chunk-Grenzen und die zulässigen Größen einschließlich des leeren
+                Sonderfalls. Er darf eine Teilantwort nicht als vollständige Datei interpretieren; bei Range-Zugriffen wird zusätzlich die Gesamtgröße des verschlüsselten Objekts benötigt.
+              </p>
+              <p>
+                Der Client verifiziert den GCM-Tag jedes Chunks gegen die erwartete AAD, bevor er dessen Klartext ausgibt. Vertauschte Chunks verletzen den Index, vollständiges Abschneiden oder Anhängen verändert die gebundene Chunk-Anzahl, und
+                Änderungen innerhalb eines Chunks scheitern an dessen Tag. Ein bereits verifizierter Chunk beweist noch nicht, dass der restliche Download vollständig eingetroffen ist.
+              </p>
+              <div class="note">
+                Ein GCM-Tag ist keine separate HMAC-SHA-256-Ausgabe. Er gehört zur authentisierten AES-GCM-Verschlüsselung und schützt Ciphertext sowie AAD. Das spätere Metadaten-HMAC hat eine eigene Aufgabe und einen eigenen Schlüssel.
+              </div>
+            </section>
+            <section id="de-text" aria-labelledby="de-text-title">
+              <span class="badge planned">Client-Architektur</span>
+              <h2 id="de-text-title">08 · Videotitel und Kommentar-Inhalte</h2>
+              <p>
+                Videotitel und Kommentar-Inhalte verwenden dasselbe Verfahren wie Dateien: UTF-8-Klartext, ein neuer zufälliger 32-Byte-fileKey, AES-KW mit masterEncryptionKey, 34-KiB-Chunks und AES-256-GCM. Der vollständige binäre Container wird
+                anschließend Base64-kodiert und im Textfeld der Datenbank gespeichert.
+              </p>
+              <pre><code>title   = Base64(wrappedFileKey || chunks)  // context=&quot;title&quot;, identity=videoId
+content = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, identity=commentId</code></pre>
+              <p>
+                Die AAD enthält zusätzlich wie bei Dateien Version, Chunk-Index und Chunk-Anzahl. Der getrennte Kontext verhindert einen Austausch zwischen einem Titel und einem Kommentar mit derselben ID. Jede neue Verschlüsselung, auch beim
+                Bearbeiten eines Textes, erhält einen neuen fileKey. Vor der Anzeige werden Base64 dekodiert, der fileKey entwrappt und alle GCM-Tags geprüft.
+              </p>
+              <p>
+                Ein regulär verschlüsselter leerer Text ist ein Base64-Container mit einem authentisierten leeren Chunk. Er ist von <code>content=''</code> eines serverseitigen Tombstones zu unterscheiden. Base64 ist nur die Transport- und
+                Speicherkodierung; die Vertraulichkeit stammt aus AES-GCM.
+              </p>
+            </section>
+            <section id="de-metadata" aria-labelledby="de-metadata-title">
+              <span class="badge planned">Client-Architektur</span>
+              <h2 id="de-metadata-title">09 · Metadaten-Integrität und Tombstones</h2>
+              <p>Der Client erzeugt das Metadaten-HMAC mit <code>masterAuthKey</code> und HMAC-SHA-256. Die Eingabe ist eine kanonische Darstellung aller fachlichen Attribute des jeweiligen Video- oder Kommentar-Datensatzes, mit diesen Regeln:</p>
+              <ol>
+                <li>Das Feld <code>hmac</code> und interne Datenbank-Hilfsfelder werden ausgeschlossen.</li>
+                <li>
+                  Verschlüsselte Textwerte werden durch ihre <strong>Länge in der gespeicherten Form</strong> ersetzt: <code>title</code> bzw. <code>content</code> enthält in der HMAC-Projektion eine Zahl statt des Base64-Strings. Bei kanonischem
+                  Base64 entspricht die Zeichenzahl der UTF-8-Bytezahl; mitgezählt wird das Padding. Es ist weder die Klartextlänge noch die Länge des dekodierten Containers.
+                </li>
+                <li>Alle übrigen Attribute bleiben inhaltlich erhalten. Das umfasst IDs, MIME-Typen, JSON-<code>meta</code>, Zeitstempel sowie bei Kommentaren Autor, Video-Zuordnung und Flags.</li>
+                <li>Datumswerte werden vor der Kanonisierung als UTC-ISO-Strings entsprechend <code>toISOString()</code> dargestellt. Die Projektion enthält nur gültige JSON-Werte, keine <code>undefined</code>-Werte oder nicht-endlichen Zahlen.</li>
+                <li>Serialisierung erfolgt per RFC 8785 (JCS), danach UTF-8-Kodierung und HMAC-SHA-256. Die 32-Byte-Ausgabe wird als Standard-Base64 gespeichert.</li>
+              </ol>
+              <pre><code>projection(video)   = allBusinessAttributesExceptHmac(video)
+projection.title    = storedVideo.title.length
+
+projection(comment) = allBusinessAttributesExceptHmac(comment)
+projection.content  = storedComment.content.length
+
+hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
+              <p>
+                Die Feldnamen bleiben erhalten: Die Projektion ersetzt beispielsweise <code>"title":"…"</code> durch <code>"title":92</code>, ohne ein zusätzliches <code>titleLength</code>-Feld einzuführen. Änderungen erfordern ein neues HMAC über
+                den vollständigen resultierenden Datensatz. Der Client verifiziert es vor der Verwendung; das Backend speichert es, kann es ohne masterAuthKey aber weder prüfen noch selbst erzeugen.
+              </p>
+              <div class="note">
+                Das Metadaten-HMAC bindet bewusst nur die gespeicherte Länge eines verschlüsselten Textes. Es authentisiert nicht dessen konkreten Base64-Inhalt. Dafür sind die GCM-Tags zuständig. Ein früherer gültiger Ciphertext desselben Kontexts
+                und derselben ID mit gleicher gespeicherter Länge kann damit nicht allein über das Metadaten-HMAC als veraltet erkannt werden.
+              </div>
+              <h3>Ausnahme: serverseitige Löschmarkierungen</h3>
+              <p>
+                Beim Soft-Delete setzt das Backend <code>deleted=true</code> und <code>content=''</code>. Das gilt für eigene Kommentare, Moderation und die Kommentare eines gelöschten Nutzers. Da der Server keinen masterAuthKey besitzt, kann er kein
+                neues gültiges HMAC für den geänderten Datensatz erzeugen; der bisherige HMAC-Wert darf nicht als gültiger Nachweis interpretiert werden.
+              </p>
+              <div class="note open">
+                <strong>Tombstones sind ausdrücklich nicht kryptografisch verifiziert.</strong> Der Client zeigt sie als serverseitige Löschmarkierung und nicht als authentisierten Kommentar an. Er versucht nicht, den leeren Inhalt zu entschlüsseln.
+                Auch die verbleibenden Tombstone-Metadaten sind damit nicht kryptografisch bestätigt. Ein manipulierter Server kann folglich Inhalte als gelöscht verbergen; die Architektur verhindert keine Löschung oder Unterdrückung von Daten.
+              </div>
+            </section>
+            <section id="de-limits" aria-labelledby="de-limits-title">
+              <h2 id="de-limits-title">10 · Schutzwirkung und Grenzen</h2>
+              <p>
+                Die Architektur schützt die Vertraulichkeit von Inhalten gegenüber einem Server oder Storage, der nur verschlüsselte Daten verarbeitet. Authentisierte Verschlüsselung erkennt Manipulationen im gebundenen Kontext; der gemeinsame HMAC
+                schützt die Integrität von Metadaten gegenüber Parteien ohne masterAuthKey.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Grenze</th>
+                    <th scope="col">Bedeutung</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Sichtbare Metadaten</td>
+                    <td>
+                      Benutzernamen, Anzeigenamen, Rollen, IDs, Beziehungen, Zeitstempel, MIME-Typen, Dateigrößen und Zugriffsmuster bleiben für das Backend sichtbar. <code>meta</code> ist nicht automatisch verschlüsselt; dort abgelegte Klartextwerte
+                      bleiben lesbar.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Gemeinsame Schlüssel</td>
+                    <td>
+                      Kontolöschung sperrt weitere API-Zugriffe, entzieht aber keine bereits kopierten Schlüssel oder Daten. Echter kryptografischer Entzug erfordert Schlüsselrotation und gegebenenfalls Neuverschlüsselung; er macht frühere Kopien
+                      nicht unlesbar.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Keine individuelle Signatur</td>
+                    <td>Jeder Inhaber des masterAuthKey kann gültige HMACs erzeugen. Ein gültiger HMAC beweist daher nicht, welcher konkrete Nutzer einen Datensatz erstellt hat; Rollen und Autorenzuordnung werden vom Backend durchgesetzt.</td>
+                  </tr>
+                  <tr>
+                    <td>Keine automatische Aktualität</td>
+                    <td>Ein früherer gültiger Datensatz oder eine frühere gültige Datei kann erneut ausgespielt werden. Zeitstempel im HMAC binden ihren Wert, beweisen ohne vertrauenswürdigen Vergleichszustand aber keine Aktualität.</td>
+                  </tr>
+                  <tr>
+                    <td>Client-Vertrauen</td>
+                    <td>
+                      XSS, kompromittierte Browser-Erweiterungen oder manipuliertes ausgeliefertes JavaScript können Passwort und Schlüssel abgreifen. Die Vertraulichkeitszusage setzt vertrauenswürdigen Client-Code und ein vertrauenswürdiges Endgerät
+                      voraus.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Passwortangriffe</td>
+                    <td>Ein gestohlener userKey und passwordKeySalt erlauben Offline-Passwortversuche über die Unwrap-Prüfung. Argon2id verteuert diese Versuche; starke Passwörter bleiben erforderlich.</td>
+                  </tr>
+                  <tr>
+                    <td>Wiederherstellung</td>
+                    <td>
+                      Ohne einen verfügbaren berechtigten Schlüsselinhaber gibt es keine serverseitige Wiederherstellung der Master-Schlüssel. Backups müssen Datenbank, Storage, stabilen Instanz-Salt und benötigte Konfiguration konsistent sichern.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                Die Bezeichnung „Zero-Knowledge“ ist somit eine begrenzte Architekturaussage und keine Zusage, dass ein aktiver Serverangreifer, ein berechtigter Schlüsselinhaber oder ein kompromittierter Client keinerlei Schaden verursachen kann.
+              </p>
+            </section>
+            <section id="de-implementation" aria-labelledby="de-implementation-title">
+              <h2 id="de-implementation-title">11 · Umsetzungsstand und Referenzen</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Bereich</th>
+                    <th scope="col">Stand im Repository</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Bootstrap / userKey</td>
+                    <td><a href="lib/cli/admin.ts">Admin-CLI</a>: zwei getrennte Master-Schlüssel und 80-Byte-Envelope implementiert.</td>
+                  </tr>
+                  <tr>
+                    <td>Argon2id / scrypt</td>
+                    <td><a href="lib/util/deriveKey.ts">deriveKey.ts</a> · <a href="lib/util/password.ts">password.ts</a></td>
+                  </tr>
+                  <tr>
+                    <td>.pepper</td>
+                    <td><a href="lib/util/pepper.ts">pepper.ts</a> · <a href="lib/initialize-admin.ts">Admin entrypoint</a> · <a href="lib/initialize-config.ts">Config entrypoint</a> · <a href="lib/server.ts">Server</a></td>
+                  </tr>
+                  <tr>
+                    <td>JWT / Rollen</td>
+                    <td><a href="lib/service/AuthService.ts">AuthService.ts</a></td>
+                  </tr>
+                  <tr>
+                    <td>Nutzer-Passwortattribute</td>
+                    <td><a href="lib/service/UserService.ts">UserService.ts</a></td>
+                  </tr>
+                  <tr>
+                    <td>Client-Kryptografie</td>
+                    <td>Datei-/Textverschlüsselung, AAD, Metadaten-HMAC und Client-Neu-Wrapping sind die hier festgelegte Zielarchitektur; das Backend prüft diese Kryptografie nicht.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                Die Backend-Routen akzeptieren und speichern die vom Client gelieferten verschlüsselten Werte. Response-Schemas validieren die Datenform, nicht die kryptografische Echtheit. Diese Dokumentation führt keine Änderungen am Laufzeitcode
+                ein.
+              </p>
+              <ul>
+                <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP · Password Storage Cheat Sheet</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc9106.html">RFC 9106 · Argon2</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc3394">RFC 3394 · AES Key Wrap</a></li>
+                <li><a href="https://csrc.nist.gov/pubs/sp/800/38/d/final">NIST SP 800-38D · GCM</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc8785.html">RFC 8785 · JSON Canonicalization Scheme</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc4648.html">RFC 4648 · Base64</a></li>
+              </ul>
+            </section>
+            <p class="foot">Stand: 21. November 2026 · Eigenständige Offline-Dokumentation · Keine externen Skripte oder Schriftarten.</p>
+          </article>
+        </div>
+      </div>
+      <div id="panel-en" role="tabpanel" aria-labelledby="tab-en" lang="en" hidden>
+        <div class="layout">
+          <nav aria-label="Contents">
+            <a href="#en-overview">01 · Goals and trust boundaries</a><a href="#en-keys">02 · Keys and responsibilities</a><a href="#en-bootstrap">03 · Bootstrap and password derivation</a><a href="#en-envelope">04 · Packing and unpacking userKey</a
+            ><a href="#en-login">05 · Authentication and server access</a><a href="#en-lifecycle">06 · Adding users and changing passwords</a><a href="#en-files">07 · Files: encryption and binary format</a
+            ><a href="#en-text">08 · Video titles and comment contents</a><a href="#en-metadata">09 · Metadata integrity and tombstones</a><a href="#en-limits">10 · Protection and limitations</a
+            ><a href="#en-implementation">11 · Implementation status and references</a>
+          </nav>
+          <article>
+            <section id="en-overview" aria-labelledby="en-overview-title">
+              <h2 id="en-overview-title">01 · Goals and trust boundaries</h2>
+              <p>
+                VideoVault protects private videos with end-to-end encryption. Video and thumbnail files, video titles and comment contents are encrypted in the client before transmission. The server holds master keys only in wrapped form and handles
+                authentication, authorization and persistence.
+              </p>
+              <figure>
+                <svg viewBox="0 0 760 180" role="img" aria-label="Trust boundaries">
+                  <title>Trust boundaries</title>
+                  <desc>Plaintext and master keys stay in the client. The backend authenticates; database and storage hold encrypted content.</desc>
+                  <defs>
+                    <marker id="marker-en-trust" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M235 87 L275 87" class="line" marker-end="url(#marker-en-trust)" />
+                  <path d="M480 87 L520 87" class="line" marker-end="url(#marker-en-trust)" />
+                  <rect x="10" y="25" width="225" height="125" rx="10" class="secret" />
+                  <text x="122.5" y="54" text-anchor="middle">Client</text>
+                  <text x="122.5" y="76" text-anchor="middle" class="small">Password · plaintext</text>
+                  <text x="122.5" y="95" text-anchor="middle" class="small">masterEncryptionKey</text>
+                  <text x="122.5" y="114" text-anchor="middle" class="small">masterAuthKey</text>
+                  <rect x="275" y="25" width="205" height="125" rx="10" class="server" />
+                  <text x="377.5" y="54" text-anchor="middle">Backend</text>
+                  <text x="377.5" y="76" text-anchor="middle" class="small">Verify loginHash</text>
+                  <text x="377.5" y="95" text-anchor="middle" class="small">JWT · roles · uploads</text>
+                  <rect x="520" y="25" width="230" height="125" rx="10" class="box" />
+                  <text x="635.0" y="54" text-anchor="middle">Database / storage</text>
+                  <text x="635.0" y="76" text-anchor="middle" class="small">Ciphertext · metadata</text>
+                  <text x="635.0" y="95" text-anchor="middle" class="small">userKey · scrypt hash</text>
+                </svg>
+                <figcaption>Web operation: TLS carries login credentials, encrypted data and visible metadata.</figcaption>
+              </figure>
+              <div class="note">“Zero knowledge” describes the goal that normal web operation requires neither the plaintext password nor decrypted contents or unwrapped master keys on the server. This is not a zero-knowledge proof protocol.</div>
+              <p>The local admin CLI is an explicit bootstrap exception: it processes the first password and generates the original keys on the machine running the command.</p>
+              <p>This document distinguishes existing backend behavior from the agreed client architecture. Describing a client procedure does not mean it has already been implemented or independently audited.</p>
+            </section>
+            <section id="en-keys" aria-labelledby="en-keys-title">
+              <h2 id="en-keys-title">02 · Keys and responsibilities</h2>
+              <figure>
+                <svg viewBox="0 0 760 340" role="img" aria-label="Key hierarchy">
+                  <title>Key hierarchy</title>
+                  <desc>The password derives passwordKey, which protects two separate master keys. The encryption key wraps file keys; the authentication key authenticates metadata.</desc>
+                  <defs>
+                    <marker id="marker-en-keys" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M330 77 L180 120" class="line" marker-end="url(#marker-en-keys)" />
+                  <path d="M430 77 L580 120" class="line" marker-end="url(#marker-en-keys)" />
+                  <path d="M180 198 L180 245" class="line" marker-end="url(#marker-en-keys)" />
+                  <path d="M580 198 L580 245" class="line" marker-end="url(#marker-en-keys)" />
+                  <rect x="255" y="5" width="250" height="72" rx="10" class="box" />
+                  <text x="380.0" y="34" text-anchor="middle">Password + salt</text>
+                  <text x="380.0" y="56" text-anchor="middle" class="small">Argon2id → passwordKey</text>
+                  <rect x="10" y="120" width="340" height="78" rx="10" class="secret" />
+                  <text x="180.0" y="149" text-anchor="middle">masterEncryptionKey</text>
+                  <text x="180.0" y="171" text-anchor="middle" class="small">32 bytes · random</text>
+                  <rect x="410" y="120" width="340" height="78" rx="10" class="secret" />
+                  <text x="580.0" y="149" text-anchor="middle">masterAuthKey</text>
+                  <text x="580.0" y="171" text-anchor="middle" class="small">32 bytes · random</text>
+                  <rect x="10" y="245" width="340" height="78" rx="10" class="box" />
+                  <text x="180.0" y="274" text-anchor="middle">File key → AES-256-GCM</text>
+                  <text x="180.0" y="296" text-anchor="middle" class="small">AES-KW · files and text</text>
+                  <rect x="410" y="245" width="340" height="78" rx="10" class="box" />
+                  <text x="580.0" y="274" text-anchor="middle">HMAC-SHA-256</text>
+                  <text x="580.0" y="296" text-anchor="middle" class="small">Metadata integrity</text>
+                </svg>
+                <figcaption>Arrows show protection relationships, not derivation of master keys from the password.</figcaption>
+              </figure>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Value</th>
+                    <th scope="col">Generation and purpose</th>
+                    <th scope="col">Storage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>masterEncryptionKey</code></td>
+                    <td>32 random bytes; wraps individual file keys.</td>
+                    <td>Plaintext only in the trusted client; wrapped inside userKey.</td>
+                  </tr>
+                  <tr>
+                    <td><code>masterAuthKey</code></td>
+                    <td>An independent 32 random bytes; HMAC-SHA-256 for metadata.</td>
+                    <td>Plaintext only in the client; separately wrapped inside userKey.</td>
+                  </tr>
+                  <tr>
+                    <td><code>passwordKey</code></td>
+                    <td>Argon2id of the password and individual passwordKeySalt; 32 bytes.</td>
+                    <td>Only during local key processing.</td>
+                  </tr>
+                  <tr>
+                    <td><code>fileKey</code></td>
+                    <td>A fresh 32 random bytes for each encryption of a file or text value.</td>
+                    <td>Wrapped at the beginning of the encrypted object.</td>
+                  </tr>
+                  <tr>
+                    <td><code>loginHash</code></td>
+                    <td>Base64-encoded Argon2id output used for authentication.</td>
+                    <td>Sent to the backend, which stores an additional scrypt hash.</td>
+                  </tr>
+                  <tr>
+                    <td>JWT signing keys</td>
+                    <td>Separate server-side HMAC keys; never content or metadata keys.</td>
+                    <td><code>./jwtkeys</code></td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                All authorized users share the same two master keys. Each user has an individual password, passwordKeySalt, derived passwordKey and wrapped representation called userKey. All random values require a cryptographically secure random
+                number generator.
+              </p>
+            </section>
+            <section id="en-bootstrap" aria-labelledby="en-bootstrap-title">
+              <span class="badge">Backend implemented</span>
+              <h2 id="en-bootstrap-title">03 · Bootstrap and password derivation</h2>
+              <p>
+                The server, configuration CLI and admin CLI entrypoints ensure that <code>./.pepper</code> exists. Initial creation generates 32 random bytes stored as exactly 64 hexadecimal characters. Existing values are reused; invalid or
+                unreadable files cause an error. New files use mode <code>0600</code> and are published atomically.
+              </p>
+              <p>The admin CLI asks for a username (at least 3 characters), display name and masked password. It reads the instance value from <code>./.pepper</code>, assigns a UUID v4 and refuses another bootstrap if any admin already exists.</p>
+              <pre><code>A(P, S) = Argon2id(password=UTF8(P), salt=S,
+                     version=0x13, memory=19456 KiB,
+                     timeCost=2, parallelism=1, output=32 bytes)
+
+loginHash       = Base64(A(password, UTF8(pepperHex + username)))
+passwordKeySalt = CSPRNG(32 bytes)
+passwordKey     = A(password, passwordKeySalt)</code></pre>
+              <p>
+                <code>0x13</code> identifies Argon2 version 1.3 (decimal 19). Memory use is 19 MiB. This is the <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP minimum Argon2id profile</a>. Passwords
+                and string salts use UTF-8 without automatic Unicode normalization. The login salt uses the stored hexadecimal text, not its decoded 32-byte value.
+              </p>
+              <p>
+                The CLI independently generates the original master keys, wraps them and creates the first user with only the admin role. Temporary plaintext key buffers are overwritten in a <code>finally</code> block; this does not guarantee erasure
+                of every copy of a JavaScript string.
+              </p>
+              <div class="note">
+                In this architecture, the value stored in <code>./.pepper</code> is a <strong>public, stable instance salt</strong>, not a secret pepper in the cryptographic sense. Clients need the exact stored hexadecimal text for login derivation.
+                A future public bootstrap endpoint is intended to provide it; that endpoint is not implemented in the current backend. The value is not rotated on restart and must be preserved during recovery.
+              </div>
+            </section>
+            <section id="en-envelope" aria-labelledby="en-envelope-title">
+              <span class="badge">Backend implemented</span>
+              <h2 id="en-envelope-title">04 · Packing and unpacking userKey</h2>
+              <figure>
+                <svg viewBox="0 0 760 230" role="img" aria-label="Binary userKey format">
+                  <title>Binary userKey format</title>
+                  <desc>Two separately wrapped 40-byte keys are concatenated into 80 bytes, then Base64-encoded together.</desc>
+                  <defs>
+                    <marker id="marker-en-envelope" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M185 95 L300 145" class="line" marker-end="url(#marker-en-envelope)" />
+                  <path d="M575 95 L460 145" class="line" marker-end="url(#marker-en-envelope)" />
+                  <rect x="10" y="15" width="350" height="80" rx="10" class="secret" />
+                  <text x="185.0" y="44" text-anchor="middle">wrappedMasterEncryptionKey</text>
+                  <text x="185.0" y="66" text-anchor="middle" class="small">40 bytes · [0, 40)</text>
+                  <rect x="400" y="15" width="350" height="80" rx="10" class="secret" />
+                  <text x="575.0" y="44" text-anchor="middle">wrappedMasterAuthKey</text>
+                  <text x="575.0" y="66" text-anchor="middle" class="small">40 bytes · [40, 80)</text>
+                  <rect x="185" y="145" width="390" height="72" rx="10" class="box" />
+                  <text x="380.0" y="174" text-anchor="middle">userKey</text>
+                  <text x="380.0" y="196" text-anchor="middle" class="small">80 bytes → Base64 → 108 characters</text>
+                </svg>
+                <figcaption>Concatenate the buffers before Base64 encoding; do not concatenate two Base64 strings.</figcaption>
+              </figure>
+              <pre><code>wrappedMasterEncryptionKey = AES-256-KW(passwordKey, masterEncryptionKey)
+wrappedMasterAuthKey       = AES-256-KW(passwordKey, masterAuthKey)
+userKey = Base64(wrappedMasterEncryptionKey || wrappedMasterAuthKey)</code></pre>
+              <p>
+                Wrapping uses <a href="https://www.rfc-editor.org/rfc/rfc3394">AES Key Wrap from RFC 3394</a> without padding, with the defined initial value <code>A6A6A6A6A6A6A6A6</code>. Wrapping a 32-byte key produces 40 bytes. Each key is wrapped
+                independently; only the resulting buffers are concatenated.
+              </p>
+              <pre><code>bytes = Base64Decode(userKey)        // exactly 80 bytes
+wrappedEncryption = bytes.subarray(0, 40)
+wrappedAuth       = bytes.subarray(40, 80)
+masterEncryptionKey = AES-256-KW-Unwrap(passwordKey, wrappedEncryption)
+masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
+              <p>
+                Use <code>Buffer.subarray()</code> or <code>Uint8Array.subarray()</code> to split the data; Node Buffers have no <code>splice()</code> method. Base64 uses the standard alphabet and padding from RFC 4648. Check the decoded length and
+                the results of both unwrap operations before using the keys. Any failure aborts unlocking.
+              </p>
+            </section>
+            <section id="en-login" aria-labelledby="en-login-title">
+              <span class="badge">Backend implemented</span>
+              <h2 id="en-login-title">05 · Authentication and server access</h2>
+              <ol>
+                <li>The client locally derives loginHash using Argon2id as described above and sends the username and Base64 string over TLS.</li>
+                <li>
+                  The backend treats this Base64 string as the password without decoding it. The database stores a scrypt string with a separate 16-byte salt: <code>N=2¹⁵, r=8, p=3</code>, output 32 bytes. Verification uses
+                  <code>timingSafeEqual</code>.
+                </li>
+                <li>On success, an HS256 JWT is signed with a randomly selected key from ten server-side 32-byte signing keys. Default lifetime is one hour. Verification checks algorithm, signature, key ID, issuer, audience and expiration.</li>
+                <li>Each authenticated request loads the current user from the database. Roles come from the current account flags, not token claims. API user responses omit <code>loginHash</code>.</li>
+              </ol>
+              <p>
+                The fifth failed attempt for a username starts a 15-second lock. Subsequent failures after expiry double the duration up to 15 minutes. Attempts during a lock restart its duration without increasing the counter. A successful login
+                removes the counter. Concurrent attempts for one username are serialized within the single AuthService instance.
+              </p>
+              <div class="note">The transmitted loginHash is a reusable login secret. Possessing it enables login without knowing the original password. Never log it, tokens or passwords. TLS remains necessary.</div>
+              <p>
+                Admins manage accounts, editors manage videos, and moderators can modify other users’ comments. Any authenticated user may retrieve content and manage their own comments. These API permissions are separate from possession of the
+                shared cryptographic keys.
+              </p>
+            </section>
+            <section id="en-lifecycle" aria-labelledby="en-lifecycle-title">
+              <span class="badge planned">Client architecture</span>
+              <h2 id="en-lifecycle-title">06 · Adding users and changing passwords</h2>
+              <h3>Adding another user</h3>
+              <p>
+                The current authorized user locally unlocks their userKey. The new user’s password is used to derive a new loginHash, a fresh 32-byte passwordKeySalt and a new passwordKey. The existing master keys are individually wrapped with that
+                new passwordKey and saved as the new userKey. No new pair of master keys is generated.
+              </p>
+              <p>
+                In this procedure the provisioning client temporarily processes the new user’s initial password. An invitation protocol or public-key handover is outside this architecture. The backend receives the completed password attributes; it
+                does not unwrap or rewrap the keys.
+              </p>
+              <h3>Changing a password</h3>
+              <p>
+                The client unwraps the existing master keys with the previous passwordKey. It derives a new passwordKey from the new password and a fresh passwordKeySalt, then rewraps both master keys and computes the new loginHash. The backend
+                hashes this with scrypt and updates <code>loginHash</code>, <code>passwordKeySalt</code> and <code>userKey</code> together.
+              </p>
+              <p>
+                The master keys and existing content encryption remain the same. A forgotten password cannot unlock the old userKey without already unlocked keys or assistance from another key holder. Password changes currently do not revoke
+                previously issued JWTs.
+              </p>
+              <div class="note open">
+                The username participates in the login salt. Renaming a user therefore requires a newly derived loginHash matching that name. The current username-only change route does not coordinate this yet; using that route alone is insufficient
+                for a consistent password login.
+              </div>
+            </section>
+            <section id="en-files" aria-labelledby="en-files-title">
+              <span class="badge planned">Client architecture</span>
+              <h2 id="en-files-title">07 · Files: encryption and binary format</h2>
+              <p>For each new encryption of a video or thumbnail file, the client generates a fresh, random 32-byte fileKey and wraps it with masterEncryptionKey using AES-256-KW. Replacing a file also requires a fresh fileKey.</p>
+              <p>
+                Plaintext is split into chunks of at most <strong>34 KiB = 34,816 bytes</strong>. Each chunk uses AES-256-GCM with the same fileKey but its own <strong>12-byte IV</strong>. An IV must never be reused with the same fileKey. Generate
+                IVs with a cryptographically secure random number generator and prevent repetitions within the file. Each chunk has a <strong>16-byte GCM tag</strong>.
+              </p>
+              <figure>
+                <svg viewBox="0 0 760 230" role="img" aria-label="File format and chunk layout">
+                  <title>File format and chunk layout</title>
+                  <desc>The file starts with a 40-byte wrapped file key. Each following chunk contains a 12-byte IV, ciphertext and a 16-byte GCM tag.</desc>
+                  <defs>
+                    <marker id="marker-en-chunks" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#65868d" /></marker>
+                  </defs>
+                  <path d="M230 48 L250 48" class="line" marker-end="url(#marker-en-chunks)" />
+                  <path d="M400 48 L420 48" class="line" marker-end="url(#marker-en-chunks)" />
+                  <path d="M570 48 L590 48" class="line" marker-end="url(#marker-en-chunks)" />
+                  <rect x="10" y="10" width="220" height="75" rx="10" class="secret" />
+                  <text x="120.0" y="39" text-anchor="middle">wrappedFileKey</text>
+                  <text x="120.0" y="61" text-anchor="middle" class="small">40 bytes</text>
+                  <rect x="250" y="10" width="150" height="75" rx="10" class="box" />
+                  <text x="325.0" y="39" text-anchor="middle">chunk 0</text>
+                  <text x="325.0" y="61" text-anchor="middle" class="small">IV + C₀ + tag</text>
+                  <rect x="420" y="10" width="150" height="75" rx="10" class="box" />
+                  <text x="495.0" y="39" text-anchor="middle">chunk 1</text>
+                  <text x="495.0" y="61" text-anchor="middle" class="small">IV + C₁ + tag</text>
+                  <rect x="590" y="10" width="160" height="75" rx="10" class="box" />
+                  <text x="670.0" y="39" text-anchor="middle">… chunk N−1</text>
+                  <text x="670.0" y="61" text-anchor="middle" class="small">final chunk</text>
+                  <rect x="70" y="140" width="140" height="75" rx="10" class="server" />
+                  <text x="140.0" y="169" text-anchor="middle">IV</text>
+                  <text x="140.0" y="191" text-anchor="middle" class="small">12 bytes</text>
+                  <rect x="230" y="140" width="340" height="75" rx="10" class="secret" />
+                  <text x="400.0" y="169" text-anchor="middle">encryptedChunkContent</text>
+                  <text x="400.0" y="191" text-anchor="middle" class="small">0 … 34,816 bytes</text>
+                  <rect x="590" y="140" width="140" height="75" rx="10" class="server" />
+                  <text x="660.0" y="169" text-anchor="middle">GCM tag / MAC</text>
+                  <text x="660.0" y="191" text-anchor="middle" class="small">16 bytes</text>
+                </svg>
+                <figcaption>A full chunk occupies 34,844 bytes. The GCM tag is distinct from the metadata HMAC.</figcaption>
+              </figure>
+              <pre><code>wrappedFileKey = AES-256-KW(masterEncryptionKey, fileKey)
+chunk[i]       = IV[i] || encryptedChunkContent[i] || GCMtag[i]
+encryptedFile  = wrappedFileKey || chunk[0] || … || chunk[N−1]</code></pre>
+              <h3>Additional authenticated data (AAD)</h3>
+              <p>AAD is UTF-8-encoded canonical JSON according to RFC 8785, containing exactly these fields:</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Field</th>
+                    <th scope="col">Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>version</code></td>
+                    <td>The number <code>1</code>, identifying this protocol profile.</td>
+                  </tr>
+                  <tr>
+                    <td><code>context</code></td>
+                    <td><code>video</code>, <code>thumbnail</code>, <code>title</code> or <code>comment</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>identity</code></td>
+                    <td>For files, the exact storage name <code>&lt;videoId&gt;.video</code> or <code>&lt;videoId&gt;.thumbnail</code>; for text, the video or comment ID.</td>
+                  </tr>
+                  <tr>
+                    <td><code>chunkIndex</code></td>
+                    <td>The integer position of this chunk, starting at <code>0</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>chunkCount</code></td>
+                    <td>Total number of chunks, at least <code>1</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <pre><code>{&quot;chunkCount&quot;:2,&quot;chunkIndex&quot;:0,&quot;context&quot;:&quot;video&quot;,&quot;identity&quot;:&quot;&lt;videoId&gt;.video&quot;,&quot;version&quot;:1}</code></pre>
+              <p>
+                The total plaintext length is explicitly <strong>not an AAD field</strong>. Use identities unchanged, without Unicode normalization or reinterpretation as local paths. AAD is authenticated, not encrypted, and is not separately stored
+                in the binary container. The client reconstructs it from the known object context and chunk structure. Version 1 uses the sizes defined here; a future version requires explicit protocol agreement.
+              </p>
+              <h3>Boundaries, completeness and range access</h3>
+              <p>
+                Every chunk except the last contains exactly 34,816 plaintext bytes. The last contains 1 to 34,816 bytes; an empty file alone uses exactly one authenticated empty chunk. An encrypted empty file therefore occupies 68 bytes. A full
+                chunk occupies 34,844 bytes.
+              </p>
+              <pre><code>C = 34816                      // maximum plaintext bytes per chunk
+B = C + 12 + 16 = 34844         // full encrypted chunk size
+L = plaintext length in bytes
+N = max(1, ceil(L / C))
+F = 40 + L + 28 × N             // total encrypted file size
+offset(i) = 40 + i × B</code></pre>
+              <p>
+                For a complete file, chunk count can be calculated as <code>N = ceil((F − 40) / B)</code>. The parser enforces a minimum total size of 68 bytes, valid chunk boundaries and permitted sizes, including the empty special case. A partial
+                response must not be interpreted as a complete file; range requests also require the encrypted object’s total size.
+              </p>
+              <p>
+                The client verifies each GCM tag against the expected AAD before releasing that chunk’s plaintext. Reordering violates the bound index; truncating or appending complete chunks changes the authenticated chunk count; changes within a
+                chunk invalidate its tag. A verified individual chunk does not prove that the remaining download has arrived completely.
+              </p>
+              <div class="note">A GCM tag is not a separate HMAC-SHA-256 output. It belongs to authenticated AES-GCM encryption and protects ciphertext and AAD. The metadata HMAC has a separate purpose and key.</div>
+            </section>
+            <section id="en-text" aria-labelledby="en-text-title">
+              <span class="badge planned">Client architecture</span>
+              <h2 id="en-text-title">08 · Video titles and comment contents</h2>
+              <p>
+                Video titles and comment contents use the same procedure as files: UTF-8 plaintext, a fresh random 32-byte fileKey, AES-KW with masterEncryptionKey, 34-KiB chunks and AES-256-GCM. The complete binary container is then Base64-encoded
+                and stored in the database text field.
+              </p>
+              <pre><code>title   = Base64(wrappedFileKey || chunks)  // context=&quot;title&quot;, identity=videoId
+content = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, identity=commentId</code></pre>
+              <p>
+                AAD also includes the version, chunk index and chunk count, as for files. The separate context prevents substitution between a title and a comment with the same ID. Every new encryption, including editing a text value, receives a
+                fresh fileKey. Before display, decode Base64, unwrap the fileKey and verify all GCM tags.
+              </p>
+              <p>
+                A regularly encrypted empty string is a Base64 container containing an authenticated empty chunk. It differs from <code>content=''</code> on a server-side tombstone. Base64 is only a transport and storage encoding; AES-GCM provides
+                confidentiality.
+              </p>
+            </section>
+            <section id="en-metadata" aria-labelledby="en-metadata-title">
+              <span class="badge planned">Client architecture</span>
+              <h2 id="en-metadata-title">09 · Metadata integrity and tombstones</h2>
+              <p>The client generates the metadata HMAC with masterAuthKey and HMAC-SHA-256. Its input is a canonical representation of all business attributes of the video or comment record, following these rules:</p>
+              <ol>
+                <li>Exclude the <code>hmac</code> field and internal database helper fields.</li>
+                <li>
+                  Replace encrypted text values with their <strong>length as stored</strong>: <code>title</code> or <code>content</code> becomes a number instead of the Base64 string in the HMAC projection. For canonical Base64, the character count
+                  equals the UTF-8 byte count and includes padding. It is neither plaintext length nor decoded container length.
+                </li>
+                <li>Preserve all other attributes, including IDs, MIME types, JSON <code>meta</code>, timestamps, and, for comments, author, video association and flags.</li>
+                <li>Represent dates as UTC ISO strings equivalent to <code>toISOString()</code> before canonicalization. The projection must contain valid JSON values only, with no <code>undefined</code> or non-finite numbers.</li>
+                <li>Serialize using RFC 8785 (JCS), encode as UTF-8 and apply HMAC-SHA-256. Store the 32-byte output as standard Base64.</li>
+              </ol>
+              <pre><code>projection(video)   = allBusinessAttributesExceptHmac(video)
+projection.title    = storedVideo.title.length
+
+projection(comment) = allBusinessAttributesExceptHmac(comment)
+projection.content  = storedComment.content.length
+
+hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
+              <p>
+                Keep field names unchanged: for example, replace <code>"title":"…"</code> with <code>"title":92</code> in the projection rather than introducing an extra titleLength field. Updates require a new HMAC over the complete resulting
+                record. The client verifies it before use; the backend stores it but cannot verify or generate it without masterAuthKey.
+              </p>
+              <div class="note">
+                The metadata HMAC deliberately binds only the stored length of encrypted text, not its actual Base64 contents. GCM tags provide content authentication. The metadata HMAC alone therefore cannot identify an earlier valid ciphertext for
+                the same context and identity with the same stored length as stale.
+              </div>
+              <h3>Exception: server-side deletion markers</h3>
+              <p>
+                For soft deletion, the backend sets <code>deleted=true</code> and <code>content=''</code>. This applies to own-comment deletion, moderation and deletion of a user’s comments. Without masterAuthKey, the server cannot produce a new
+                valid HMAC for the modified record; the old HMAC must not be treated as valid evidence.
+              </p>
+              <div class="note open">
+                <strong>Tombstones are explicitly not cryptographically verified.</strong> The client displays a server-side deletion marker rather than an authenticated comment and does not attempt to decrypt the empty content. Remaining tombstone
+                metadata is not cryptographically confirmed either. A malicious server can consequently hide content by marking it deleted; this architecture does not prevent deletion or suppression of data.
+              </div>
+            </section>
+            <section id="en-limits" aria-labelledby="en-limits-title">
+              <h2 id="en-limits-title">10 · Protection and limitations</h2>
+              <p>
+                The architecture protects content confidentiality from a server or storage system that handles encrypted data only. Authenticated encryption detects tampering within its bound context, and the shared HMAC protects metadata integrity
+                against parties without masterAuthKey.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Boundary</th>
+                    <th scope="col">Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Visible metadata</td>
+                    <td>
+                      Usernames, display names, roles, IDs, relationships, timestamps, MIME types, file sizes and access patterns remain visible to the backend. <code>meta</code> is not automatically encrypted; plaintext values placed there remain
+                      readable.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Shared keys</td>
+                    <td>Deleting an account blocks further API access but does not revoke keys or data already copied. Cryptographic revocation requires key rotation and potentially re-encryption; it cannot make previous copies unreadable.</td>
+                  </tr>
+                  <tr>
+                    <td>No individual signature</td>
+                    <td>Every masterAuthKey holder can generate valid HMACs. A valid HMAC therefore cannot prove which individual user created a record; the backend enforces roles and author assignment.</td>
+                  </tr>
+                  <tr>
+                    <td>No automatic freshness</td>
+                    <td>An earlier valid record or file can be replayed. Including timestamps in an HMAC binds their values but does not prove freshness without trusted comparison state.</td>
+                  </tr>
+                  <tr>
+                    <td>Client trust</td>
+                    <td>XSS, compromised browser extensions or modified delivered JavaScript can steal passwords and keys. Confidentiality assumes trusted client code and a trusted endpoint.</td>
+                  </tr>
+                  <tr>
+                    <td>Password attacks</td>
+                    <td>A stolen userKey and passwordKeySalt enable offline password guesses using unwrap verification. Argon2id increases their cost; strong passwords remain necessary.</td>
+                  </tr>
+                  <tr>
+                    <td>Recovery</td>
+                    <td>Without an available authorized key holder, the server cannot recover the master keys. Backups must consistently preserve the database, storage, stable instance salt and required configuration.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>“Zero knowledge” is therefore a bounded architectural claim, not a promise that an active server attacker, authorized key holder or compromised client cannot cause harm.</p>
+            </section>
+            <section id="en-implementation" aria-labelledby="en-implementation-title">
+              <h2 id="en-implementation-title">11 · Implementation status and references</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Area</th>
+                    <th scope="col">Repository status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Bootstrap / userKey</td>
+                    <td><a href="lib/cli/admin.ts">Admin CLI</a>: two separate master keys and 80-byte envelope implemented.</td>
+                  </tr>
+                  <tr>
+                    <td>Argon2id / scrypt</td>
+                    <td><a href="lib/util/deriveKey.ts">deriveKey.ts</a> · <a href="lib/util/password.ts">password.ts</a></td>
+                  </tr>
+                  <tr>
+                    <td>.pepper</td>
+                    <td><a href="lib/util/pepper.ts">pepper.ts</a> · <a href="lib/initialize-admin.ts">Admin entrypoint</a> · <a href="lib/initialize-config.ts">Config entrypoint</a> · <a href="lib/server.ts">Server</a></td>
+                  </tr>
+                  <tr>
+                    <td>JWT / roles</td>
+                    <td><a href="lib/service/AuthService.ts">AuthService.ts</a></td>
+                  </tr>
+                  <tr>
+                    <td>User password attributes</td>
+                    <td><a href="lib/service/UserService.ts">UserService.ts</a></td>
+                  </tr>
+                  <tr>
+                    <td>Client cryptography</td>
+                    <td>File/text encryption, AAD, metadata HMACs and client-side rewrapping are the agreed target architecture; the backend does not verify this cryptography.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>Backend routes accept and persist encrypted values supplied by clients. Response schemas validate data shape, not cryptographic authenticity. This documentation introduces no runtime code changes.</p>
+              <ul>
+                <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP · Password Storage Cheat Sheet</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc9106.html">RFC 9106 · Argon2</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc3394">RFC 3394 · AES Key Wrap</a></li>
+                <li><a href="https://csrc.nist.gov/pubs/sp/800/38/d/final">NIST SP 800-38D · GCM</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc8785.html">RFC 8785 · JSON Canonicalization Scheme</a></li>
+                <li><a href="https://www.rfc-editor.org/rfc/rfc4648.html">RFC 4648 · Base64</a></li>
+              </ul>
+            </section>
+            <p class="foot">As of 21 November 2026 · Standalone offline documentation · No external scripts or fonts.</p>
+          </article>
+        </div>
+      </div>
+    </main>
+    <script>
+      (() => {
+        const tabs = [...document.querySelectorAll('[role="tab"]')];
+        const languages = ['de', 'en'];
+        function selectLanguage(lang, moveFocus = false, updateHash = false) {
+          if (!languages.includes(lang)) return;
+          document.documentElement.lang = lang;
+          document.title = lang === 'de' ? 'VideoVault · Sicherheitsarchitektur' : 'VideoVault · Security architecture';
+          for (const tab of tabs) {
+            const active = tab.dataset.lang === lang;
+            tab.setAttribute('aria-selected', String(active));
+            tab.tabIndex = active ? 0 : -1;
+            if (active && moveFocus) tab.focus();
+          }
+          for (const panel of document.querySelectorAll('[role="tabpanel"]')) panel.hidden = panel.lang !== lang;
+          for (const copy of document.querySelectorAll('[data-header-lang]')) copy.hidden = copy.dataset.headerLang !== lang;
+          if (updateHash) {
+            const section = location.hash.replace(/^#(?:de|en)-/, '') || 'overview';
+            history.replaceState(null, '', '#' + lang + '-' + section);
+          }
+        }
+        for (const tab of tabs) {
+          tab.addEventListener('click', () => selectLanguage(tab.dataset.lang, false, true));
+          tab.addEventListener('keydown', (event) => {
+            let next;
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') next = tabs[1 - tabs.indexOf(tab)];
+            if (event.key === 'Home') next = tabs[0];
+            if (event.key === 'End') next = tabs[tabs.length - 1];
+            if (next) {
+              event.preventDefault();
+              selectLanguage(next.dataset.lang, true, true);
+            }
+          });
+        }
+        function fromHash() {
+          selectLanguage(location.hash.startsWith('#en-') ? 'en' : 'de');
+        }
+        window.addEventListener('hashchange', fromHash);
+        fromHash();
+      })();
+    </script>
+  </body>
+</html>
