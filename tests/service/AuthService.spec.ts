@@ -2,7 +2,7 @@ import crypto, { randomBytes } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import jwt, { SignOptions } from 'jsonwebtoken';
+import jwt, { SignOptions, JwtPayload } from 'jsonwebtoken';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { User } from '@/domain/User';
 import { AuthService } from '@/service/AuthService';
@@ -336,7 +336,7 @@ describe('AuthService', () => {
         const [header, , signature] = token.split('.');
         const payload = Buffer.from(JSON.stringify({ sub: 'attacker', exp: start.getTime() / 1000 + 3600 })).toString('base64url');
         expect(await service.authenticate({ token: `${header}.${payload}.${signature}` })).toBeNull();
-        const forged = jwt.sign({ sub: userId }, randomBytes(32), { algorithm: 'HS256', keyid: 'key-0', expiresIn: 3600 });
+        const forged = jwt.sign({ sub: userId } as JwtPayload, randomBytes(32), { algorithm: 'HS256', keyid: 'key-0', expiresIn: 3600 });
         expect(await service.authenticate({ token: forged })).toBeNull();
       });
 
@@ -350,7 +350,7 @@ describe('AuthService', () => {
 
       test('rejects a missing key ID', async () => {
         const key = await readFile(join(keyDirectory, 'key-0.key'));
-        const token = jwt.sign({ sub: userId }, key, { algorithm: 'HS256', expiresIn: 3600 });
+        const token = jwt.sign({ sub: userId } as JwtPayload, key, { algorithm: 'HS256', expiresIn: 3600 });
         expect(await service.authenticate({ token })).toBeNull();
       });
 
