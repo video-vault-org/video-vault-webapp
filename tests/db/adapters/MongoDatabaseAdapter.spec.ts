@@ -169,12 +169,12 @@ describe('MongoDatabaseAdapter', () => {
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
-    test('changeUsersUsernameByUserId makes the user findable under the new username', async () => {
-      await db.changeUsersUsernameByUserId({ userId: 'missing', username: 'ignored' });
-      await db.changeUsersUsernameByUserId({ userId, username: 'new-name' });
+    test('changeUsersUsernameByUserId atomically updates username and loginHash', async () => {
+      await db.changeUsersUsernameByUserId({ userId: 'missing', username: 'ignored', loginHash: 'new-hash' });
+      await db.changeUsersUsernameByUserId({ userId, username: 'new-name', loginHash: 'new-hash' });
 
       expect(await db.findOneUserByUsername({ username })).toBeNull();
-      expect(await db.findOneUserByUsername({ username: 'new-name' })).toEqual({ ...user, username: 'new-name' });
+      expect(await db.findOneUserByUsername({ username: 'new-name' })).toEqual({ ...user, username: 'new-name', loginHash: 'new-hash' });
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
@@ -190,9 +190,16 @@ describe('MongoDatabaseAdapter', () => {
 
     test('duplicate usernames are rejected without changing the existing user', async () => {
       await expect(db.createUser({ ...otherUser, userId: 'u3', username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: 11000 } });
-      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: 11000 } });
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username, loginHash: 'new-hash' })).rejects.toMatchObject({ name: 'DatabaseConflictError', cause: { code: 11000 } });
 
       expect(await db.findOneUserByUsername({ username })).toEqual(user);
+      expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
+    });
+
+    test('changeUsersUsernameByUserId updates loginHash even when the username is unchanged', async () => {
+      await db.changeUsersUsernameByUserId({ userId, username, loginHash: 'new-hash' });
+
+      expect(await db.findOneUserByUsername({ username })).toEqual({ ...user, loginHash: 'new-hash' });
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
@@ -226,9 +233,9 @@ describe('MongoDatabaseAdapter', () => {
 
     test('handles apostrophes in query values', async () => {
       const username = "O'Neil";
-      await db.changeUsersUsernameByUserId({ userId, username });
+      await db.changeUsersUsernameByUserId({ userId, username, loginHash: 'new-hash' });
 
-      expect(await db.findOneUserByUsername({ username })).toEqual({ ...user, username });
+      expect(await db.findOneUserByUsername({ username })).toEqual({ ...user, username, loginHash: 'new-hash' });
     });
 
     test('findOneUserByUsername returns the matching user or null', async () => {

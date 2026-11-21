@@ -370,7 +370,7 @@ describe('AuthService', () => {
         const token = await signedToken();
         await db.changeUsersAdminRoleByUserId({ userId, admin: false });
         await db.changeUsersEditorRoleByUserId({ userId, editor: true });
-        await db.changeUsersUsernameByUserId({ userId, username: 'renamed' });
+        await db.changeUsersUsernameByUserId({ userId, username: 'renamed', loginHash: user.loginHash });
         const lookup = jest.spyOn(db, 'findOneUserByUserId');
 
         const current = await service.authenticate({ token });

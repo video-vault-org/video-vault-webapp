@@ -609,10 +609,20 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
                 Die Master-Schlüssel und vorhandenen Inhaltsverschlüsselungen bleiben dabei dieselben. Ein vergessenes Passwort kann ohne bereits entsperrte Schlüssel oder Hilfe eines anderen Schlüsselinhabers nicht zum Entschlüsseln des bisherigen
                 userKey verwendet werden. Passwortänderungen widerrufen aktuell keine bereits ausgestellten JWTs.
               </p>
-              <div class="note open">
-                Ein Benutzername ist Teil des Login-Salts. Eine Umbenennung benötigt daher einen passend neu abgeleiteten loginHash. Die aktuelle reine Username-Änderungsroute koordiniert das noch nicht; sie allein reicht für einen konsistenten
-                Passwort-Login nicht aus.
-              </div>
+              <h3>Benutzernamen ändern</h3>
+              <p>
+                Der Benutzername ist Teil des Login-Salts. Der Client muss deshalb aus dem Passwort und <code>pepperHex + neuerBenutzername</code> einen neuen Base64-loginHash ableiten. Ein Umbenennen allein im Backend kann diesen Wert nicht aus dem
+                bisherigen Hash rekonstruieren.
+              </p>
+              <p>
+                Beide Backend-Routen verlangen nun einen JSON-Body mit <code>{ "loginHash": "…" }</code>: <code>PATCH /api/user/change/username/:username</code> für den eigenen Nutzer und
+                <code>PATCH /api/user/change/username/:userId/:username</code> für Admins. Der Service hasht den neuen loginHash mit scrypt und einem frischen Salt. Alle fünf DB-Adapter speichern Benutzername und scrypt-Hash gemeinsam atomar; bei
+                einem Namenskonflikt bleibt beides unverändert. Auch bei unverändertem Benutzernamen wird der mitgegebene Hash aktualisiert.
+              </p>
+              <p>
+                <code>passwordKeySalt</code>, <code>userKey</code> und die Master-Schlüssel müssen nicht geändert werden, da die passwordKey-Ableitung nicht vom Benutzernamen abhängt. Auch ein Admin benötigt den passend neu abgeleiteten loginHash;
+                das Backend erhält dafür kein Klartext-Passwort. Diese Backend-Unterstützung ist implementiert; die Ableitung erfolgt im vorgesehenen Client-Verfahren.
+              </p>
             </section>
             <section id="de-files" aria-labelledby="de-files-title">
               <span class="badge planned">Client-Architektur</span>
@@ -1125,10 +1135,20 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
                 The master keys and existing content encryption remain the same. A forgotten password cannot unlock the old userKey without already unlocked keys or assistance from another key holder. Password changes currently do not revoke
                 previously issued JWTs.
               </p>
-              <div class="note open">
-                The username participates in the login salt. Renaming a user therefore requires a newly derived loginHash matching that name. The current username-only change route does not coordinate this yet; using that route alone is insufficient
-                for a consistent password login.
-              </div>
+              <h3>Changing a username</h3>
+              <p>
+                The username participates in the login salt. The client must therefore derive a new Base64 loginHash from the password and <code>pepperHex + newUsername</code>. Renaming the user on the backend alone cannot reconstruct this value from
+                the previous hash.
+              </p>
+              <p>
+                Both backend routes now require a JSON body containing <code>{ "loginHash": "…" }</code>: <code>PATCH /api/user/change/username/:username</code> for the current account and
+                <code>PATCH /api/user/change/username/:userId/:username</code> for admins. The service hashes the new loginHash with scrypt and a fresh salt. All five database adapters atomically store the username and scrypt hash together; a name
+                conflict leaves both unchanged. Supplying the same username still updates the supplied hash.
+              </p>
+              <p>
+                <code>passwordKeySalt</code>, <code>userKey</code> and the master keys need not change, because passwordKey derivation does not depend on the username. An admin also needs the correctly rederived loginHash; the backend receives no
+                plaintext password for this operation. This backend support is implemented; derivation follows the intended client procedure.
+              </p>
             </section>
             <section id="en-files" aria-labelledby="en-files-title">
               <span class="badge planned">Client architecture</span>

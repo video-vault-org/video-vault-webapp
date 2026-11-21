@@ -65,8 +65,8 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await this.write(async () => (await this.users()).updateOne({ userId }, { $set: { displayName } }));
   }
 
-  public async changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void> {
-    await this.write(async () => (await this.users()).updateOne({ userId }, { $set: { username } }));
+  public async changeUsersUsernameByUserId({ userId, username, loginHash }: { userId: string; username: string; loginHash: string }): Promise<void> {
+    await this.write(async () => (await this.users()).updateOne({ userId }, { $set: { username, loginHash } }));
   }
 
   public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {

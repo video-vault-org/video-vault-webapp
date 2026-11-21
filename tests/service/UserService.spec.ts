@@ -142,14 +142,17 @@ describe('UserService', () => {
     expect(update).toHaveBeenCalledWith(parameters);
   });
 
-  test('changeUsersUsername forwards the update to the database', async () => {
+  test('changeUsersUsername hashes the new loginHash and forwards it with the username', async () => {
     const update = jest.spyOn(db, 'changeUsersUsernameByUserId').mockResolvedValue(undefined);
-    const parameters = { userId, username: 'new-alice' };
+    const parameters = { userId, username: 'new-alice', loginHash: Buffer.from('new-client-login-hash').toString('base64') };
 
     await expect(service.changeUsersUsername(parameters)).resolves.toBeUndefined();
 
     expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(parameters);
+    const stored = update.mock.calls[0][0];
+    expect(stored).toEqual({ ...parameters, loginHash: expect.stringMatching(/^\$scrypt\$/) });
+    expect(await verifyPassword(parameters.loginHash, stored.loginHash)).toBe(true);
+    expect(parameters.loginHash).toBe(Buffer.from('new-client-login-hash').toString('base64'));
   });
 
   test('changeUsersPassword hashes the new loginHash and forwards the remaining password attributes unchanged', async () => {
@@ -199,7 +202,7 @@ describe('UserService', () => {
     await db.createUser(user);
     await db.createUser(otherUser);
 
-    await expect(service.changeUsersUsername({ userId, username: otherUser.username })).rejects.toThrow();
+    await expect(service.changeUsersUsername({ userId, username: otherUser.username, loginHash: 'new-hash' })).rejects.toThrow();
 
     expect(await service.findAllUsers()).toEqual([user, otherUser]);
   });

@@ -39,12 +39,14 @@ interface DatabaseAdapter {
   changeUsersDisplayNameByUserId({ userId, displayName }: { userId: string; displayName: string }): Promise<void>;
 
   /**
-   * Changes the users username, matched by its userId
+   * Atomically changes the user's username and loginHash, matched by userId.
+   * The client must derive a new loginHash because the username is part of its Argon2id salt.
    * @param userId The id of the user to be changed
    * @param username The desired new username
+   * @param loginHash The new salted scrypt string, hashed by UserService from the client's new loginHash.
    * @throws DatabaseConflictError if another user already has the username or a conditional write conflicts.
    */
-  changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void>;
+  changeUsersUsernameByUserId({ userId, username, loginHash }: { userId: string; username: string; loginHash: string }): Promise<void>;
 
   /**
    * Changes the users password attributes, matched by its userId

@@ -13,6 +13,7 @@ import { StorageWrapper } from '@/storage/StorageWrapper';
 import { User } from '@/domain/User';
 import { createApp } from '@/http/app';
 import { hashPassword, verifyPassword } from '@/util/password';
+import { deriveKey } from '@/util/deriveKey';
 
 const instant = '2026-01-01T00:00:00.000Z';
 const video = { videoId: 'v1', title: 'Video', meta: { duration: 10 }, videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', lastModified: new Date(instant), hmac: 'video-hmac' };
@@ -29,7 +30,7 @@ const protectedRoutes = [
   ['get', '/api/user/all', 'admin', undefined, 200],
   ['get', '/api/user/find/target', 'admin', undefined, 200],
   ['patch', '/api/user/change/displayname/target/Changed', 'admin', undefined, 204],
-  ['patch', '/api/user/change/username/target/renamed', 'admin', undefined, 204],
+  ['patch', '/api/user/change/username/target/renamed', 'admin', { loginHash }, 204],
   ['patch', '/api/user/change/password/target', 'admin', password, 204],
   ['patch', '/api/user/change/admin/target', 'admin', { admin: true }, 204],
   ['patch', '/api/user/change/editor/target', 'admin', { editor: true }, 204],
@@ -37,7 +38,7 @@ const protectedRoutes = [
   ['delete', '/api/user/delete/target', 'admin', undefined, 204],
   ['get', '/api/user/me', 'any', undefined, 200],
   ['patch', '/api/user/change/displayname/Changed', 'any', undefined, 204],
-  ['patch', '/api/user/change/username/renamed', 'any', undefined, 204],
+  ['patch', '/api/user/change/username/renamed', 'any', { loginHash }, 204],
   ['patch', '/api/user/change/password', 'any', password, 204],
   ['delete', '/api/user/delete', 'any', undefined, 204],
   ['post', '/api/video/upload/new-video', 'editor', undefined, 400],
@@ -154,6 +155,31 @@ describe('Fastify backend', () => {
     expect(me.body.userId).toBe('reader');
     expect(me.body).not.toHaveProperty('loginHash');
     expect(me.headers['cache-control']).toBe('no-store');
+  });
+
+  test.each(['own', 'admin'] as const)('%s username changes require a new loginHash and preserve the wrapped keys', async (mode) => {
+    const userId = mode === 'own' ? 'reader' : 'target';
+    const original = (await db.findOneUserByUserId({ userId }))!;
+    const username = 'renamed-user';
+    const newLoginHash = (await deriveKey('test-password', 'ab'.repeat(32) + username)).toString('base64');
+    const url = mode === 'own' ? `/api/user/change/username/${username}` : `/api/user/change/username/${userId}/${username}`;
+
+    await request(app.server)
+      .patch(url)
+      .set(headers(mode === 'own' ? 'reader' : 'admin'))
+      .send({ loginHash: newLoginHash })
+      .expect(204);
+
+    const updated = (await db.findOneUserByUserId({ userId }))!;
+    expect(updated).toEqual({ ...original, username, loginHash: expect.stringMatching(/^\$scrypt\$/) });
+    expect(await verifyPassword(newLoginHash, updated.loginHash)).toBe(true);
+    expect(await verifyPassword(loginHash, updated.loginHash)).toBe(false);
+    await request(app.server).post('/login').send({ username: original.username, loginHash }).expect(401);
+    await request(app.server).post('/login').send({ username, loginHash }).expect(401);
+    const result = await request(app.server).post('/login').send({ username, loginHash: newLoginHash }).expect(200);
+    const me = await request(app.server).get('/api/user/me').set('Authorization', `Bearer ${result.body.token}`).expect(200);
+    expect(me.body).toMatchObject({ userId, username, userKey: original.userKey, passwordKeySalt: original.passwordKeySalt });
+    expect(me.body).not.toHaveProperty('loginHash');
   });
 
   test('login rejects invalid credentials and active locks with the same response', async () => {
@@ -593,7 +619,7 @@ describe('Fastify backend', () => {
       .post('/login')
       .send({ username: 'x', loginHash: 'x'.repeat(1024 * 1024) })
       .expect(413);
-    await request(app.server).patch('/api/user/change/username/target').set(headers()).expect(409);
+    await request(app.server).patch('/api/user/change/username/target').set(headers()).send({ loginHash }).expect(409);
     jest.spyOn(users, 'findAllUsers').mockRejectedValueOnce(new Error(`secret ${storedHash}`));
     await request(app.server).get('/api/user/all').set(headers('admin')).expect(500, { error: 'Internal server error' });
     jest.spyOn(auth, 'authenticate').mockRejectedValueOnce(new Error('DB unavailable'));

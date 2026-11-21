@@ -208,24 +208,21 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     await this.update('users', { userId }, { displayName });
   }
 
-  public async changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void> {
+  public async changeUsersUsernameByUserId({ userId, username, loginHash }: { userId: string; username: string; loginHash: string }): Promise<void> {
     const user = await this.findOneUserByUserId({ userId });
-    if (!user || username === user.username) {
+    if (!user) {
       return;
     }
-    await this.transact([
-      this.reserveUsername(username, userId),
-      {
-        Update: {
-          TableName: this.table('users'),
-          Key: { userId },
-          UpdateExpression: 'SET username = :new',
-          ConditionExpression: 'username = :old',
-          ExpressionAttributeValues: { ':new': username, ':old': user.username }
-        }
-      },
-      this.releaseUsername(user.username, userId)
-    ]);
+    const update = {
+      Update: {
+        TableName: this.table('users'),
+        Key: { userId },
+        UpdateExpression: 'SET username = :new, loginHash = :hash',
+        ConditionExpression: 'username = :old',
+        ExpressionAttributeValues: { ':new': username, ':old': user.username, ':hash': loginHash }
+      }
+    };
+    await this.transact(username === user.username ? [update] : [this.reserveUsername(username, userId), update, this.releaseUsername(user.username, userId)]);
   }
 
   public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {

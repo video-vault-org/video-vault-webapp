@@ -103,12 +103,12 @@ describe('InMemoryDatabaseAdapter', () => {
       expect(await db.findAllUsers()).toEqual([{ ...user, displayName: 'New display name' }, otherUser]);
     });
 
-    test('changeUsersUsernameByUserId makes the user findable under the new username', async () => {
-      await db.changeUsersUsernameByUserId({ userId: 'missing', username: 'ignored' });
-      await db.changeUsersUsernameByUserId({ userId, username: 'new-name' });
+    test('changeUsersUsernameByUserId atomically updates username and loginHash', async () => {
+      await db.changeUsersUsernameByUserId({ userId: 'missing', username: 'ignored', loginHash: 'new-hash' });
+      await db.changeUsersUsernameByUserId({ userId, username: 'new-name', loginHash: 'new-hash' });
 
       expect(await db.findOneUserByUsername({ username })).toBeNull();
-      expect(await db.findOneUserByUsername({ username: 'new-name' })).toEqual({ ...user, username: 'new-name' });
+      expect(await db.findOneUserByUsername({ username: 'new-name' })).toEqual({ ...user, username: 'new-name', loginHash: 'new-hash' });
       expect(await db.findOneUserByUserId({ userId: otherUser.userId })).toEqual(otherUser);
     });
 
@@ -119,15 +119,15 @@ describe('InMemoryDatabaseAdapter', () => {
     });
 
     test('changeUsersUsernameByUserId rejects another user’s username without changing either user', async () => {
-      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username })).rejects.toBeInstanceOf(DatabaseConflictError);
+      await expect(db.changeUsersUsernameByUserId({ userId: otherUser.userId, username, loginHash: 'new-hash' })).rejects.toBeInstanceOf(DatabaseConflictError);
 
       expect(await db.findAllUsers()).toEqual([user, otherUser]);
     });
 
-    test('changeUsersUsernameByUserId accepts the user’s current username', async () => {
-      await db.changeUsersUsernameByUserId({ userId, username });
+    test('changeUsersUsernameByUserId updates loginHash even when the username is unchanged', async () => {
+      await db.changeUsersUsernameByUserId({ userId, username, loginHash: 'new-hash' });
 
-      expect(await db.findAllUsers()).toEqual([user, otherUser]);
+      expect(await db.findAllUsers()).toEqual([{ ...user, loginHash: 'new-hash' }, otherUser]);
     });
 
     test('changeUsersPasswordByUserId updates all three password attributes', async () => {

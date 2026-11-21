@@ -47,13 +47,14 @@ class UserService {
   }
 
   /**
-   * Updates a user's username.
+   * Hashes the client's new loginHash with scrypt and atomically updates it together with the username.
    * @param userId The ID of the user to update.
-   * @param username The new username.
-   * @throws If another user has the username or the database update fails.
+   * @param username The new username used by the client when deriving its new loginHash.
+   * @param loginHash The new Base64 loginHash derived from the password and pepper + new username.
+   * @throws If hashing fails, another user has the username or the database update fails.
    */
-  public async changeUsersUsername({ userId, username }: { userId: string; username: string }): Promise<void> {
-    await this.db.changeUsersUsernameByUserId({ userId, username });
+  public async changeUsersUsername({ userId, username, loginHash }: { userId: string; username: string; loginHash: string }): Promise<void> {
+    await this.db.changeUsersUsernameByUserId({ userId, username, loginHash: await hashPassword(loginHash) });
   }
 
   /**

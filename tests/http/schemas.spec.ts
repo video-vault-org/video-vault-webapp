@@ -51,7 +51,7 @@ describe('compiled Fastify request and response schemas', () => {
     const invalid = { ...account, userId: 'new-user', username: 'ab' };
     expect((await app.inject({ method: 'POST', url: '/api/user/add', headers, payload: invalid })).statusCode).toBe(400);
     for (const url of ['/api/user/change/username/ab', '/api/user/change/username/admin/ab']) {
-      expect((await app.inject({ method: 'PATCH', url, headers })).statusCode).toBe(400);
+      expect((await app.inject({ method: 'PATCH', url, headers, payload: { loginHash: 'new-hash' } })).statusCode).toBe(400);
     }
     expect(create).not.toHaveBeenCalled();
     expect(rename).not.toHaveBeenCalled();
@@ -59,10 +59,22 @@ describe('compiled Fastify request and response schemas', () => {
 
   test('accepts three-character usernames in both own and admin rename routes', async () => {
     await db.createUser(account);
-    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/abc', headers })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/abc', headers, payload: { loginHash: 'new-hash' } })).statusCode).toBe(204);
     expect((await db.findOneUserByUserId({ userId: account.userId }))?.username).toBe('abc');
-    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/admin/xyz', headers })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/admin/xyz', headers, payload: { loginHash: 'new-hash' } })).statusCode).toBe(204);
     expect((await db.findOneUserByUserId({ userId: account.userId }))?.username).toBe('xyz');
+  });
+
+  test.each([undefined, {}, { loginHash: '' }, { loginHash: 123 }, { loginHash: 'x'.repeat(4097) }, { loginHash: 'hash', unknown: true }])('rejects invalid username-change bodies without updating the account (%j)', async (payload) => {
+    await db.createUser(account);
+    const rename = jest.spyOn(users, 'changeUsersUsername');
+    for (const url of ['/api/user/change/username/renamed', '/api/user/change/username/admin/renamed']) {
+      const response = await app.inject({ method: 'PATCH', url, headers, payload });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: 'Invalid request' });
+    }
+    expect(rename).not.toHaveBeenCalled();
+    expect(await db.findOneUserByUserId({ userId: account.userId })).toEqual(account);
   });
 
   test('rejects boolean strings and unknown request fields instead of coercing or discarding them', async () => {

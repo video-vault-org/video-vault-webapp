@@ -53,16 +53,16 @@ function userRoutes(app: FastifyInstance, users: UserService, auth: AuthService)
     return reply.code(204).send(null);
   });
 
-  /** PATCH /api/user/change/username/:userId/:username — Admins only. Changes another user's username. */
-  router.patch('/change/username/:userId/:username', { onRequest: admin, schema: { params: object({ userId: id, username }), response: noContent } }, async (request, reply) => {
+  /** PATCH /api/user/change/username/:userId/:username — Admins only. Changes another user's username and loginHash together; requires JSON { loginHash } derived for the new username. */
+  router.patch('/change/username/:userId/:username', { onRequest: admin, schema: { params: object({ userId: id, username }), body: object({ loginHash: text }), response: noContent } }, async (request, reply) => {
     await requireUser(request.params.userId);
-    await users.changeUsersUsername(request.params);
+    await users.changeUsersUsername({ ...request.params, loginHash: request.body.loginHash });
     return reply.code(204).send(null);
   });
 
-  /** PATCH /api/user/change/username/:username — Any authenticated user. Changes their own username. */
-  router.patch('/change/username/:username', { schema: { params: object({ username }), response: noContent } }, async (request, reply) => {
-    await users.changeUsersUsername({ userId: currentUser(request).userId, username: request.params.username });
+  /** PATCH /api/user/change/username/:username — Any authenticated user. Changes their own username and loginHash together; requires JSON { loginHash } derived for the new username. */
+  router.patch('/change/username/:username', { schema: { params: object({ username }), body: object({ loginHash: text }), response: noContent } }, async (request, reply) => {
+    await users.changeUsersUsername({ userId: currentUser(request).userId, username: request.params.username, loginHash: request.body.loginHash });
     return reply.code(204).send(null);
   });
 

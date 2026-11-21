@@ -46,7 +46,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.displayName = displayName;
   }
 
-  public async changeUsersUsernameByUserId({ userId, username }: { userId: string; username: string }): Promise<void> {
+  public async changeUsersUsernameByUserId({ userId, username, loginHash }: { userId: string; username: string; loginHash: string }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {
       return;
@@ -55,6 +55,7 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
       throw new DatabaseConflictError('Username already exists');
     }
     user.username = username;
+    user.loginHash = loginHash;
   }
 
   public async changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {
