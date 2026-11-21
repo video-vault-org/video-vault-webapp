@@ -4,12 +4,12 @@ import prompts from 'prompts';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { initializeAdmin, readAdminInput } from '@/cli/admin';
 import { verifyPassword } from '@/util/password';
-import { ensurePepper } from '@/util/pepper';
+import { ensureInstanceSalt } from '@/util/instanceSalt';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 
 jest.mock('prompts', () => jest.fn());
-jest.mock('@/util/pepper', () => ({ ensurePepper: jest.fn() }));
-const pepper = 'ab'.repeat(32);
+jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
+const instanceSalt = 'ab'.repeat(32);
 
 const input = { username: 'alice', displayName: 'Alice', password: 'p\u00e4ssword-\ud83d\udd10' };
 const uuid = '5eaef793-3886-49b1-8947-5216b6746fb3';
@@ -21,13 +21,13 @@ describe('interactive admin initialization', () => {
   beforeEach(() => {
     db = new InMemoryDatabaseAdapter();
     jest.mocked(prompts).mockReset();
-    jest.mocked(ensurePepper).mockReset().mockResolvedValue(pepper);
+    jest.mocked(ensureInstanceSalt).mockReset().mockResolvedValue(instanceSalt);
   });
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  test('asks for three attributes, masks the password and never prompts for pepper', async () => {
+  test('asks for three attributes, masks the password and never prompts for the instance salt', async () => {
     jest.mocked(prompts).mockResolvedValueOnce(input);
     await expect(readAdminInput()).resolves.toEqual(input);
     expect(prompts).toHaveBeenCalledTimes(1);
@@ -72,9 +72,9 @@ describe('interactive admin initialization', () => {
     expect(saved.userId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(saved).toMatchObject({ username: input.username, displayName: input.displayName, admin: true, editor: false, moderator: false });
     expect(saved).not.toHaveProperty('password');
-    expect(saved).not.toHaveProperty('pepper');
+    expect(saved).not.toHaveProperty('instanceSalt');
     expect(JSON.stringify(saved)).not.toContain(input.password);
-    expect(JSON.stringify(saved)).not.toContain(pepper);
+    expect(JSON.stringify(saved)).not.toContain(instanceSalt);
     expect(saved.passwordKeySalt).toBe(salt.toString('base64'));
     expect(Buffer.from(saved.passwordKeySalt, 'base64')).toHaveLength(32);
     const wrappedKeys = Buffer.from(saved.userKey, 'base64');
@@ -83,7 +83,7 @@ describe('interactive admin initialization', () => {
     const wrappedHmacKey = wrappedKeys.subarray(40);
     expect(wrappedAesKey).not.toEqual(wrappedHmacKey);
 
-    const loginHash = await hash(input.password, { salt: Buffer.from(pepper + input.username, 'utf8'), type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
+    const loginHash = await hash(input.password, { salt: Buffer.from(instanceSalt + input.username, 'utf8'), type: argon2id, version: 0x13, memoryCost: 19456, timeCost: 2, parallelism: 1, hashLength: 32, raw: true });
     expect(await verifyPassword(loginHash.toString('base64'), saved.loginHash)).toBe(true);
     expect(await verifyPassword(input.password, saved.loginHash)).toBe(false);
 
@@ -133,7 +133,7 @@ describe('interactive admin initialization', () => {
     { ...input, userId: 'supplied-id' },
     { ...input, userKey: 'supplied-key' },
     { ...input, password: '' },
-    { ...input, pepper: 'supplied-pepper' },
+    { ...input, instanceSalt: 'supplied-instanceSalt' },
     { ...input, username: 'ab' },
     { ...input, username: 'a' },
     { ...input, username: '' },
@@ -167,9 +167,9 @@ describe('interactive admin initialization', () => {
     expect(await db.findAllUsers()).toEqual([]);
   });
 
-  test('does not create the admin if reading the pepper fails', async () => {
-    const error = new Error('Pepper is unreadable');
-    jest.mocked(ensurePepper).mockRejectedValueOnce(error);
+  test('does not create the admin if reading the instance salt fails', async () => {
+    const error = new Error('Instance salt is unreadable');
+    jest.mocked(ensureInstanceSalt).mockRejectedValueOnce(error);
     await expect(initializeAdmin(db, input)).rejects.toBe(error);
     expect(await db.findAllUsers()).toEqual([]);
   });

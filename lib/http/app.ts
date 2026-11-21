@@ -16,7 +16,7 @@ import { UploadStore } from './uploads';
 import { userRoutes } from './routes/users';
 import { videoRoutes } from './routes/videos';
 import { commentRoutes } from './routes/comments';
-import { object, text, username, errorResponses } from './validation';
+import { Type, object, text, username, errorResponses } from './validation';
 import { loggingOptions, HttpLogController } from './logging';
 import { registerDocumentation } from './documentation';
 
@@ -38,19 +38,22 @@ function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServe
 /**
  * Registers the backend without opening a listening socket. Call ready()/inject() before use, close() after use.
  * Auth runs before parsing and schema validation. Every JSON API route has a compiled response schema.
+ * instanceSalt is the stable public value loaded from ./.salt at startup; /bootstrap serves it without file access.
  * temporaryDirectory must match the StorageWrapper. Bodies, headers and query secrets are excluded from logs.
  */
 function createApp(
   { auth, users, videos, comments }: { auth: AuthService; users: UserService; videos: VideoService; comments: CommentService },
   {
+    instanceSalt,
     staticDirectory = './public',
     temporaryDirectory = './tmp',
     maxVideoBytes,
     maxThumbnailBytes,
     logger,
     instance
-  }: { staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: FastifyServerOptions['logger']; instance?: FastifyInstance } = {}
+  }: { instanceSalt: string; staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: FastifyServerOptions['logger']; instance?: FastifyInstance }
 ): FastifyInstance {
+  if (instanceSalt.length !== 64 || !/^[0-9a-f]{64}$/i.test(instanceSalt)) throw new TypeError('Instance salt must contain exactly 64 hexadecimal characters');
   const app = instance ?? createHttpServer({ logger });
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
   const authenticate = authentication(auth);
@@ -64,6 +67,14 @@ function createApp(
   app.register(multipart, { limits: { files: 2, fields: 0, parts: 2, fileSize: Math.max(maxVideoBytes ?? 2 * 1024 ** 3, maxThumbnailBytes ?? 20 * 1024 ** 2) } });
 
   app.register(async (router) => {
+    /** GET /bootstrap — Public. Returns protocol version 1 and the stable public instance salt as stored in ./.salt. */
+    router
+      .withTypeProvider<TypeBoxTypeProvider>()
+      .get('/bootstrap', { schema: { response: { 200: object({ version: Type.Literal(1), instanceSalt: Type.String({ minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' }) }), ...errorResponses } } }, async (_request, reply) => {
+        reply.header('Cache-Control', 'no-store');
+        return { version: 1 as const, instanceSalt };
+      });
+
     /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
     router.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
       const token = await auth.login(request.body);

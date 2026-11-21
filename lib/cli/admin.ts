@@ -4,14 +4,14 @@ import { z } from 'zod';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { UserService } from '@/service/UserService';
 import { deriveKey } from '@/util/deriveKey';
-import { ensurePepper } from '@/util/pepper';
+import { ensureInstanceSalt } from '@/util/instanceSalt';
 
 const value = z.string().min(1).max(4096);
 const inputSchema = z.object({ username: value.min(3), displayName: value, password: value }).strict();
 
 /**
  * Prompts once for username (3–4096 characters), display name and password.
- * Password is rendered as asterisks. Pepper is loaded from ./.pepper during initialization.
+ * Password is rendered as asterisks. The instance salt is loaded from ./.salt during initialization.
  * @throws If cancelled or the answers are invalid.
  */
 async function readAdminInput(): Promise<{ username: string; displayName: string; password: string }> {
@@ -33,13 +33,13 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
 
 /**
  * Creates the first admin, refusing to run if any admin already exists.
- * A UUID v4 identifies the user. LoginHash is Argon2id(password, pepper + username), producing 32 raw bytes.
+ * A UUID v4 identifies the user. LoginHash is Argon2id(password, instanceSalt + username), producing 32 raw bytes.
  * Both Argon2id derivations use v19, 19456 KiB, 2 passes and parallelism 1 (OWASP minimum profile).
  * A separate passwordKey uses a random 32-byte passwordKeySalt.
  * Independent random 32-byte AES and HMAC keys are each wrapped with passwordKey using RFC 3394 AES-256-KW without padding.
  * userKey is the Base64-encoded concatenation of the wrapped AES key followed by the wrapped HMAC key (40 bytes each).
  * LoginHash and passwordKeySalt are also Base64-encoded; UserService additionally hashes loginHash with scrypt.
- * Password is never stored. Pepper is read from ./.pepper (created if absent). Temporary secret buffers are cleared after use.
+ * Password is never stored. The instance salt is read from ./.salt (created if absent). Temporary secret buffers are cleared after use.
  * The initial user has only the admin role.
  * @param db An opened and initialized database adapter.
  * @param input The entered username, displayName and password; IDs, keys and roles cannot be supplied.
@@ -50,9 +50,9 @@ async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<voi
   if ((await db.findAllUsers()).some((existing) => existing.admin)) throw new Error('An admin already exists');
   const userId = randomUUID();
   if (await db.findOneUserByUserId({ userId })) throw new Error('User ID already exists');
-  const pepper = await ensurePepper();
+  const instanceSalt = await ensureInstanceSalt();
   const passwordKeySalt = randomBytes(32);
-  const loginHash = await deriveKey(password, pepper + username);
+  const loginHash = await deriveKey(password, instanceSalt + username);
   let passwordKey: Buffer | undefined;
   let aesKey: Buffer | undefined;
   let hmacKey: Buffer | undefined;

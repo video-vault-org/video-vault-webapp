@@ -26,7 +26,7 @@ describe('compiled Fastify request and response schemas', () => {
     videos = new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db);
     comments = new CommentService(db);
     jest.spyOn(auth, 'authenticate').mockResolvedValue(account);
-    app = createApp({ auth, users, videos, comments }, { logger: false });
+    app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), logger: false });
   });
   afterEach(async () => {
     await app.close();

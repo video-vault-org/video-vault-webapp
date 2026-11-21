@@ -7,10 +7,10 @@ import { VideoService } from '@/service/VideoService';
 import { CommentService } from '@/service/CommentService';
 import { createApp, createHttpServer } from '@/http/app';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
-import { ensurePepper } from '@/util/pepper';
+import { ensureInstanceSalt } from '@/util/instanceSalt';
 
 /**
- * Ensures ./.pepper exists, initializes configured adapters and one AuthService, then starts the HTTP server.
+ * Ensures ./.salt exists, initializes configured adapters and one AuthService, then starts the HTTP server.
  * PORT defaults to 3000; HOST to 0.0.0.0; STATIC_DIRECTORY to ./public.
  * VIDEO_UPLOAD_LIMIT_BYTES and THUMBNAIL_UPLOAD_LIMIT_BYTES override the 2 GiB and 20 MiB defaults.
  * JWT_TTL_SECONDS overrides the default one-hour token lifetime.
@@ -25,7 +25,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
 }> {
   const app = createHttpServer();
   try {
-    await ensurePepper();
+    const instanceSalt = await ensureInstanceSalt();
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
     const db = await loadDb();
     const storage = await loadStorage();
@@ -34,6 +34,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
     createApp(
       { auth, users: new UserService(db), videos: new VideoService(storage, db, { logger: app.log }), comments: new CommentService(db) },
       {
+        instanceSalt,
         instance: app,
         staticDirectory,
         maxVideoBytes: process.env.VIDEO_UPLOAD_LIMIT_BYTES === undefined ? undefined : Number(process.env.VIDEO_UPLOAD_LIMIT_BYTES),

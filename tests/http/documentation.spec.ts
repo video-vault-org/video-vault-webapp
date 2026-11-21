@@ -36,6 +36,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     app = createApp(
       { auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter(), { temporaryDirectory: join(directory, 'tmp') }), db), comments: new CommentService(db) },
       {
+        instanceSalt: 'ab'.repeat(32),
         logger: false,
         staticDirectory: directory,
         temporaryDirectory: join(directory, 'tmp'),
@@ -78,7 +79,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/video/change/files/{videoId}'].patch).toBeDefined();
     expect(document.paths['/api/comments/{videoId}'].get).toBeDefined();
     expect(document.paths['/api/user/change/displayname/{userId}/{displayname}'].patch).toBeDefined();
-    expect(Object.keys(document.paths).every((path) => path === '/login' || path.startsWith('/api/'))).toBe(true);
+    expect(Object.keys(document.paths).every((path) => path === '/login' || path === '/bootstrap' || path.startsWith('/api/'))).toBe(true);
     const ids: string[] = [];
     for (const path of Object.keys(document.paths)) {
       expect(document.paths[path].head).toBeUndefined();
@@ -90,7 +91,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
         ids.push(operation.operationId);
       }
     }
-    expect(ids).toHaveLength(34);
+    expect(ids).toHaveLength(35);
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });
@@ -124,6 +125,22 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(body.additionalProperties).toBe(false);
     expect(body.properties).not.toHaveProperty('meta');
     expect(replacement.responses['204'].content).toBeUndefined();
+  });
+
+  test('documents bootstrap as public with a strict version and instance salt response schema', async () => {
+    const document = (await app.inject('/docs/json')).json();
+    const bootstrap = document.paths['/bootstrap'].get;
+    expect(bootstrap.security).toEqual([]);
+    expect(bootstrap.tags).toEqual(['Authentication']);
+    expect(bootstrap.description).toContain('Public.');
+    const body = dereference(document, bootstrap.responses['200'].content['application/json'].schema);
+    expect(body.required).toEqual(expect.arrayContaining(['version', 'instanceSalt']));
+    expect(body.additionalProperties).toBe(false);
+    const salt = dereference(document, (body.properties as Record<string, unknown>).instanceSalt);
+    expect(salt).toMatchObject({ type: 'string', minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' });
+    const response = await app.inject('/bootstrap');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ version: 1, instanceSalt: 'ab'.repeat(32) });
   });
 
   test('documents multipart file selectors and binary downloads with correct content types', async () => {

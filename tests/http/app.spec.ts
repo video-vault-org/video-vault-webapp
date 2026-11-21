@@ -119,7 +119,7 @@ describe('Fastify backend', () => {
     users = new UserService(db);
     videos = new VideoService(storage, db);
     comments = new CommentService(db);
-    app = createApp({ auth, users, videos, comments }, { staticDirectory, temporaryDirectory, maxVideoBytes: 1024, maxThumbnailBytes: 16 });
+    app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), staticDirectory, temporaryDirectory, maxVideoBytes: 1024, maxThumbnailBytes: 16 });
     await app.ready();
     await db.postVideo(video);
     await db.postComment(comment);
@@ -354,7 +354,7 @@ describe('Fastify backend', () => {
   test('a staged upload survives rebuilding the app and can be submitted by another editor', async () => {
     expect((await upload()).status).toBe(201);
     await app.close();
-    app = createApp({ auth, users, videos, comments }, { staticDirectory, temporaryDirectory });
+    app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), staticDirectory, temporaryDirectory });
     await app.ready();
     await request(app.server)
       .post('/api/video/submit')
@@ -609,7 +609,7 @@ describe('Fastify backend', () => {
   test('serves public static files without authentication and never exposes private directories', async () => {
     await request(app.server).get('/').expect(200, '<h1>VideoVault</h1>');
     await request(app.server).head('/index.html').expect(200);
-    for (const path of ['/.secret', '/jwtkeys/key-0.key', '/tmp/upload.video', '/conf/db.json', '/missing']) await request(app.server).get(path).expect(404);
+    for (const path of ['/.secret', '/.salt', '/jwtkeys/key-0.key', '/tmp/upload.video', '/conf/db.json', '/missing']) await request(app.server).get(path).expect(404);
     await request(app.server).get('/api/missing').set(headers()).expect(404);
   });
 

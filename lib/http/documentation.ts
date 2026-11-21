@@ -4,6 +4,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import type { authorization } from './middleware';
 
 const summaries: Record<string, string> = {
+  'GET /bootstrap': 'Get the public instance salt',
   'POST /login': 'Log in',
   'POST /api/user/add': 'Create a user',
   'GET /api/user/me': 'Get your account',
@@ -52,19 +53,28 @@ function registerDocumentation(app: FastifyInstance, { maxVideoBytes = 2 * 1024 
       info: {
         title: 'VideoVault API',
         version: '0.0.1',
-        description: "Encrypted video collection API. Login expects the client's Base64 loginHash, not a plaintext password. Use the returned JWT in Authorize. Admin, editor and moderator roles are independent."
+        description:
+          'Encrypted video collection API. Load /bootstrap for the public instance salt before deriving the Base64 loginHash. Login expects that loginHash, not a plaintext password. Use the returned JWT in Authorize. Admin, editor and moderator roles are independent.'
       },
       tags: [{ name: 'Authentication' }, { name: 'Users' }, { name: 'Videos' }, { name: 'Comments' }],
       components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } }
     },
     transform: ({ schema, url, route }) => {
       const login = url === '/login';
-      if (!login && !url.startsWith('/api/')) return { schema: { ...schema, hide: true }, url };
+      const bootstrap = url === '/bootstrap';
+      const publicRoute = login || bootstrap;
+      if (!publicRoute && !url.startsWith('/api/')) return { schema: { ...schema, hide: true }, url };
       const method = Array.isArray(route.method) ? route.method[0] : route.method;
       const hooks = route.onRequest ? (Array.isArray(route.onRequest) ? route.onRequest : [route.onRequest]) : [];
       const roles = hooks.flatMap((hook) => (hook as Partial<ReturnType<typeof authorization>>).requiredRoles ?? []);
-      const tag = login ? 'Authentication' : url.startsWith('/api/user/') ? 'Users' : url.startsWith('/api/video/') ? 'Videos' : 'Comments';
-      let description = login ? 'Public. Supply the client-derived loginHash as Base64.' : roles.length ? `Requires role: ${roles.join(' or ')}.` : 'Requires an authenticated user.';
+      const tag = publicRoute ? 'Authentication' : url.startsWith('/api/user/') ? 'Users' : url.startsWith('/api/video/') ? 'Videos' : 'Comments';
+      let description = bootstrap
+        ? 'Public. Returns protocol version 1 and the stable public instance salt as 64 hexadecimal characters. Cache-Control: no-store. No authentication required.'
+        : login
+          ? 'Public. Supply the client-derived loginHash as Base64.'
+          : roles.length
+            ? `Requires role: ${roles.join(' or ')}.`
+            : 'Requires an authenticated user.';
       if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';
       if (url === '/api/video/change/files/:videoId')
         description += ' Upload first. Supply videoMimeType and/or thumbnailMimeType, plus lastModified and hmac. Only selected files are replaced. Failures may leave partial Storage changes; temporary files remain for retry.';
@@ -74,7 +84,7 @@ function registerDocumentation(app: FastifyInstance, { maxVideoBytes = 2 * 1024 
         summary: summaries[`${method} ${url}`] ?? `${method} ${url}`,
         description,
         tags: [tag],
-        security: login ? [] : [{ bearerAuth: [] }],
+        security: publicRoute ? [] : [{ bearerAuth: [] }],
         operationId: `${method.toLowerCase()}_${url.replace(/[:*]/g, '').split('/').filter(Boolean).join('_')}`
       };
       if (url === '/api/video/upload/:videoId') {

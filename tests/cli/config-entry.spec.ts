@@ -1,4 +1,4 @@
-jest.mock('@/util/pepper', () => ({ ensurePepper: jest.fn().mockResolvedValue('ab'.repeat(32)) }));
+jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn().mockResolvedValue('ab'.repeat(32)) }));
 jest.mock('@/cli/config', () => ({ initializeConfig: jest.fn() }));
 
 describe('configuration CLI entrypoint', () => {
@@ -18,9 +18,9 @@ describe('configuration CLI entrypoint', () => {
     jest.mocked(config.initializeConfig).mockResolvedValueOnce(undefined);
     await import('@/initialize-config');
     await new Promise(setImmediate);
-    const pepper = await import('@/util/pepper');
-    expect(pepper.ensurePepper).toHaveBeenCalledWith();
-    expect(jest.mocked(pepper.ensurePepper).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(config.initializeConfig).mock.invocationCallOrder[0]);
+    const instanceSalt = await import('@/util/instanceSalt');
+    expect(instanceSalt.ensureInstanceSalt).toHaveBeenCalledWith();
+    expect(jest.mocked(instanceSalt.ensureInstanceSalt).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(config.initializeConfig).mock.invocationCallOrder[0]);
     expect(config.initializeConfig).toHaveBeenCalledWith();
     expect(console.log).toHaveBeenCalledWith('Database and storage configuration saved');
     expect(console.error).not.toHaveBeenCalled();
@@ -33,12 +33,12 @@ describe('configuration CLI entrypoint', () => {
     await new Promise(setImmediate);
     expect(process.exitCode).toBe(1);
     expect(console.log).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledWith('Configuration initialization failed: check answers, pepper file and configuration file permissions');
+    expect(console.error).toHaveBeenCalledWith('Configuration initialization failed: check answers, instance salt file and configuration file permissions');
   });
-  test('stops before prompting when pepper initialization fails', async () => {
-    const pepper = await import('@/util/pepper');
+  test('stops before prompting when instance salt initialization fails', async () => {
+    const instanceSalt = await import('@/util/instanceSalt');
     const config = await import('@/cli/config');
-    jest.mocked(pepper.ensurePepper).mockRejectedValueOnce(new Error('private-value'));
+    jest.mocked(instanceSalt.ensureInstanceSalt).mockRejectedValueOnce(new Error('private-value'));
     await import('@/initialize-config');
     await new Promise(setImmediate);
     expect(config.initializeConfig).not.toHaveBeenCalled();

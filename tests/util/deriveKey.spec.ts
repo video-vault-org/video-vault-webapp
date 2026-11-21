@@ -3,9 +3,9 @@ import { deriveKey } from '@/util/deriveKey';
 describe('deriveKey', () => {
   test('matches an Argon2 reference-binding result with the explicit OWASP profile and UTF-8 input', async () => {
     // Argon2id v19, m=19456 KiB, t=2, p=1, 32-byte output.
-    const key = await deriveKey('p\u00e4ssword-\ud83d\udd10', 'application-pepper-alice');
+    const key = await deriveKey('p\u00e4ssword-\ud83d\udd10', 'application-salt-alice');
     expect(key).toHaveLength(32);
-    expect(key.toString('hex')).toBe('174805a9b7029912b2251a5d35e4e85e261f278221294e4184fb64091a3aec62');
+    expect(key.toString('hex')).toBe('b01b12ad711e5c80eeea22843f319b700779e0355280990062296352a31906e5');
   });
 
   test('uses raw salt bytes and does not mutate the salt', async () => {

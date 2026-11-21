@@ -209,7 +209,7 @@ describe('Fastify native Pino logging', () => {
     const db = new InMemoryDatabaseAdapter();
     const auth = new AuthService(db);
     jest.spyOn(auth, 'login').mockResolvedValue(null);
-    const app = createApp({ auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db), comments: new CommentService(db) }, { logger: captured.options });
+    const app = createApp({ auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db), comments: new CommentService(db) }, { instanceSalt: 'ab'.repeat(32), logger: captured.options });
     try {
       expect(
         (await app.inject({ method: 'POST', url: '/login?token=query-secret', headers: { authorization: 'Bearer header-secret', cookie: 'session=cookie-secret' }, payload: { username: 'private-user', loginHash: 'body-secret' } })).statusCode

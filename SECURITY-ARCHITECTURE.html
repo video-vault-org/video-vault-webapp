@@ -491,18 +491,18 @@
               <span class="badge">Backend implementiert</span>
               <h2 id="de-bootstrap-title">03 · Erstinitialisierung und Passwortableitung</h2>
               <p>
-                Die Startdateien für Server, Konfigurations-CLI und Admin-CLI stellen sicher, dass <code>./.pepper</code> existiert. Bei der ersten Erzeugung entstehen 32 zufällige Bytes, gespeichert als genau 64 Hex-Zeichen. Vorhandene Werte werden
+                Die Startdateien für Server, Konfigurations-CLI und Admin-CLI stellen sicher, dass <code>./.salt</code> existiert. Bei der ersten Erzeugung entstehen 32 zufällige Bytes, gespeichert als genau 64 Hex-Zeichen. Vorhandene Werte werden
                 wiederverwendet; ungültige oder unlesbare Dateien führen zu einem Fehler. Neue Dateien erhalten Modus <code>0600</code> und werden atomar veröffentlicht.
               </p>
               <p>
-                Die Admin-CLI fragt Benutzername (mindestens 3 Zeichen), Anzeigename und maskiertes Passwort ab. Sie liest den Instanzwert aus <code>./.pepper</code>, vergibt eine UUID v4 und verweigert eine weitere Erstinitialisierung, sobald ein
+                Die Admin-CLI fragt Benutzername (mindestens 3 Zeichen), Anzeigename und maskiertes Passwort ab. Sie liest den Instanzwert aus <code>./.salt</code>, vergibt eine UUID v4 und verweigert eine weitere Erstinitialisierung, sobald ein
                 Admin vorhanden ist.
               </p>
               <pre><code>A(P, S) = Argon2id(password=UTF8(P), salt=S,
                      version=0x13, memory=19456 KiB,
                      timeCost=2, parallelism=1, output=32 bytes)
 
-loginHash       = Base64(A(password, UTF8(pepperHex + username)))
+loginHash       = Base64(A(password, UTF8(instanceSalt + username)))
 passwordKeySalt = CSPRNG(32 bytes)
 passwordKey     = A(password, passwordKeySalt)</code></pre>
               <p>
@@ -514,10 +514,23 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 Die CLI erzeugt die beiden ursprünglichen Master-Schlüssel unabhängig, wrappt sie und legt den ersten Nutzer nur mit der Admin-Rolle an. Temporäre Klartext-Schlüsselbuffer werden im <code>finally</code>-Block überschrieben; das ist
                 keine Garantie, dass jede Kopie eines JavaScript-Strings aus dem Speicher verschwindet.
               </p>
+              <h3>Öffentlicher Bootstrap für den Client</h3>
+              <p>
+                Vor der Anmeldung ruft der Client <code>GET /bootstrap</code> über HTTPS unter derselben Origin auf. Die Route ist ohne Token erreichbar und liefert ausschließlich die Protokollversion und die öffentliche, stabile Instanz-Salt aus
+                <code>./.salt</code>. Ein Beispiel mit einem fiktiven Salt-Wert:
+              </p>
+              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab" }</code></pre>
+              <p>
+                Das Response-Schema bindet die Version an <code>1</code> und die Instanz-Salt an genau 64 Hex-Zeichen. Der Client prüft die unterstützte Version und das Format, bevor er den loginHash ableitet. Er verwendet exakt den gelieferten
+                Hex-Text, ohne Groß-/Kleinschreibung oder Kodierung zu ändern. Die Instanz-Salt ist öffentlich und kein Anmeldegeheimnis.
+              </p>
+              <p>
+                Der Server lädt die Instanz-Salt einmal vor dem Start des HTTP-Servers. Requests auf <code>/bootstrap</code> verwenden den geladenen Wert, ohne Dateien zu lesen oder neue Salts zu erzeugen.
+                <code>Cache-Control: no-store</code> verhindert persistentes HTTP-Caching; im laufenden Client kann der Wert im Speicher bleiben. Die Route ist in Swagger als öffentlich dokumentiert.
+              </p>
               <div class="note">
-                Der Wert in <code>./.pepper</code> ist für diese Architektur eine <strong>öffentliche, stabile Instanz-Salt</strong>, kein geheimer Pepper im kryptografischen Sinne. Der Client benötigt exakt den gespeicherten Hex-Text für die
-                Login-Ableitung. Eine spätere öffentliche Bootstrap-Route soll ihn bereitstellen; diese Route ist im aktuellen Backend noch nicht implementiert. Der Wert wird bei einem Neustart nicht rotiert und muss bei einer Wiederherstellung
-                erhalten bleiben.
+                Die Instanz-Salt wird bei Neustarts nicht rotiert und muss zusammen mit der Datenbank gesichert werden. Bestehende Installationen müssen die bisherige Salt-Datei unter dem neuen Namen <code>./.salt</code> mit unverändertem Inhalt
+                übernehmen. Eine Neuerzeugung verändert die Login-Ableitung vorhandener Nutzer.
               </div>
             </section>
             <section id="de-envelope" aria-labelledby="de-envelope-title">
@@ -565,6 +578,7 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               <span class="badge">Backend implementiert</span>
               <h2 id="de-login-title">05 · Anmeldung und Serverzugriff</h2>
               <ol>
+                <li>Der Client lädt die öffentliche Instanz-Salt über <code>GET /bootstrap</code> und prüft Protokollversion und Format.</li>
                 <li>Der Client erzeugt den <code>loginHash</code> lokal nach der beschriebenen Argon2id-Ableitung und sendet Benutzername und diesen Base64-String über TLS.</li>
                 <li>
                   Das Backend behandelt den Base64-String als Passwort, ohne ihn vorher zu dekodieren. In der Datenbank liegt davon ein scrypt-String mit eigenem 16-Byte-Salt: <code>N=2¹⁵, r=8, p=3</code>, Ausgabe 32 Bytes. Der Vergleich erfolgt mit
@@ -611,8 +625,8 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               </p>
               <h3>Benutzernamen ändern</h3>
               <p>
-                Der Benutzername ist Teil des Login-Salts. Der Client muss deshalb aus dem Passwort und <code>pepperHex + neuerBenutzername</code> einen neuen Base64-loginHash ableiten. Ein Umbenennen allein im Backend kann diesen Wert nicht aus dem
-                bisherigen Hash rekonstruieren.
+                Der Benutzername ist Teil des Login-Salts. Der Client muss deshalb aus dem Passwort und <code>instanceSalt + neuerBenutzername</code> einen neuen Base64-loginHash ableiten. Ein Umbenennen allein im Backend kann diesen Wert nicht aus
+                dem bisherigen Hash rekonstruieren.
               </p>
               <p>
                 Beide Backend-Routen verlangen nun einen JSON-Body mit <code>{ "loginHash": "…" }</code>: <code>PATCH /api/user/change/username/:username</code> für den eigenen Nutzer und
@@ -868,8 +882,8 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                     <td><a href="lib/util/deriveKey.ts">deriveKey.ts</a> · <a href="lib/util/password.ts">password.ts</a></td>
                   </tr>
                   <tr>
-                    <td>.pepper</td>
-                    <td><a href="lib/util/pepper.ts">pepper.ts</a> · <a href="lib/initialize-admin.ts">Admin entrypoint</a> · <a href="lib/initialize-config.ts">Config entrypoint</a> · <a href="lib/server.ts">Server</a></td>
+                    <td>.salt / GET /bootstrap</td>
+                    <td><a href="lib/util/instanceSalt.ts">instanceSalt.ts</a> · <a href="lib/initialize-admin.ts">Admin entrypoint</a> · <a href="lib/initialize-config.ts">Config entrypoint</a> · <a href="lib/server.ts">Server</a></td>
                   </tr>
                   <tr>
                     <td>JWT / Rollen</td>
@@ -1027,15 +1041,15 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
               <span class="badge">Backend implemented</span>
               <h2 id="en-bootstrap-title">03 · Bootstrap and password derivation</h2>
               <p>
-                The server, configuration CLI and admin CLI entrypoints ensure that <code>./.pepper</code> exists. Initial creation generates 32 random bytes stored as exactly 64 hexadecimal characters. Existing values are reused; invalid or
-                unreadable files cause an error. New files use mode <code>0600</code> and are published atomically.
+                The server, configuration CLI and admin CLI entrypoints ensure that <code>./.salt</code> exists. Initial creation generates 32 random bytes stored as exactly 64 hexadecimal characters. Existing values are reused; invalid or unreadable
+                files cause an error. New files use mode <code>0600</code> and are published atomically.
               </p>
-              <p>The admin CLI asks for a username (at least 3 characters), display name and masked password. It reads the instance value from <code>./.pepper</code>, assigns a UUID v4 and refuses another bootstrap if any admin already exists.</p>
+              <p>The admin CLI asks for a username (at least 3 characters), display name and masked password. It reads the instance value from <code>./.salt</code>, assigns a UUID v4 and refuses another bootstrap if any admin already exists.</p>
               <pre><code>A(P, S) = Argon2id(password=UTF8(P), salt=S,
                      version=0x13, memory=19456 KiB,
                      timeCost=2, parallelism=1, output=32 bytes)
 
-loginHash       = Base64(A(password, UTF8(pepperHex + username)))
+loginHash       = Base64(A(password, UTF8(instanceSalt + username)))
 passwordKeySalt = CSPRNG(32 bytes)
 passwordKey     = A(password, passwordKeySalt)</code></pre>
               <p>
@@ -1046,9 +1060,23 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 The CLI independently generates the original master keys, wraps them and creates the first user with only the admin role. Temporary plaintext key buffers are overwritten in a <code>finally</code> block; this does not guarantee erasure
                 of every copy of a JavaScript string.
               </p>
+              <h3>Public bootstrap for the client</h3>
+              <p>
+                Before logging in, the client requests <code>GET /bootstrap</code> over HTTPS from the same origin. This route requires no token and returns only the protocol version and the public, stable instance salt from <code>./.salt</code>. An
+                example using a fictitious salt value:
+              </p>
+              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab" }</code></pre>
+              <p>
+                The response schema fixes the version to <code>1</code> and requires exactly 64 hexadecimal characters for the instance salt. The client validates the supported version and salt format before deriving loginHash. It uses the exact
+                hexadecimal text received, without changing case or encoding. The instance salt is public and is not a login secret.
+              </p>
+              <p>
+                The server loads the instance salt once before starting the HTTP server. Requests to <code>/bootstrap</code> use this in-memory value without reading files or generating new salts. <code>Cache-Control: no-store</code> prevents
+                persistent HTTP caching; a running client may keep the value in memory. Swagger documents this route as public.
+              </p>
               <div class="note">
-                In this architecture, the value stored in <code>./.pepper</code> is a <strong>public, stable instance salt</strong>, not a secret pepper in the cryptographic sense. Clients need the exact stored hexadecimal text for login derivation.
-                A future public bootstrap endpoint is intended to provide it; that endpoint is not implemented in the current backend. The value is not rotated on restart and must be preserved during recovery.
+                The instance salt is not rotated on restart and must be backed up with the database. Existing installations must retain the previous salt file's exact contents under its new name <code>./.salt</code>. Generating a replacement changes
+                login derivation for existing accounts.
               </div>
             </section>
             <section id="en-envelope" aria-labelledby="en-envelope-title">
@@ -1096,6 +1124,7 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               <span class="badge">Backend implemented</span>
               <h2 id="en-login-title">05 · Authentication and server access</h2>
               <ol>
+                <li>The client obtains the public instance salt from <code>GET /bootstrap</code> and validates the protocol version and format.</li>
                 <li>The client locally derives loginHash using Argon2id as described above and sends the username and Base64 string over TLS.</li>
                 <li>
                   The backend treats this Base64 string as the password without decoding it. The database stores a scrypt string with a separate 16-byte salt: <code>N=2¹⁵, r=8, p=3</code>, output 32 bytes. Verification uses
@@ -1137,8 +1166,8 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               </p>
               <h3>Changing a username</h3>
               <p>
-                The username participates in the login salt. The client must therefore derive a new Base64 loginHash from the password and <code>pepperHex + newUsername</code>. Renaming the user on the backend alone cannot reconstruct this value from
-                the previous hash.
+                The username participates in the login salt. The client must therefore derive a new Base64 loginHash from the password and <code>instanceSalt + newUsername</code>. Renaming the user on the backend alone cannot reconstruct this value
+                from the previous hash.
               </p>
               <p>
                 Both backend routes now require a JSON body containing <code>{ "loginHash": "…" }</code>: <code>PATCH /api/user/change/username/:username</code> for the current account and
@@ -1378,8 +1407,8 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                     <td><a href="lib/util/deriveKey.ts">deriveKey.ts</a> · <a href="lib/util/password.ts">password.ts</a></td>
                   </tr>
                   <tr>
-                    <td>.pepper</td>
-                    <td><a href="lib/util/pepper.ts">pepper.ts</a> · <a href="lib/initialize-admin.ts">Admin entrypoint</a> · <a href="lib/initialize-config.ts">Config entrypoint</a> · <a href="lib/server.ts">Server</a></td>
+                    <td>.salt / GET /bootstrap</td>
+                    <td><a href="lib/util/instanceSalt.ts">instanceSalt.ts</a> · <a href="lib/initialize-admin.ts">Admin entrypoint</a> · <a href="lib/initialize-config.ts">Config entrypoint</a> · <a href="lib/server.ts">Server</a></td>
                   </tr>
                   <tr>
                     <td>JWT / roles</td>

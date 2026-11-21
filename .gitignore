@@ -6,7 +6,7 @@ built
 /storage
 video-vault.db
 
-/.pepper
-/.pepper.*.tmp
+/.salt
+/.salt.*.tmp
 
 AGENTS.md
