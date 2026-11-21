@@ -41,11 +41,15 @@ describe('HTTP middleware and errors', () => {
     await request(app).get('/').expect(status, { error: message });
   });
 
-  test('forwards errors after response headers were sent', () => {
+  test('logs errors and closes the response after headers were sent', () => {
     const error = new Error('late');
     const next = jest.fn();
-    handleErrors(error, {} as Parameters<typeof handleErrors>[1], { headersSent: true } as Parameters<typeof handleErrors>[2], next);
-    expect(next).toHaveBeenCalledWith(error);
+    const log = { error: jest.fn() };
+    const destroy = jest.fn();
+    handleErrors(error, { log } as unknown as Parameters<typeof handleErrors>[1], { headersSent: true, destroy } as unknown as Parameters<typeof handleErrors>[2], next);
+    expect(log.error).toHaveBeenCalledWith({ err: error }, 'Response failed after headers were sent');
+    expect(destroy).toHaveBeenCalledWith();
+    expect(next).not.toHaveBeenCalled();
   });
 
   test.each([0, -1, 0.5, NaN, Infinity])('rejects invalid upload size limits %s', (limit) => {

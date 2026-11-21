@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { startServer } from './server';
+import { logger } from './http/logging';
 
 startServer().then(
   ({ server, close }) => {
     const address = server.address();
-    console.log(`VideoVault listening on ${typeof address === 'object' && address ? address.port : address}`);
+    logger.info({ address }, 'VideoVault listening');
     const shutdown = () => {
       close().catch((error: unknown) => {
-        console.error('Shutdown failed', error instanceof Error ? error.message : 'Unknown error');
+        logger.error({ err: error instanceof Error ? error : new Error('Unknown shutdown error') }, 'Shutdown failed');
         process.exitCode = 1;
       });
     };
@@ -15,7 +16,7 @@ startServer().then(
     process.once('SIGTERM', shutdown);
   },
   (error: unknown) => {
-    console.error('Startup failed', error instanceof Error ? error.message : 'Unknown error');
+    logger.error({ err: error instanceof Error ? error : new Error('Unknown startup error') }, 'Startup failed');
     process.exitCode = 1;
   }
 );

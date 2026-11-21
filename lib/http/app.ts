@@ -11,6 +11,8 @@ import { userRoutes } from './routes/users';
 import { videoRoutes } from './routes/videos';
 import { commentRoutes } from './routes/comments';
 import { text } from './validation';
+import { Logger } from 'pino';
+import { logger as defaultLogger, requestLogging } from './logging';
 
 /**
  * Creates the Express backend without opening a listening socket.
@@ -19,9 +21,16 @@ import { text } from './validation';
  */
 function createApp(
   { auth, users, videos, comments }: { auth: AuthService; users: UserService; videos: VideoService; comments: CommentService },
-  { staticDirectory = './public', temporaryDirectory = './tmp', maxVideoBytes, maxThumbnailBytes }: { staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number } = {}
+  {
+    staticDirectory = './public',
+    temporaryDirectory = './tmp',
+    maxVideoBytes,
+    maxThumbnailBytes,
+    logger = defaultLogger
+  }: { staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: Logger } = {}
 ): Express {
   const app = express();
+  app.use(requestLogging(logger));
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
   const json = express.json({ limit: '1mb' });
   app.disable('x-powered-by');

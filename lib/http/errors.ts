@@ -14,12 +14,15 @@ class HttpError extends Error {
 }
 
 /** Returns consistent JSON errors without exposing database errors, credentials or stack traces. */
-const handleErrors: ErrorRequestHandler = (error: unknown, _request, response, next) => {
+const handleErrors: ErrorRequestHandler = (error: unknown, request, response, _next) => {
   if (response.headersSent) {
-    next(error);
+    response.err = error instanceof Error ? error : new Error('Unknown server error');
+    request.log.error({ err: response.err }, 'Response failed after headers were sent');
+    response.destroy();
     return;
   }
   if (error instanceof HttpError) {
+    if (error.status >= 500) response.err = error;
     response.status(error.status).json({ error: error.message });
     return;
   }
@@ -40,6 +43,7 @@ const handleErrors: ErrorRequestHandler = (error: unknown, _request, response, n
     response.status(409).json({ error: 'Resource already exists' });
     return;
   }
+  response.err = error instanceof Error ? error : new Error('Unknown server error');
   response.status(500).json({ error: 'Internal server error' });
 };
 

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 
 jest.mock('@/server', () => ({ startServer: jest.fn() }));
+jest.mock('@/http/logging', () => ({ logger: { info: jest.fn(), error: jest.fn() } }));
 
 describe('backend entrypoint', () => {
   const exitCode = process.exitCode;
@@ -28,7 +29,8 @@ describe('backend entrypoint', () => {
     listener();
     await Promise.resolve();
     expect(close).toHaveBeenCalledTimes(1);
-    expect(console.log).toHaveBeenCalledWith('VideoVault listening on 3000');
+    const { logger } = await import('@/http/logging');
+    expect(logger.info).toHaveBeenCalledWith({ address: { port: 3000, family: 'IPv4', address: '127.0.0.1' } }, 'VideoVault listening');
   });
 
   test('reports startup failure with a failing exit status', async () => {
@@ -36,7 +38,8 @@ describe('backend entrypoint', () => {
     jest.mocked(module.startServer).mockRejectedValueOnce(new Error('Cannot initialize'));
     await import('@/index');
     expect(process.exitCode).toBe(1);
-    expect(console.error).toHaveBeenCalledWith('Startup failed', 'Cannot initialize');
+    const { logger } = await import('@/http/logging');
+    expect(logger.error).toHaveBeenCalledWith({ err: expect.objectContaining({ message: 'Cannot initialize' }) }, 'Startup failed');
   });
 
   test('reports shutdown failure with a failing exit status', async () => {
@@ -50,5 +53,7 @@ describe('backend entrypoint', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(process.exitCode).toBe(1);
+    const { logger } = await import('@/http/logging');
+    expect(logger.error).toHaveBeenCalledWith({ err: expect.objectContaining({ message: 'Cannot close' }) }, 'Shutdown failed');
   });
 });
