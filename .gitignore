@@ -3,3 +3,5 @@ built
 /jwtkeys
 /tmp
 /conf
+/storage
+video-vault.db
