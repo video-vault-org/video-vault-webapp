@@ -24,10 +24,11 @@ function authentication(auth: Pick<AuthService, 'authenticate'>): onRequestAsync
 }
 
 /** Requires any supplied role. Admin, editor and moderator privileges remain independent. */
-function authorization(auth: Pick<AuthService, 'authorize'>, roles: ('admin' | 'editor' | 'moderator')[]): onRequestAsyncHookHandler {
-  return async (request) => {
+function authorization(auth: Pick<AuthService, 'authorize'>, roles: ('admin' | 'editor' | 'moderator')[]): onRequestAsyncHookHandler & { requiredRoles: readonly ('admin' | 'editor' | 'moderator')[] } {
+  const hook: onRequestAsyncHookHandler = async (request) => {
     if (!roles.some((role) => auth.authorize(currentUser(request)).includes(role))) throw new HttpError(403, 'Insufficient permissions');
   };
+  return Object.assign(hook, { requiredRoles: [...roles] });
 }
 
 /** Returns the authenticated user, or rejects access with HTTP 401. */

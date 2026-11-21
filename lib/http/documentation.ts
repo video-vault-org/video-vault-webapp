@@ -1,0 +1,108 @@
+import { FastifyInstance, FastifySchema } from 'fastify';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import type { authorization } from './middleware';
+
+const summaries: Record<string, string> = {
+  'POST /login': 'Log in',
+  'POST /api/user/add': 'Create a user',
+  'GET /api/user/me': 'Get your account',
+  'GET /api/user/all': 'List users',
+  'GET /api/user/find/:userId': 'Find a user',
+  'PATCH /api/user/change/displayname/:userId/:displayname': "Change a user's display name",
+  'PATCH /api/user/change/displayname/:displayname': 'Change your display name',
+  'PATCH /api/user/change/username/:userId/:username': "Change a user's username",
+  'PATCH /api/user/change/username/:username': 'Change your username',
+  'PATCH /api/user/change/password/:userId': "Change a user's password attributes",
+  'PATCH /api/user/change/password': 'Change your password attributes',
+  'PATCH /api/user/change/admin/:userId': 'Change the admin role',
+  'PATCH /api/user/change/editor/:userId': 'Change the editor role',
+  'PATCH /api/user/change/moderator/:userId': 'Change the moderator role',
+  'DELETE /api/user/delete/:userId': 'Delete a user and clear their comments',
+  'DELETE /api/user/delete': 'Delete your account and clear your comments',
+  'POST /api/video/upload/:videoId': 'Upload temporary video and thumbnail files',
+  'POST /api/video/submit': 'Submit a new video',
+  'PATCH /api/video/change/title/:videoId': 'Change a video title',
+  'PATCH /api/video/change/metadata/:videoId': 'Change video metadata',
+  'PATCH /api/video/change/files/:videoId': 'Replace video and/or thumbnail files',
+  'DELETE /api/video/delete/:videoId': 'Delete a video, its comments and files',
+  'GET /api/video/all': 'List all videos',
+  'GET /api/video/find/:videoId': 'Find a video',
+  'GET /api/video/file/:videoId': 'Download encrypted video bytes',
+  'GET /api/video/thumbnail/:videoId': 'Download encrypted thumbnail bytes',
+  'GET /api/video/:since': 'Find videos modified since a date',
+  'POST /api/comment/submit': 'Post a comment',
+  'GET /api/comments/:videoId': 'List comments, newest first, with cursor pagination',
+  'GET /api/comment/find/:commentId': 'Find a comment, including deleted comments',
+  'PATCH /api/comment/change/own/:commentId': 'Change your own comment',
+  'PATCH /api/comment/change/:commentId': 'Change a comment',
+  'DELETE /api/comment/delete/own/:commentId': 'Soft-delete your own comment and clear its content',
+  'DELETE /api/comment/delete/:commentId': 'Soft-delete a comment and clear its content'
+};
+
+/**
+ * Registers public Swagger UI at /docs and OpenAPI JSON/YAML at /docs/json and /docs/yaml.
+ * Must run before API route plugins. Documentation reuses runtime schemas; documentation-only multipart schemas never validate stream bodies.
+ * Required roles are read from the authorization hooks, so the documentation follows the actual access rules.
+ */
+function registerDocumentation(app: FastifyInstance, { maxVideoBytes = 2 * 1024 ** 3, maxThumbnailBytes = 20 * 1024 ** 2 }: { maxVideoBytes?: number; maxThumbnailBytes?: number } = {}): void {
+  app.register(swagger, {
+    openapi: {
+      openapi: '3.0.3',
+      info: {
+        title: 'VideoVault API',
+        version: '0.0.1',
+        description: "Encrypted video collection API. Login expects the client's Base64 loginHash, not a plaintext password. Use the returned JWT in Authorize. Admin, editor and moderator roles are independent."
+      },
+      tags: [{ name: 'Authentication' }, { name: 'Users' }, { name: 'Videos' }, { name: 'Comments' }],
+      components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } }
+    },
+    transform: ({ schema, url, route }) => {
+      const login = url === '/login';
+      if (!login && !url.startsWith('/api/')) return { schema: { ...schema, hide: true }, url };
+      const method = Array.isArray(route.method) ? route.method[0] : route.method;
+      const hooks = route.onRequest ? (Array.isArray(route.onRequest) ? route.onRequest : [route.onRequest]) : [];
+      const roles = hooks.flatMap((hook) => (hook as Partial<ReturnType<typeof authorization>>).requiredRoles ?? []);
+      const tag = login ? 'Authentication' : url.startsWith('/api/user/') ? 'Users' : url.startsWith('/api/video/') ? 'Videos' : 'Comments';
+      let description = login ? 'Public. Supply the client-derived loginHash as Base64.' : roles.length ? `Requires role: ${roles.join(' or ')}.` : 'Requires an authenticated user.';
+      if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';
+      if (url === '/api/video/change/files/:videoId')
+        description += ' Upload first. Supply videoMimeType and/or thumbnailMimeType, plus lastModified and hmac. Only selected files are replaced. Failures may leave partial Storage changes; temporary files remain for retry.';
+      if (url === '/api/video/submit') description += ' Requires both temporary files to have been uploaded with the same videoId.';
+      const documented: FastifySchema = {
+        ...schema,
+        summary: summaries[`${method} ${url}`] ?? `${method} ${url}`,
+        description,
+        tags: [tag],
+        security: login ? [] : [{ bearerAuth: [] }],
+        operationId: `${method.toLowerCase()}_${url.replace(/[:*]/g, '').split('/').filter(Boolean).join('_')}`
+      };
+      if (url === '/api/video/upload/:videoId') {
+        documented.description += ' New videos require both files. Existing videos accept video, thumbnail or both. Files are staged until submit.';
+        documented.consumes = ['multipart/form-data'];
+        documented.body = {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            video: { type: 'string', format: 'binary', description: `Video file, maximum ${maxVideoBytes} bytes.` },
+            thumbnail: { type: 'string', format: 'binary', description: `Thumbnail file, maximum ${maxThumbnailBytes} bytes.` }
+          }
+        };
+      }
+      if (url === '/api/video/file/:videoId' || url === '/api/video/thumbnail/:videoId') {
+        documented.response = { ...(documented.response as Record<string, unknown>), 200: { description: 'Encrypted file bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } } };
+      }
+      return { schema: documented, url };
+    }
+  });
+  app.register(swaggerUi, {
+    routePrefix: '/docs',
+    staticCSP: true,
+    // This backend also serves plain HTTP; keep the remaining CSP without forcing local assets to HTTPS.
+    transformStaticCSP: (header) => header.replace('upgrade-insecure-requests;', ''),
+    uiConfig: { deepLinking: true, docExpansion: 'list', persistAuthorization: false, validatorUrl: null }
+  });
+}
+
+export { registerDocumentation };

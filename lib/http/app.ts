@@ -18,6 +18,7 @@ import { videoRoutes } from './routes/videos';
 import { commentRoutes } from './routes/comments';
 import { object, text, errorResponses } from './validation';
 import { loggingOptions, HttpLogController } from './logging';
+import { registerDocumentation } from './documentation';
 
 /** Creates the native Fastify server and its Pino logger before adapter initialization, so startup errors can be logged. */
 function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
@@ -53,6 +54,7 @@ function createApp(
   const app = instance ?? createHttpServer({ logger });
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
   const authenticate = authentication(auth);
+  registerDocumentation(app, { maxVideoBytes, maxThumbnailBytes });
 
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url.split('?')[0];
@@ -61,11 +63,13 @@ function createApp(
   });
   app.register(multipart, { limits: { files: 2, fields: 0, parts: 2, fileSize: Math.max(maxVideoBytes ?? 2 * 1024 ** 3, maxThumbnailBytes ?? 20 * 1024 ** 2) } });
 
-  /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
-  app.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username: text, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
-    const token = await auth.login(request.body);
-    if (!token) throw new HttpError(401, 'Invalid credentials or account locked');
-    return { token };
+  app.register(async (router) => {
+    /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
+    router.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username: text, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
+      const token = await auth.login(request.body);
+      if (!token) throw new HttpError(401, 'Invalid credentials or account locked');
+      return { token };
+    });
   });
 
   app.register(async (router) => userRoutes(router, users, auth), { prefix: '/api/user' });
