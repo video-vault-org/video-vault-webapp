@@ -1,7 +1,7 @@
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { Video } from '@/domain/Video';
-import { logger } from '@/http/logging';
+import { FastifyBaseLogger } from 'fastify';
 
 /**
  * Coordinates video metadata in the database and video files in storage.
@@ -9,14 +9,17 @@ import { logger } from '@/http/logging';
 class VideoService {
   private readonly storage: StorageWrapper;
   private readonly db: DatabaseAdapter;
+  private readonly logger: Pick<FastifyBaseLogger, 'warn'>;
 
   /**
    * @param storage The storage wrapper used for video and thumbnail files.
    * @param db The database adapter used for video metadata and comments.
+   * @param logger The desired logger
    */
-  public constructor(storage: StorageWrapper, db: DatabaseAdapter) {
+  public constructor(storage: StorageWrapper, db: DatabaseAdapter, { logger = console }: { logger?: Pick<FastifyBaseLogger, 'warn'> } = {}) {
     this.storage = storage;
     this.db = db;
+    this.logger = logger;
   }
 
   /**
@@ -32,7 +35,7 @@ class VideoService {
       await this.storage.saveThumbnailFile({ videoId: video.videoId });
       await this.db.postVideo(video);
       await this.storage.deleteTemporaryFiles({ videoId: video.videoId }).catch((error: unknown) => {
-        logger.warn({ err: error instanceof Error ? error : new Error('Unknown temporary file cleanup error'), videoId: video.videoId }, 'Temporary video files could not be deleted');
+        this.logger.warn({ err: error instanceof Error ? error : new Error('Unknown temporary file cleanup error'), videoId: video.videoId }, 'Temporary video files could not be deleted');
       });
     } catch (err: unknown) {
       await this.storage.deleteFiles({ videoId: video.videoId });

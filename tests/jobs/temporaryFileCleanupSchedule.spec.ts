@@ -1,6 +1,6 @@
 import { Dirent, Stats } from 'node:fs';
 import { lstat, readdir, unlink } from 'node:fs/promises';
-import { Logger } from 'pino';
+import { BackgroundLogger } from '@/http/logging';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 
 jest.mock('node:fs/promises', () => ({ access: jest.fn(), readdir: jest.fn(), lstat: jest.fn(), unlink: jest.fn() }));
@@ -10,7 +10,7 @@ describe('scheduled temporary file cleanup', () => {
   let stop: (() => Promise<void>) | undefined;
   const info = jest.fn();
   const error = jest.fn();
-  const logger = { info, error } as unknown as Logger;
+  const logger = { info, error } as BackgroundLogger;
   beforeEach(() => {
     jest.useFakeTimers();
     jest.resetAllMocks();

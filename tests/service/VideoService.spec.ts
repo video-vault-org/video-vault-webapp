@@ -3,7 +3,7 @@ import { Video } from '@/domain/Video';
 import { VideoService } from '@/service/VideoService';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
-import { logger } from '@/http/logging';
+const logger = { warn: jest.fn() };
 
 describe('VideoService', () => {
   const video: Video = {
@@ -25,7 +25,8 @@ describe('VideoService', () => {
   beforeEach(() => {
     storage = new StorageWrapper(new InMemoryStorageAdapter());
     db = new InMemoryDatabaseAdapter();
-    service = new VideoService(storage, db);
+    logger.warn.mockReset();
+    service = new VideoService(storage, db, { logger });
     jest.spyOn(storage, 'deleteTemporaryFiles').mockResolvedValue(undefined);
   });
 

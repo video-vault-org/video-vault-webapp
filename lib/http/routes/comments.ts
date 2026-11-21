@@ -1,93 +1,95 @@
-import { Router } from 'express';
-import { z } from 'zod';
+import { FastifyInstance } from 'fastify';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { AuthService } from '@/service/AuthService';
 import { CommentService } from '@/service/CommentService';
 import { VideoService } from '@/service/VideoService';
+import { Comment } from '@/domain/Comment';
 import { authorization, currentUser } from '../middleware';
 import { HttpError } from '../errors';
-import { commentChange, date, id, text } from '../validation';
+import { Type, object, commentChange, date, id, text, comment, errorResponses, noContent } from '../validation';
 
-/** Builds comment routes; the parent router must authenticate every request first. */
-function commentRoutes(comments: CommentService, videos: VideoService, auth: AuthService): Router {
-  const router = Router();
-  const moderator = authorization(auth, ['moderator']);
-  const requireComment = async (commentId: string, userId?: string) => {
-    const comment = await comments.findComment({ commentId });
-    if (!comment || (userId !== undefined && comment.userId !== userId)) throw new HttpError(404, 'Comment not found');
-    return comment;
-  };
-
-  /** POST /api/comment/submit — Any authenticated user. Author comes from the JWT; edited and deleted start as false. */
-  router.post('/comment/submit', async (request, response) => {
-    const input = z
-      .object({ commentId: id, videoId: id, content: z.string().max(1_000_000), created: date, lastModified: date, hmac: text })
-      .strict()
-      .parse(request.body);
-    if (!(await videos.findVideo({ videoId: input.videoId }))) throw new HttpError(404, 'Video not found');
-    if (await comments.findComment({ commentId: input.commentId })) throw new HttpError(409, 'Comment already exists');
-    const comment = { ...input, userId: currentUser(response).userId, edited: false, deleted: false };
-    await comments.submitComment(comment);
-    response.status(201).json(comment);
-  });
-
-  /** GET /api/comments/:videoId?cursor=&pagesize=100 — Any authenticated user. Newest first; returns { comments, cursor }. */
-  router.get('/comments/:videoId', async (request, response) => {
-    const { cursor, pagesize } = z
-      .object({ cursor: z.string().max(4096).default(''), pagesize: z.coerce.number().int().min(1).max(1000).default(100) })
-      .strict()
-      .parse(request.query);
-    let result: Awaited<ReturnType<CommentService['findCommentsByVideoIdSortedByCreatedDescPaginated']>>;
-    try {
-      result = await comments.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId: id.parse(request.params.videoId), paginationCursor: cursor, paginationSize: pagesize });
-    } catch (error) {
-      if (error instanceof RangeError) throw new HttpError(400, 'Invalid pagination cursor');
-      throw error;
-    }
-    const [items, nextCursor] = result;
-    response.json({ comments: items, cursor: nextCursor });
-  });
-
-  /** GET /api/comment/find/:commentId — Any authenticated user. Includes comments marked as deleted. */
-  router.get('/comment/find/:commentId', async (request, response) => {
-    response.json(await requireComment(id.parse(request.params.commentId)));
-  });
-
-  /** PATCH /api/comment/change/own/:commentId — Any authenticated user. Updates only their own comment. */
-  router.patch('/comment/change/own/:commentId', async (request, response) => {
-    const commentId = id.parse(request.params.commentId);
-    const userId = currentUser(response).userId;
-    const change = commentChange.parse(request.body);
-    await requireComment(commentId, userId);
-    await comments.changeOwnCommentsContent({ commentId, userId, ...change });
-    response.sendStatus(204);
-  });
-
-  /** PATCH /api/comment/change/:commentId — Moderators only. Updates a specific comment regardless of author. */
-  router.patch('/comment/change/:commentId', moderator, async (request, response) => {
-    const commentId = id.parse(request.params.commentId);
-    const change = commentChange.parse(request.body);
-    await requireComment(commentId);
-    await comments.changeCommentsContent({ commentId, ...change });
-    response.sendStatus(204);
-  });
-
-  /** DELETE /api/comment/delete/own/:commentId — Any authenticated user. Marks their own comment deleted and clears its content. */
-  router.delete('/comment/delete/own/:commentId', async (request, response) => {
-    const commentId = id.parse(request.params.commentId);
-    const userId = currentUser(response).userId;
-    await requireComment(commentId, userId);
-    await comments.deleteOwnComment({ commentId, userId });
-    response.sendStatus(204);
-  });
-
-  /** DELETE /api/comment/delete/:commentId — Moderators only. Marks a specific comment deleted and clears its content. */
-  router.delete('/comment/delete/:commentId', moderator, async (request, response) => {
-    const commentId = id.parse(request.params.commentId);
-    await requireComment(commentId);
-    await comments.deleteComment({ commentId });
-    response.sendStatus(204);
-  });
-  return router;
+function publicComment(item: Comment) {
+  return { ...item, created: item.created.toISOString(), lastModified: item.lastModified.toISOString() };
 }
 
+/** Registers comment routes; the parent authenticates every API request. */
+function commentRoutes(app: FastifyInstance, comments: CommentService, videos: VideoService, auth: AuthService): void {
+  const router = app.withTypeProvider<TypeBoxTypeProvider>();
+  const moderator = authorization(auth, ['moderator']);
+  const params = object({ commentId: id });
+  const requireComment = async (commentId: string, userId?: string) => {
+    const item = await comments.findComment({ commentId });
+    if (!item || (userId !== undefined && item.userId !== userId)) throw new HttpError(404, 'Comment not found');
+    return item;
+  };
+
+  /** POST /api/comment/submit — Any authenticated user. Author comes from JWT; edited and deleted begin as false. */
+  router.post(
+    '/comment/submit',
+    { schema: { body: object({ commentId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, hmac: text }), response: { 201: comment, ...errorResponses } } },
+    async (request, reply) => {
+      const input = request.body;
+      if (!(await videos.findVideo({ videoId: input.videoId }))) throw new HttpError(404, 'Video not found');
+      if (await comments.findComment({ commentId: input.commentId })) throw new HttpError(409, 'Comment already exists');
+      const item = { ...input, created: new Date(input.created), lastModified: new Date(input.lastModified), userId: currentUser(request).userId, edited: false, deleted: false };
+      await comments.submitComment(item);
+      return reply.code(201).send(publicComment(item));
+    }
+  );
+
+  /** GET /api/comments/:videoId?cursor=&pagesize=100 — Any authenticated user. Paginated comments, newest first. */
+  router.get(
+    '/comments/:videoId',
+    {
+      schema: {
+        params: object({ videoId: id }),
+        querystring: object({ cursor: Type.String({ maxLength: 4096, default: '' }), pagesize: Type.Integer({ minimum: 1, maximum: 1000, default: 100 }) }),
+        response: { 200: object({ comments: Type.Array(comment), cursor: Type.String() }), ...errorResponses }
+      }
+    },
+    async (request) => {
+      try {
+        const [items, cursor] = await comments.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId: request.params.videoId, paginationCursor: request.query.cursor, paginationSize: request.query.pagesize });
+        return { comments: items.map(publicComment), cursor };
+      } catch (error) {
+        if (error instanceof RangeError) throw new HttpError(400, 'Invalid pagination cursor');
+        throw error;
+      }
+    }
+  );
+
+  /** GET /api/comment/find/:commentId — Any authenticated user. Includes comments marked deleted. */
+  router.get('/comment/find/:commentId', { schema: { params, response: { 200: comment, ...errorResponses } } }, async (request) => publicComment(await requireComment(request.params.commentId)));
+
+  /** PATCH /api/comment/change/own/:commentId — Any authenticated user. Changes only their own comment. */
+  router.patch('/comment/change/own/:commentId', { schema: { params, body: commentChange, response: noContent } }, async (request, reply) => {
+    const userId = currentUser(request).userId;
+    const { commentId } = request.params;
+    await requireComment(commentId, userId);
+    await comments.changeOwnCommentsContent({ commentId, userId, ...request.body, lastModified: new Date(request.body.lastModified) });
+    return reply.code(204).send(null);
+  });
+
+  /** PATCH /api/comment/change/:commentId — Moderators only. Changes a comment regardless of author. */
+  router.patch('/comment/change/:commentId', { onRequest: moderator, schema: { params, body: commentChange, response: noContent } }, async (request, reply) => {
+    await requireComment(request.params.commentId);
+    await comments.changeCommentsContent({ ...request.params, ...request.body, lastModified: new Date(request.body.lastModified) });
+    return reply.code(204).send(null);
+  });
+
+  /** DELETE /api/comment/delete/own/:commentId — Any authenticated user. Soft-deletes their own comment and clears content. */
+  router.delete('/comment/delete/own/:commentId', { schema: { params, response: noContent } }, async (request, reply) => {
+    const userId = currentUser(request).userId;
+    await requireComment(request.params.commentId, userId);
+    await comments.deleteOwnComment({ ...request.params, userId });
+    return reply.code(204).send(null);
+  });
+
+  /** DELETE /api/comment/delete/:commentId — Moderators only. Soft-deletes a comment and clears content. */
+  router.delete('/comment/delete/:commentId', { onRequest: moderator, schema: { params, response: noContent } }, async (request, reply) => {
+    await requireComment(request.params.commentId);
+    await comments.deleteComment(request.params);
+    return reply.code(204).send(null);
+  });
+}
 export { commentRoutes };

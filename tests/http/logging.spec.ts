@@ -1,9 +1,8 @@
-import express from 'express';
-import { Writable } from 'node:stream';
+import { Writable, Readable } from 'node:stream';
 import request from 'supertest';
-import { createLogger, requestLogging } from '@/http/logging';
-import { handleErrors, HttpError } from '@/http/errors';
-import { createApp } from '@/http/app';
+import { createHttpServer, createApp } from '@/http/app';
+import { loggingOptions } from '@/http/logging';
+import { HttpError } from '@/http/errors';
 import { AuthService } from '@/service/AuthService';
 import { UserService } from '@/service/UserService';
 import { VideoService } from '@/service/VideoService';
@@ -12,16 +11,16 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 
-function capture(terminal = false, level: 'info' | 'warn' = 'info') {
+function capture(terminal = false, level = 'info') {
   let output = '';
   const destination = new Writable({
-    write(chunk, _encoding, callback) {
+    write(chunk, _encoding, done) {
       output += chunk.toString();
-      callback();
+      done();
     }
   });
   return {
-    log: createLogger({ destination, terminal, level }),
+    options: loggingOptions({ destination, terminal, level }),
     output: () => output,
     records: () =>
       output
@@ -32,166 +31,202 @@ function capture(terminal = false, level: 'info' | 'warn' = 'info') {
   };
 }
 
-describe('Pino logging', () => {
-  test('writes one JSON line per message to non-terminal output, including serialized errors', () => {
-    const { log, output, records } = capture();
-    log.info('Information');
-    log.warn('Warning');
-    log.error({ err: Object.assign(new Error('Failure\nwith details'), { secret: 'never-log-me' }) }, 'Failed');
-    expect(records().map(({ level }) => level)).toEqual([30, 40, 50]);
-    expect(records()[2].err).toMatchObject({ type: 'Error', message: 'Failure\nwith details', stack: expect.stringContaining('Error: Failure') });
-    expect(output().split('\n')).toHaveLength(4);
-    expect(output()).not.toContain('\u001b[');
-    expect(output()).not.toContain('never-log-me');
+describe('Fastify native Pino logging', () => {
+  test('writes one JSON line per native log message and omits custom error properties', async () => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    try {
+      app.log.info('Information');
+      app.log.warn('Warning');
+      app.log.error({ err: Object.assign(new Error('Failure\nwith details'), { secret: 'never-log-me' }) }, 'Failed');
+      expect(captured.records().map(({ level }) => level)).toEqual([30, 40, 50]);
+      expect(captured.records()[2].err).toMatchObject({ type: 'Error', message: 'Failure\nwith details', stack: expect.any(String) });
+      expect(captured.output().split('\n')).toHaveLength(4);
+      expect(captured.output()).not.toContain('\u001b[');
+      expect(captured.output()).not.toContain('never-log-me');
+    } finally {
+      await app.close();
+    }
   });
-
-  test('writes colored single-line terminal records, including errors and stacks', async () => {
-    const { log, output } = capture(true);
-    log.info('Information');
-    log.warn('Warning');
-    log.error({ err: new Error('Failure\nwith details') }, 'Failed');
-    await new Promise(setImmediate);
-    expect(output()).toContain('\u001b[');
-    expect(output()).toContain('INFO');
-    expect(output()).toContain('WARN');
-    expect(output()).toContain('ERROR');
-    expect(output()).toContain('Failure');
-    expect(output().trim().split('\n')).toHaveLength(3);
+  test('writes colored single-line terminal records, including multiline errors', async () => {
+    const captured = capture(true);
+    const app = createHttpServer({ logger: captured.options });
+    try {
+      app.log.info('Information');
+      app.log.warn('Warning');
+      app.log.error({ err: new Error('Failure\nwith details') }, 'Failed');
+      expect(captured.output()).toContain('\u001b[');
+      expect(captured.output()).toContain('ERROR');
+      expect(captured.output().trim().split('\n')).toHaveLength(3);
+    } finally {
+      await app.close();
+    }
   });
-
-  test('honors the configured minimum severity', () => {
-    const { log, records } = capture(false, 'warn');
-    log.info('Hidden');
-    log.warn('Visible');
-    expect(records().map(({ msg }) => msg)).toEqual(['Visible']);
+  test('honors the configured minimum severity', async () => {
+    const captured = capture(false, 'warn');
+    const app = createHttpServer({ logger: captured.options });
+    try {
+      app.log.info('Hidden');
+      app.log.warn('Visible');
+      expect(captured.records().map(({ msg }) => msg)).toEqual(['Visible']);
+    } finally {
+      await app.close();
+    }
   });
-
-  test('uses stdout TTY status and LOG_LEVEL by default', async () => {
-    const environment = process.env.LOG_LEVEL;
+  test('defaults to stdout TTY status and LOG_LEVEL', async () => {
+    const previous = process.env.LOG_LEVEL;
     const tty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
     try {
       process.env.LOG_LEVEL = 'warn';
       Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
       let output = '';
       const destination = new Writable({
-        write(chunk, _encoding, callback) {
+        write(chunk, _encoding, done) {
           output += chunk.toString();
-          callback();
+          done();
         }
       });
-      const log = createLogger({ destination });
-      log.info('Hidden');
-      log.warn('Visible');
+      const app = createHttpServer({ logger: loggingOptions({ destination }) });
+      app.log.warn('Visible');
       expect(JSON.parse(output)).toMatchObject({ level: 40, msg: 'Visible' });
+      await app.close();
       Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
-      createLogger({ destination }).warn('Terminal');
-      await new Promise(setImmediate);
+      const terminal = createHttpServer({ logger: loggingOptions({ destination }) });
+      terminal.log.warn('Terminal');
       expect(output).toContain('\u001b[');
+      await terminal.close();
     } finally {
-      if (environment === undefined) delete process.env.LOG_LEVEL;
-      else process.env.LOG_LEVEL = environment;
+      if (previous === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = previous;
       if (tty) Object.defineProperty(process.stdout, 'isTTY', tty);
       else Reflect.deleteProperty(process.stdout, 'isTTY');
     }
   });
-
-  test('logs arrival and completion with a server-generated correlation ID and duration', async () => {
-    const { log, records } = capture();
-    const app = express();
-    app.use(requestLogging(log));
-    app.get('/slow', (_request, response) => setTimeout(() => response.sendStatus(204), 20));
-    const response = await request(app).get('/slow?token=secret-query').set('X-Request-ID', 'untrusted-id');
-    const [received, completed] = records();
-    expect(response.status).toBe(204);
-    expect(received).toMatchObject({ level: 30, msg: 'Request received', req: { id: response.headers['x-request-id'], method: 'GET', path: '/slow' } });
-    expect(received.req.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(received.req.id).not.toBe('untrusted-id');
-    expect(completed).toMatchObject({ level: 30, msg: 'Request completed', req: received.req, res: { statusCode: 204 }, responseTime: expect.any(Number) });
-    expect(completed.responseTime).toBeGreaterThanOrEqual(15);
-    expect(records()).toHaveLength(2);
+  test('logs arrival and completion with native request ID and elapsed time', async () => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    app.get('/slow', async (_request, reply) => {
+      await new Promise((done) => setTimeout(done, 20));
+      return reply.code(204).send();
+    });
+    try {
+      const response = await app.inject({ url: '/slow?token=secret-query', headers: { 'x-request-id': 'untrusted-id' } });
+      const [received, completed] = captured.records();
+      expect(response.statusCode).toBe(204);
+      expect(received).toMatchObject({ level: 30, msg: 'Request received', req: { id: response.headers['x-request-id'], method: 'GET', path: '/slow' } });
+      expect(received.req.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(received.req.id).not.toBe('untrusted-id');
+      expect(completed).toMatchObject({ level: 30, reqId: received.reqId, res: { statusCode: 204 }, responseTime: expect.any(Number) });
+      expect(completed.responseTime).toBeGreaterThanOrEqual(15);
+      expect(captured.records()).toHaveLength(2);
+    } finally {
+      await app.close();
+    }
   });
-
-  test.each([200, 302, 400, 401, 403, 404, 409, 413, 500, 503])('selects severity for status %i', async (status) => {
-    const { log, records } = capture();
-    const app = express();
-    app.use(requestLogging(log));
-    app.get('/', (_request, response) => response.sendStatus(status));
-    await request(app).get('/');
-    expect(records()[1]).toMatchObject({ level: status >= 500 ? 50 : status >= 400 ? 40 : 30, res: { statusCode: status } });
+  test.each([200, 302, 400, 401, 403, 404, 409, 413, 500, 503])('selects severity for HTTP %i', async (status) => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    app.get('/', async (_request, reply) => reply.code(status).send(''));
+    try {
+      await app.inject('/');
+      expect(captured.records()[1]).toMatchObject({ level: status >= 500 ? 50 : status >= 400 ? 40 : 30, res: { statusCode: status } });
+    } finally {
+      await app.close();
+    }
   });
-
-  test('records the original unexpected error once while keeping the HTTP response generic', async () => {
-    const { log, records } = capture();
-    const app = express();
-    app.use(requestLogging(log));
-    app.get('/', () => {
+  test('records original unexpected errors once and returns generic error responses', async () => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    app.get('/', async () => {
       throw new Error('Database unavailable');
     });
-    app.use(handleErrors);
-    await request(app).get('/').expect(500, { error: 'Internal server error' });
-    expect(records()).toHaveLength(2);
-    expect(records()[1]).toMatchObject({ level: 50, msg: 'Request failed', err: { type: 'Error', message: 'Database unavailable', stack: expect.any(String) } });
+    try {
+      const response = await app.inject('/');
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({ error: 'Internal server error' });
+      expect(captured.records()).toHaveLength(2);
+      expect(captured.records()[1]).toMatchObject({ level: 50, msg: 'Request failed', err: { message: 'Database unavailable' } });
+    } finally {
+      await app.close();
+    }
   });
-
-  test('logs explicit server errors and handles non-Error exceptions', async () => {
-    const { log, records } = capture();
-    const app = express();
-    app.use(requestLogging(log));
-    app.get('/explicit', () => {
+  test('handles explicit HTTP failures and non-Error exceptions', async () => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    app.get('/explicit', async () => {
       throw new HttpError(503, 'Unavailable');
     });
-    app.get('/unknown', () => {
+    app.get('/unknown', async () => {
       throw 'sensitive-unknown-value';
     });
-    app.use(handleErrors);
-    await request(app).get('/explicit').expect(503);
-    await request(app).get('/unknown').expect(500);
-    expect(records()[1].err.message).toBe('Unavailable');
-    expect(records()[3].err.message).toBe('Unknown server error');
+    try {
+      expect((await app.inject('/explicit')).statusCode).toBe(503);
+      expect((await app.inject('/unknown')).statusCode).toBe(500);
+      expect(captured.records()[1].err.message).toBe('Unavailable');
+      expect(captured.records()[3].err.message).toBe('Unknown server error');
+    } finally {
+      await app.close();
+    }
   });
-
-  test('logs the original streaming error and the aborted response with a common request ID', async () => {
-    const { log, records } = capture();
-    const app = express();
-    app.use(requestLogging(log));
-    app.get('/stream', (_request, response, next) => {
-      response.write('partial');
-      setImmediate(() => next(new Error('Streaming failed')));
+  test('logs stream errors with request correlation when a response is aborted', async () => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    app.get('/', async (_request, reply) => {
+      const stream = new Readable({
+        read() {
+          this.push('partial');
+          this._read = () => undefined;
+          setImmediate(() => this.destroy(new Error('Streaming failed')));
+        }
+      });
+      return reply.type('application/octet-stream').send(stream);
     });
-    app.use(handleErrors);
-    await expect(request(app).get('/stream')).rejects.toThrow(/aborted|socket hang up/);
-    await new Promise(setImmediate);
-    expect(records().map(({ level }) => level)).toEqual([30, 50, 50]);
-    expect(records()[1]).toMatchObject({ msg: 'Response failed after headers were sent', err: { message: 'Streaming failed' } });
-    expect(records()[2]).toMatchObject({ msg: 'Request failed', responseTime: expect.any(Number), req: records()[0].req });
+    try {
+      await app.ready();
+      await expect(request(app.server).get('/')).rejects.toThrow(/aborted|socket hang up/);
+      await new Promise(setImmediate);
+      expect(captured.records()).toEqual(expect.arrayContaining([expect.objectContaining({ level: 50, reqId: expect.any(String), err: expect.objectContaining({ message: 'Streaming failed' }) })]));
+    } finally {
+      await app.close();
+    }
   });
-
-  test('supports request-scoped warnings with the same correlation metadata', async () => {
-    const { log, records } = capture();
-    const app = express();
-    app.use(requestLogging(log));
-    app.get('/', (request, response) => {
+  test('supports native request-scoped warnings', async () => {
+    const captured = capture();
+    const app = createHttpServer({ logger: captured.options });
+    app.get('/', async (request) => {
       request.log.warn('Service warning');
-      response.sendStatus(204);
+      return null;
     });
-    await request(app).get('/');
-    expect(records()[1]).toMatchObject({ level: 40, msg: 'Service warning', req: records()[0].req });
+    try {
+      await app.inject('/');
+      expect(captured.records()[1]).toMatchObject({ level: 40, msg: 'Service warning', reqId: captured.records()[0].reqId });
+    } finally {
+      await app.close();
+    }
   });
-
-  test('the real Express app logs login and validation failures without bodies, headers or query secrets', async () => {
-    const { log, output, records } = capture();
+  test('the real app never logs request/response bodies, tokens, cookies or query secrets', async () => {
+    const captured = capture();
     const db = new InMemoryDatabaseAdapter();
     const auth = new AuthService(db);
     jest.spyOn(auth, 'login').mockResolvedValue(null);
-    const app = createApp({ auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db), comments: new CommentService(db) }, { logger: log });
-    await request(app).post('/login?token=query-secret').set('Authorization', 'Bearer header-secret').set('Cookie', 'session=cookie-secret').send({ username: 'private-user', loginHash: 'body-secret' }).expect(401);
-    await request(app).post('/login').send({ username: 'private-user', loginHash: 'invalid-secret', unexpected: 'validation-secret' }).expect(400);
-    jest.mocked(auth.login).mockResolvedValue('response-token-secret');
-    await request(app).post('/login').send({ username: 'private-user', loginHash: 'body-secret' }).expect(200, { token: 'response-token-secret' });
-    expect(output()).not.toContain('response-token-secret');
-    expect(records().map(({ level }) => level)).toEqual([30, 40, 30, 40, 30, 30]);
-    for (const secret of ['query-secret', 'header-secret', 'cookie-secret', 'body-secret', 'private-user', 'invalid-secret', 'validation-secret']) expect(output()).not.toContain(secret);
-    expect(records()[0].req).toEqual({ id: expect.any(String), method: 'POST', path: '/login' });
-    expect(records()[1].res).toEqual({ statusCode: 401 });
+    const app = createApp({ auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db), comments: new CommentService(db) }, { logger: captured.options });
+    try {
+      expect(
+        (await app.inject({ method: 'POST', url: '/login?token=query-secret', headers: { authorization: 'Bearer header-secret', cookie: 'session=cookie-secret' }, payload: { username: 'private-user', loginHash: 'body-secret' } })).statusCode
+      ).toBe(401);
+      expect((await app.inject({ method: 'POST', url: '/login', payload: { username: 'private-user', loginHash: 'invalid-secret', unexpected: 'validation-secret' } })).statusCode).toBe(400);
+      jest.mocked(auth.login).mockResolvedValue('response-token-secret');
+      expect((await app.inject({ method: 'POST', url: '/login', payload: { username: 'private-user', loginHash: 'body-secret' } })).statusCode).toBe(200);
+      expect(
+        captured
+          .records()
+          .filter(({ reqId }) => reqId)
+          .map(({ level }) => level)
+      ).toEqual([30, 40, 30, 40, 30, 30]);
+      for (const secret of ['query-secret', 'header-secret', 'cookie-secret', 'body-secret', 'private-user', 'invalid-secret', 'validation-secret', 'response-token-secret']) expect(captured.output()).not.toContain(secret);
+    } finally {
+      await app.close();
+      jest.restoreAllMocks();
+    }
   });
 });

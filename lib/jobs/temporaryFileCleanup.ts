@@ -1,7 +1,6 @@
 import { access, lstat, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Logger } from 'pino';
-import { logger as defaultLogger } from '@/http/logging';
+import { BackgroundLogger } from '@/http/logging';
 
 const day = 24 * 60 * 60 * 1000;
 const hour = 60 * 60 * 1000;
@@ -54,7 +53,7 @@ async function cleanupTemporaryFiles({ directory = './tmp', now = Date.now() }: 
  * Starts immediate and hourly cleanup runs. Runs never overlap and failures are logged without stopping the schedule.
  * The timer does not keep Node alive. The returned idempotent stop function clears it and waits for any active run.
  */
-function startTemporaryFileCleanup({ directory = './tmp', intervalMs = hour, logger = defaultLogger }: { directory?: string; intervalMs?: number; logger?: Logger } = {}): () => Promise<void> {
+function startTemporaryFileCleanup({ directory = './tmp', intervalMs = hour, logger = console }: { directory?: string; intervalMs?: number; logger?: BackgroundLogger } = {}): () => Promise<void> {
   if (!Number.isSafeInteger(intervalMs) || intervalMs <= 0 || intervalMs > 2 ** 31 - 1) throw new RangeError('Invalid cleanup interval');
   let running: Promise<void> | undefined;
   let stopped = false;

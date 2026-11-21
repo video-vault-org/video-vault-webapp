@@ -60,7 +60,18 @@ describe('startServer', () => {
     expect(resetDb).toHaveBeenCalledTimes(1);
     expect(resetStorage).toHaveBeenCalledTimes(1);
     expect(running.server.listening).toBe(false);
-    expect(startTemporaryFileCleanup).toHaveBeenCalledWith();
+    expect(startTemporaryFileCleanup).toHaveBeenCalledWith({ logger: expect.objectContaining({ info: expect.any(Function), error: expect.any(Function) }) });
+    expect(jest.mocked(startTemporaryFileCleanup).mock.results[0].value).toHaveBeenCalledTimes(1);
+  });
+
+  test('propagates database shutdown failures after stopping the HTTP server and cleanup job', async () => {
+    const active = await startServer({ port: 0, host: '127.0.0.1', staticDirectory: directory });
+    const error = new Error('Database close failed');
+    jest.mocked(resetDb).mockRejectedValueOnce(error);
+    const first = active.close();
+    expect(active.close()).toBe(first);
+    await expect(first).rejects.toBe(error);
+    expect(active.server.listening).toBe(false);
     expect(jest.mocked(startTemporaryFileCleanup).mock.results[0].value).toHaveBeenCalledTimes(1);
   });
 

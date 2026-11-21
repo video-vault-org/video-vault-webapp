@@ -1,5 +1,11 @@
-import express, { Express } from 'express';
-import { z } from 'zod';
+import Fastify, { FastifyInstance, FastifyServerOptions } from 'fastify';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import Ajv, { AnySchema } from 'ajv';
+import addFormats from 'ajv-formats';
+import multipart from '@fastify/multipart';
+import staticFiles from '@fastify/static';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { AuthService } from '@/service/AuthService';
 import { UserService } from '@/service/UserService';
 import { VideoService } from '@/service/VideoService';
@@ -10,14 +16,28 @@ import { UploadStore } from './uploads';
 import { userRoutes } from './routes/users';
 import { videoRoutes } from './routes/videos';
 import { commentRoutes } from './routes/comments';
-import { text } from './validation';
-import { Logger } from 'pino';
-import { logger as defaultLogger, requestLogging } from './logging';
+import { object, text, errorResponses } from './validation';
+import { loggingOptions, HttpLogController } from './logging';
+
+/** Creates the native Fastify server and its Pino logger before adapter initialization, so startup errors can be logged. */
+function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
+  const app = Fastify({ logger, genReqId: () => randomUUID(), logController: new HttpLogController(), bodyLimit: 1024 * 1024, routerOptions: { maxParamLength: 4096, ignoreTrailingSlash: true } });
+  const strict = addFormats(new Ajv({ removeAdditional: false, coerceTypes: false, useDefaults: true }));
+  const query = addFormats(new Ajv({ removeAdditional: false, coerceTypes: true, useDefaults: true }));
+  app.setValidatorCompiler(({ schema, httpPart }) => (httpPart === 'querystring' ? query : strict).compile(schema as AnySchema));
+  app.decorateRequest('user', null);
+  app.decorateRequest('failure', null);
+  app.setErrorHandler(handleErrors);
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('X-Request-ID', request.id).header('X-Content-Type-Options', 'nosniff');
+  });
+  return app;
+}
 
 /**
- * Creates the Express backend without opening a listening socket.
- * Services must be initialized. temporaryDirectory must match the StorageWrapper's temporary directory.
- * API requests use Bearer JWTs; only explicitly granted roles allow privileged operations.
+ * Registers the backend without opening a listening socket. Call ready()/inject() before use, close() after use.
+ * Auth runs before parsing and schema validation. Every JSON API route has a compiled response schema.
+ * temporaryDirectory must match the StorageWrapper. Bodies, headers and query secrets are excluded from logs.
  */
 function createApp(
   { auth, users, videos, comments }: { auth: AuthService; users: UserService; videos: VideoService; comments: CommentService },
@@ -26,46 +46,49 @@ function createApp(
     temporaryDirectory = './tmp',
     maxVideoBytes,
     maxThumbnailBytes,
-    logger = defaultLogger
-  }: { staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: Logger } = {}
-): Express {
-  const app = express();
-  app.use(requestLogging(logger));
+    logger,
+    instance
+  }: { staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: FastifyServerOptions['logger']; instance?: FastifyInstance } = {}
+): FastifyInstance {
+  const app = instance ?? createHttpServer({ logger });
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
-  const json = express.json({ limit: '1mb' });
-  app.disable('x-powered-by');
-  app.use((_request, response, next) => {
-    response.set('X-Content-Type-Options', 'nosniff');
-    next();
-  });
-  app.use(['/api', '/login'], (_request, response, next) => {
-    response.set('Cache-Control', 'no-store');
-    next();
-  });
+  const authenticate = authentication(auth);
 
-  /** POST /login — Public. JSON body: username and the client's Base64 loginHash. Returns { token }, or 401 for failure/lock. */
-  app.post('/login', json, async (request, response) => {
-    const credentials = z.object({ username: text, loginHash: text }).strict().parse(request.body);
-    const token = await auth.login(credentials);
+  app.addHook('onRequest', async (request, reply) => {
+    const path = request.url.split('?')[0];
+    if (path === '/login' || path.startsWith('/login/') || path === '/api' || path.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    if (path === '/api' || path.startsWith('/api/')) await authenticate.call(app, request, reply);
+  });
+  app.register(multipart, { limits: { files: 2, fields: 0, parts: 2, fileSize: Math.max(maxVideoBytes ?? 2 * 1024 ** 3, maxThumbnailBytes ?? 20 * 1024 ** 2) } });
+
+  /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
+  app.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username: text, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
+    const token = await auth.login(request.body);
     if (!token) throw new HttpError(401, 'Invalid credentials or account locked');
-    response.json({ token });
+    return { token };
   });
 
-  app.use('/api', authentication(auth), json);
-  app.use('/api/user', userRoutes(users, auth));
-  app.use('/api/video', videoRoutes(videos, auth, uploads));
-  app.use('/api', commentRoutes(comments, videos, auth));
-  app.use('/api', (_request, _response) => {
-    throw new HttpError(404, 'Route not found');
+  app.register(async (router) => userRoutes(router, users, auth), { prefix: '/api/user' });
+  app.register(async (router) => videoRoutes(router, videos, auth, uploads), { prefix: '/api/video' });
+  app.register(async (router) => commentRoutes(router, comments, videos, auth), { prefix: '/api' });
+
+  /** GET/HEAD for non-API paths — Public. Serves only public files; dotfiles and directory redirects are disabled. */
+  app.register(staticFiles, {
+    root: resolve(staticDirectory),
+    dotfiles: 'deny',
+    redirect: false,
+    allowedPath: (_path, _root, request) =>
+      !/^\/api(?:\/|\?|$)/.test(request.url) &&
+      !request.url
+        .split('?')[0]
+        .split('/')
+        .some((part) => part.startsWith('.'))
   });
 
-  /** GET/HEAD for non-API paths — Public. Serves files only from staticDirectory; dotfiles and directory redirects are disabled. */
-  app.use(express.static(staticDirectory, { dotfiles: 'deny', redirect: false }));
-  app.use((_request, _response) => {
+  app.setNotFoundHandler(async () => {
     throw new HttpError(404, 'Not found');
   });
-  app.use(handleErrors);
+
   return app;
 }
-
-export { createApp };
+export { createApp, createHttpServer };

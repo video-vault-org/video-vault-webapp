@@ -1,11 +1,11 @@
-import { createServer, Server } from 'node:http';
+import { Server } from 'node:http';
 import { loadDb, resetDb } from '@/db';
 import { loadStorage, resetStorage } from '@/storage';
 import { AuthService } from '@/service/AuthService';
 import { UserService } from '@/service/UserService';
 import { VideoService } from '@/service/VideoService';
 import { CommentService } from '@/service/CommentService';
-import { createApp } from '@/http/app';
+import { createApp, createHttpServer } from '@/http/app';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 
 /**
@@ -22,42 +22,46 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
   server: Server;
   close: () => Promise<void>;
 }> {
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
+  const app = createHttpServer();
   try {
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
     const db = await loadDb();
     const storage = await loadStorage();
     const auth = new AuthService(db, { tokenLifetimeSeconds: process.env.JWT_TTL_SECONDS === undefined ? undefined : Number(process.env.JWT_TTL_SECONDS) });
     await auth.initialize();
-    const app = createApp(
-      { auth, users: new UserService(db), videos: new VideoService(storage, db), comments: new CommentService(db) },
+    createApp(
+      { auth, users: new UserService(db), videos: new VideoService(storage, db, { logger: app.log }), comments: new CommentService(db) },
       {
+        instance: app,
         staticDirectory,
         maxVideoBytes: process.env.VIDEO_UPLOAD_LIMIT_BYTES === undefined ? undefined : Number(process.env.VIDEO_UPLOAD_LIMIT_BYTES),
         maxThumbnailBytes: process.env.THUMBNAIL_UPLOAD_LIMIT_BYTES === undefined ? undefined : Number(process.env.THUMBNAIL_UPLOAD_LIMIT_BYTES)
       }
     );
-    const server = createServer(app);
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(port, host, () => {
-        server.off('error', reject);
-        resolve();
-      });
-    });
-    const stopCleanup = startTemporaryFileCleanup();
+    await app.listen({ port, host });
+    const server = app.server;
+    const stopCleanup = startTemporaryFileCleanup({ logger: app.log });
     let closing: Promise<void> | undefined;
     return {
       server,
       close: () => {
-        closing ??= new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))).finally(async () => {
-          await stopCleanup();
-          resetStorage();
-          await resetDb();
-        });
+        closing ??= app
+          .close()
+          .finally(async () => {
+            await stopCleanup();
+            resetStorage();
+            await resetDb();
+          })
+          .catch((error: unknown) => {
+            app.log.error({ err: error }, 'Shutdown failed');
+            throw error;
+          });
         return closing;
       }
     };
   } catch (error) {
+    app.log.error({ err: error }, 'Startup failed');
+    await app.close().catch(() => undefined);
     resetStorage();
     await resetDb().catch(() => undefined);
     throw error;
