@@ -514,18 +514,40 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 Die CLI erzeugt die beiden ursprünglichen Master-Schlüssel unabhängig, wrappt sie und legt den ersten Nutzer nur mit der Admin-Rolle an. Temporäre Klartext-Schlüsselbuffer werden im <code>finally</code>-Block überschrieben; das ist
                 keine Garantie, dass jede Kopie eines JavaScript-Strings aus dem Speicher verschwindet.
               </p>
+              <h3>Anwendungskonfiguration und DynamoDB-Namensraum</h3>
+              <p>
+                <code>npm run config:init</code> fragt zuerst den Anwendungstitel, danach Datenbank und Storage ab. Der Titel wird über die saveConfig-Funktion in <code>./conf/app.json</code> gespeichert, beispielsweise
+                <code>{ "title": "Meine Videos" }</code>. Vorhandene Titel dienen als Vorgabe; vor dem Überschreiben bestehender Konfigurationen wird eine Bestätigung verlangt. Erlaubt sind 1 bis 100 Zeichen nach dem Entfernen äußerer Leerzeichen.
+                Ohne app.json gilt <code>VideoVault</code>; fehlerhafte oder unlesbare vorhandene Dateien führen zu einem Fehler.
+              </p>
+              <p>
+                Wenn in <code>./conf/db.json</code> kein <code>conf.tablePrefix</code> gesetzt ist, leitet der DynamoDB-Adapter seinen Präfix bei der Initialisierung aus dem aktuellen Titel ab. CamelCase-Wortgrenzen und andere Trennzeichen werden zu
+                Bindestrichen, diakritische Zeichen entfernt und ASCII-Buchstaben kleingeschrieben: <code>VideoVault → video-vault-</code>, <code>Meine Videos → meine-videos-</code>. Titel ohne ASCII-Buchstaben oder Ziffern erhalten
+                <code>app-&lt;16 Hex-Zeichen aus SHA-256 des Titels&gt;-</code>. Ungewöhnlich lange normalisierte Titel werden auf 100 Zeichen gekürzt und erhalten ebenfalls einen Hash-Suffix. Der Tabellenname entsteht durch Anhängen von
+                <code>users</code>, <code>usernames</code>, <code>videos</code>, <code>comments</code> oder <code>login-attempts</code>. Ein explizit gespeicherter <code>conf.tablePrefix</code> hat Vorrang. Die Config-CLI fragt den Präfix separat ab:
+                Ein vorhandener Wert dient als Vorgabe, ansonsten wird die Vorgabe aus dem Titel abgeleitet. Der bestätigte Wert wird in der Datenbank-Konfiguration gespeichert und bleibt unabhängig von späteren Titeländerungen.
+              </p>
+              <div class="note open">
+                Konfigurationsänderungen erfordern einen Neustart. Ein geänderter Präfix wählt andere DynamoDB-Tabellen und kann diese bei der Initialisierung neu anlegen; bestehende Daten werden nicht automatisch verschoben. Ohne expliziten
+                tablePrefix kann auch eine Titeländerung den Präfix ändern. Mit gesetztem tablePrefix bleibt der Tabellen-Namensraum bei Titeländerungen stabil. Unterschiedliche Titel mit derselben normalisierten Form können denselben Präfix ergeben.
+                Der Anwendungstitel beeinflusst weder die Instanz-Salt noch die Passwortableitung oder die Master-Schlüssel.
+              </div>
+              <p>
+                Der Titel ist öffentliche Anzeigeinformation. Bootstrap gibt nur freigegebene Anwendungsfelder aus, keine Datenbank- oder Storage-Zugangsdaten. Der künftige Client soll den Titel als Text setzen, etwa über <code>document.title</code>,
+                und nicht als HTML interpretieren. Das Objekt <code>app</code> kann später um Logo und Favicon erweitert werden; diese Funktionen sind noch nicht implementiert.
+              </p>
               <h3>Öffentlicher Bootstrap für den Client</h3>
               <p>
-                Vor der Anmeldung ruft der Client <code>GET /bootstrap</code> über HTTPS unter derselben Origin auf. Die Route ist ohne Token erreichbar und liefert ausschließlich die Protokollversion und die öffentliche, stabile Instanz-Salt aus
-                <code>./.salt</code>. Ein Beispiel mit einem fiktiven Salt-Wert:
+                Vor der Anmeldung ruft der Client <code>GET /bootstrap</code> über HTTPS unter derselben Origin auf. Die Route ist ohne Token erreichbar und liefert die Protokollversion, die öffentliche, stabile Instanz-Salt aus
+                <code>./.salt</code> und den Anwendungstitel unter <code>app.title</code>. Ein Beispiel mit einem fiktiven Salt-Wert:
               </p>
-              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab" }</code></pre>
+              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab", "app": { "title": "VideoVault" } }</code></pre>
               <p>
                 Das Response-Schema bindet die Version an <code>1</code> und die Instanz-Salt an genau 64 Hex-Zeichen. Der Client prüft die unterstützte Version und das Format, bevor er den loginHash ableitet. Er verwendet exakt den gelieferten
                 Hex-Text, ohne Groß-/Kleinschreibung oder Kodierung zu ändern. Die Instanz-Salt ist öffentlich und kein Anmeldegeheimnis.
               </p>
               <p>
-                Der Server lädt die Instanz-Salt einmal vor dem Start des HTTP-Servers. Requests auf <code>/bootstrap</code> verwenden den geladenen Wert, ohne Dateien zu lesen oder neue Salts zu erzeugen.
+                Der Server lädt die Instanz-Salt und die Anwendungskonfiguration einmal vor dem Start des HTTP-Servers. Requests auf <code>/bootstrap</code> verwenden den geladenen Wert, ohne Dateien zu lesen oder neue Salts zu erzeugen.
                 <code>Cache-Control: no-store</code> verhindert persistentes HTTP-Caching; im laufenden Client kann der Wert im Speicher bleiben. Die Route ist in Swagger als öffentlich dokumentiert.
               </p>
               <div class="note">
@@ -1060,19 +1082,41 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 The CLI independently generates the original master keys, wraps them and creates the first user with only the admin role. Temporary plaintext key buffers are overwritten in a <code>finally</code> block; this does not guarantee erasure
                 of every copy of a JavaScript string.
               </p>
+              <h3>Application configuration and the DynamoDB namespace</h3>
+              <p>
+                <code>npm run config:init</code> asks for the application title first, followed by database and storage settings. Its saveConfig function stores the title in <code>./conf/app.json</code>, for example
+                <code>{ "title": "Meine Videos" }</code>. Existing titles are prefilled; overwriting existing configurations requires confirmation. Titles must contain 1 to 100 characters after trimming surrounding whitespace. Missing app.json
+                defaults to <code>VideoVault</code>; malformed or unreadable existing files cause an error.
+              </p>
+              <p>
+                When <code>conf.tablePrefix</code> is absent from <code>./conf/db.json</code>, the DynamoDB adapter derives its prefix from the current title on initialization. Camel-case word boundaries and other separators become hyphens,
+                diacritics are removed and ASCII letters lowercased: <code>VideoVault → video-vault-</code>, <code>Meine Videos → meine-videos-</code>. Titles without ASCII letters or digits use
+                <code>app-&lt;16 hexadecimal characters from SHA-256 of the title&gt;-</code>. Unusually long normalized titles are truncated to 100 characters and also receive a hash suffix. Table names append <code>users</code>,
+                <code>usernames</code>, <code>videos</code>, <code>comments</code> or <code>login-attempts</code>. An explicitly saved <code>conf.tablePrefix</code> takes precedence. The configuration CLI asks for the prefix separately, prefilling an
+                existing value or otherwise deriving its initial value from the title. The confirmed value is saved in the database configuration and remains independent of subsequent title changes.
+              </p>
+              <div class="note open">
+                Configuration changes require a restart. Changing the prefix selects different DynamoDB tables and may create them during initialization; existing data is not automatically migrated. Without an explicit tablePrefix, a title change can
+                also change the prefix. With tablePrefix set, title changes preserve the table namespace. Different titles with the same normalized form can produce the same prefix. The application title does not affect the instance salt, password
+                derivation or master keys.
+              </div>
+              <p>
+                The title is public display information. Bootstrap exposes only approved application fields, never database or storage credentials. The future client should set the title as text, for example via <code>document.title</code>, rather
+                than interpreting it as HTML. The <code>app</code> object can later accommodate a logo and favicon; those features are not implemented yet.
+              </p>
               <h3>Public bootstrap for the client</h3>
               <p>
-                Before logging in, the client requests <code>GET /bootstrap</code> over HTTPS from the same origin. This route requires no token and returns only the protocol version and the public, stable instance salt from <code>./.salt</code>. An
-                example using a fictitious salt value:
+                Before logging in, the client requests <code>GET /bootstrap</code> over HTTPS from the same origin. This route requires no token and returns the protocol version, the public, stable instance salt from <code>./.salt</code> and the
+                application title under <code>app.title</code>. An example using a fictitious salt value:
               </p>
-              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab" }</code></pre>
+              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab", "app": { "title": "VideoVault" } }</code></pre>
               <p>
                 The response schema fixes the version to <code>1</code> and requires exactly 64 hexadecimal characters for the instance salt. The client validates the supported version and salt format before deriving loginHash. It uses the exact
                 hexadecimal text received, without changing case or encoding. The instance salt is public and is not a login secret.
               </p>
               <p>
-                The server loads the instance salt once before starting the HTTP server. Requests to <code>/bootstrap</code> use this in-memory value without reading files or generating new salts. <code>Cache-Control: no-store</code> prevents
-                persistent HTTP caching; a running client may keep the value in memory. Swagger documents this route as public.
+                The server loads the instance salt and application configuration once before starting the HTTP server. Requests to <code>/bootstrap</code> use this in-memory value without reading files or generating new salts.
+                <code>Cache-Control: no-store</code> prevents persistent HTTP caching; a running client may keep the value in memory. Swagger documents this route as public.
               </p>
               <div class="note">
                 The instance salt is not rotated on restart and must be backed up with the database. Existing installations must retain the previous salt file's exact contents under its new name <code>./.salt</code>. Generating a replacement changes

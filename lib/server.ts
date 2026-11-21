@@ -8,6 +8,8 @@ import { CommentService } from '@/service/CommentService';
 import { createApp, createHttpServer } from '@/http/app';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 import { ensureInstanceSalt } from '@/util/instanceSalt';
+import { loadConfig as loadAppConfig } from '@/app';
+import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 
 /**
  * Ensures ./.salt exists, initializes configured adapters and one AuthService, then starts the HTTP server.
@@ -27,7 +29,8 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
   try {
     const instanceSalt = await ensureInstanceSalt();
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
-    const db = await loadDb();
+    const appConfig = (await loadAppConfig()) ?? { title: DEFAULT_APP_TITLE };
+    const db = await loadDb(appConfig);
     const storage = await loadStorage();
     const auth = new AuthService(db, { tokenLifetimeSeconds: process.env.JWT_TTL_SECONDS === undefined ? undefined : Number(process.env.JWT_TTL_SECONDS) });
     await auth.initialize();
@@ -35,6 +38,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
       { auth, users: new UserService(db), videos: new VideoService(storage, db, { logger: app.log }), comments: new CommentService(db) },
       {
         instanceSalt,
+        appConfig,
         instance: app,
         staticDirectory,
         maxVideoBytes: process.env.VIDEO_UPLOAD_LIMIT_BYTES === undefined ? undefined : Number(process.env.VIDEO_UPLOAD_LIMIT_BYTES),

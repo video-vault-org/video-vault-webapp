@@ -140,7 +140,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(salt).toMatchObject({ type: 'string', minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' });
     const response = await app.inject('/bootstrap');
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ version: 1, instanceSalt: 'ab'.repeat(32) });
+    expect(response.json()).toEqual({ version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' } });
   });
 
   test('documents multipart file selectors and binary downloads with correct content types', async () => {

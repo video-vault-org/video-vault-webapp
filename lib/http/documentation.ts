@@ -2,9 +2,10 @@ import { FastifyInstance, FastifySchema } from 'fastify';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { authorization } from './middleware';
+import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 
 const summaries: Record<string, string> = {
-  'GET /bootstrap': 'Get the public instance salt',
+  'GET /bootstrap': 'Get the public application settings and instance salt',
   'POST /login': 'Log in',
   'POST /api/user/add': 'Create a user',
   'GET /api/user/me': 'Get your account',
@@ -46,12 +47,12 @@ const summaries: Record<string, string> = {
  * Must run before API route plugins. Documentation reuses runtime schemas; documentation-only multipart schemas never validate stream bodies.
  * Required roles are read from the authorization hooks, so the documentation follows the actual access rules.
  */
-function registerDocumentation(app: FastifyInstance, { maxVideoBytes = 2 * 1024 ** 3, maxThumbnailBytes = 20 * 1024 ** 2 }: { maxVideoBytes?: number; maxThumbnailBytes?: number } = {}): void {
+function registerDocumentation(app: FastifyInstance, { title = DEFAULT_APP_TITLE, maxVideoBytes = 2 * 1024 ** 3, maxThumbnailBytes = 20 * 1024 ** 2 }: { title?: string; maxVideoBytes?: number; maxThumbnailBytes?: number } = {}): void {
   app.register(swagger, {
     openapi: {
       openapi: '3.0.3',
       info: {
-        title: 'VideoVault API',
+        title: `${title} API`,
         version: '0.0.1',
         description:
           'Encrypted video collection API. Load /bootstrap for the public instance salt before deriving the Base64 loginHash. Login expects that loginHash, not a plaintext password. Use the returned JWT in Authorize. Admin, editor and moderator roles are independent.'
@@ -69,7 +70,7 @@ function registerDocumentation(app: FastifyInstance, { maxVideoBytes = 2 * 1024 
       const roles = hooks.flatMap((hook) => (hook as Partial<ReturnType<typeof authorization>>).requiredRoles ?? []);
       const tag = publicRoute ? 'Authentication' : url.startsWith('/api/user/') ? 'Users' : url.startsWith('/api/video/') ? 'Videos' : 'Comments';
       let description = bootstrap
-        ? 'Public. Returns protocol version 1 and the stable public instance salt as 64 hexadecimal characters. Cache-Control: no-store. No authentication required.'
+        ? 'Public. Returns protocol version 1, the configured application title and the stable public instance salt as 64 hexadecimal characters. Cache-Control: no-store. No authentication required.'
         : login
           ? 'Public. Supply the client-derived loginHash as Base64.'
           : roles.length

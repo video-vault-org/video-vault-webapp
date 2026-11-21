@@ -1,3 +1,5 @@
+import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
+import { dynamoTablePrefix } from '@/app/dynamoTablePrefix';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient, KeySchemaElement, TableDescription, waitUntilTableExists } from '@aws-sdk/client-dynamodb';
 import {
@@ -52,7 +54,7 @@ function keySchema(partition: string, sort?: string): KeySchemaElement[] {
  *   aws dynamodb create-table --cli-input-json "$input" || break
  * done
  *
- * For a custom tablePrefix, adjust the TableName values. The LSI must be
+ * For a custom tablePrefix or application title, adjust TableName values to the selected prefix. The LSI must be
  * declared at table creation.
  */
 function createTableInputs(prefix: string): CreateTableCommandInput[] {
@@ -166,9 +168,9 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
   private readonly prefix: string;
   private readonly config: DynamoDBConf;
 
-  public constructor(config: DynamoDBConf) {
+  public constructor(config: DynamoDBConf, title: string = DEFAULT_APP_TITLE) {
     this.config = config;
-    this.prefix = config.tablePrefix ?? 'video-vault-';
+    this.prefix = config.tablePrefix ?? dynamoTablePrefix(title);
   }
 
   public async open(): Promise<void> {

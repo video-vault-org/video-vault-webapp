@@ -19,6 +19,7 @@ import { commentRoutes } from './routes/comments';
 import { Type, object, text, username, errorResponses } from './validation';
 import { loggingOptions, HttpLogController } from './logging';
 import { registerDocumentation } from './documentation';
+import { AppConfig, appConfigSchema, DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 
 /** Creates the native Fastify server and its Pino logger before adapter initialization, so startup errors can be logged. */
 function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
@@ -45,19 +46,21 @@ function createApp(
   { auth, users, videos, comments }: { auth: AuthService; users: UserService; videos: VideoService; comments: CommentService },
   {
     instanceSalt,
+    appConfig = { title: DEFAULT_APP_TITLE },
     staticDirectory = './public',
     temporaryDirectory = './tmp',
     maxVideoBytes,
     maxThumbnailBytes,
     logger,
     instance
-  }: { instanceSalt: string; staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: FastifyServerOptions['logger']; instance?: FastifyInstance }
+  }: { instanceSalt: string; appConfig?: AppConfig; staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: FastifyServerOptions['logger']; instance?: FastifyInstance }
 ): FastifyInstance {
   if (instanceSalt.length !== 64 || !/^[0-9a-f]{64}$/i.test(instanceSalt)) throw new TypeError('Instance salt must contain exactly 64 hexadecimal characters');
+  const { title } = appConfigSchema.parse(appConfig);
   const app = instance ?? createHttpServer({ logger });
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
   const authenticate = authentication(auth);
-  registerDocumentation(app, { maxVideoBytes, maxThumbnailBytes });
+  registerDocumentation(app, { title, maxVideoBytes, maxThumbnailBytes });
 
   app.addHook('onRequest', async (request, reply) => {
     const path = request.url.split('?')[0];
@@ -67,16 +70,24 @@ function createApp(
   app.register(multipart, { limits: { files: 2, fields: 0, parts: 2, fileSize: Math.max(maxVideoBytes ?? 2 * 1024 ** 3, maxThumbnailBytes ?? 20 * 1024 ** 2) } });
 
   app.register(async (router) => {
-    /** GET /bootstrap — Public. Returns protocol version 1 and the stable public instance salt as stored in ./.salt. */
-    router
-      .withTypeProvider<TypeBoxTypeProvider>()
-      .get('/bootstrap', { schema: { response: { 200: object({ version: Type.Literal(1), instanceSalt: Type.String({ minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' }) }), ...errorResponses } } }, async (_request, reply) => {
+    const routes = router.withTypeProvider<TypeBoxTypeProvider>();
+
+    /** GET /bootstrap — Public. Returns protocol version 1, the stable public instance salt and the configured application title. */
+    routes.get(
+      '/bootstrap',
+      {
+        schema: {
+          response: { 200: object({ version: Type.Literal(1), instanceSalt: Type.String({ minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' }), app: object({ title: Type.String({ minLength: 1, maxLength: 100 }) }) }), ...errorResponses }
+        }
+      },
+      async (_request, reply) => {
         reply.header('Cache-Control', 'no-store');
-        return { version: 1 as const, instanceSalt };
-      });
+        return { version: 1 as const, instanceSalt, app: { title } };
+      }
+    );
 
     /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
-    router.withTypeProvider<TypeBoxTypeProvider>().post('/login', { schema: { body: object({ username, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
+    routes.post('/login', { schema: { body: object({ username, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
       const token = await auth.login(request.body);
       if (!token) throw new HttpError(401, 'Invalid credentials or account locked');
       return { token };

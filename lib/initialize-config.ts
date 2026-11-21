@@ -2,11 +2,11 @@
 import { initializeConfig } from './cli/config';
 import { ensureInstanceSalt } from './util/instanceSalt';
 
-/** Interactive CLI: npm run config:init. Ensures ./.salt exists, then configures the database and storage. */
+/** Interactive CLI: npm run config:init. Ensures ./.salt exists, then configures the application, database and storage. */
 ensureInstanceSalt()
   .then(() => initializeConfig())
   .then(() => {
-    console.log('Database and storage configuration saved');
+    console.log('Configuration initialization completed');
   })
   .catch(() => {
     // Configuration and validation errors can contain credentials; never print them.

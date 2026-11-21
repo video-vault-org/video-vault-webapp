@@ -22,7 +22,7 @@ describe('configuration CLI entrypoint', () => {
     expect(instanceSalt.ensureInstanceSalt).toHaveBeenCalledWith();
     expect(jest.mocked(instanceSalt.ensureInstanceSalt).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(config.initializeConfig).mock.invocationCallOrder[0]);
     expect(config.initializeConfig).toHaveBeenCalledWith();
-    expect(console.log).toHaveBeenCalledWith('Database and storage configuration saved');
+    expect(console.log).toHaveBeenCalledWith('Configuration initialization completed');
     expect(console.error).not.toHaveBeenCalled();
   });
 

@@ -6,6 +6,8 @@ import { MongoDatabaseAdapter } from '@/db/adapters/MongoDatabaseAdapter';
 import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapter';
 import { SQLiteDatabaseAdapter } from '@/db/adapters/SQLiteDatabaseAdapter';
 import { DynamoDBDatabaseAdapter } from '@/db/adapters/DynamoDBDatabaseAdapter';
+import { loadConfig as loadAppConfig } from '@/app';
+import { AppConfig, DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 
 let db: Promise<DatabaseAdapter> | null = null;
 
@@ -26,7 +28,7 @@ const loadConfig = async function (): Promise<DatabaseConfig | null> {
   }
 };
 
-const connectDb = async function (): Promise<DatabaseAdapter> {
+const connectDb = async function (appConfig?: AppConfig): Promise<DatabaseAdapter> {
   const config: DatabaseConfig = JSON.parse(await readFile('./conf/db.json', 'utf8'));
   let adapter: DatabaseAdapter;
 
@@ -37,7 +39,7 @@ const connectDb = async function (): Promise<DatabaseAdapter> {
   } else if (config.type === 'sqlite') {
     adapter = new SQLiteDatabaseAdapter(config.conf);
   } else if (config.type === 'dynamodb') {
-    adapter = new DynamoDBDatabaseAdapter(config.conf);
+    adapter = new DynamoDBDatabaseAdapter(config.conf, appConfig?.title ?? (await loadAppConfig())?.title ?? DEFAULT_APP_TITLE);
   } else {
     adapter = new InMemoryDatabaseAdapter();
   }
@@ -52,8 +54,8 @@ const connectDb = async function (): Promise<DatabaseAdapter> {
   }
 };
 
-const loadDb = async function (): Promise<DatabaseAdapter> {
-  const connection = (db ??= connectDb());
+const loadDb = async function (appConfig?: AppConfig): Promise<DatabaseAdapter> {
+  const connection = (db ??= connectDb(appConfig));
   try {
     return await connection;
   } catch (error) {

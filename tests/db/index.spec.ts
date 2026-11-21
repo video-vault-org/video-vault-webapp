@@ -6,6 +6,7 @@ import { PostgresqlDatabaseAdapter } from '@/db/adapters/PostgresqlDatabaseAdapt
 import { SQLiteDatabaseAdapter } from '@/db/adapters/SQLiteDatabaseAdapter';
 import { DynamoDBDatabaseAdapter } from '@/db/adapters/DynamoDBDatabaseAdapter';
 import { DatabaseConfig } from '@/db/config/DatabaseConfig';
+import { loadConfig as loadAppConfig } from '@/app';
 
 function mockAdapter() {
   return jest.fn().mockImplementation(() => ({
@@ -15,6 +16,7 @@ function mockAdapter() {
   }));
 }
 
+jest.mock('@/app', () => ({ loadConfig: jest.fn() }));
 jest.mock('fs/promises', () => ({ readFile: jest.fn(), writeFile: jest.fn() }));
 jest.mock('@/db/adapters/InMemoryDatabaseAdapter', () => ({ InMemoryDatabaseAdapter: mockAdapter() }));
 jest.mock('@/db/adapters/MongoDatabaseAdapter', () => ({ MongoDatabaseAdapter: mockAdapter() }));
@@ -33,6 +35,7 @@ describe('db', () => {
   const write = jest.mocked(writeFile);
 
   beforeEach(() => {
+    jest.mocked(loadAppConfig).mockReset().mockResolvedValue(null);
     read.mockReset();
     write.mockReset().mockResolvedValue(undefined);
   });
@@ -68,7 +71,7 @@ describe('db', () => {
       { config: mongo, adapter: MongoDatabaseAdapter, args: [mongo.conf] },
       { config: postgresql, adapter: PostgresqlDatabaseAdapter, args: [postgresql.conf] },
       { config: sqlite, adapter: SQLiteDatabaseAdapter, args: [sqlite.conf] },
-      { config: dynamodb, adapter: DynamoDBDatabaseAdapter, args: [dynamodb.conf] }
+      { config: dynamodb, adapter: DynamoDBDatabaseAdapter, args: [dynamodb.conf, 'VideoVault'] }
     ])('constructs and initializes the $config.type adapter', async ({ config, adapter, args }) => {
       read.mockResolvedValue(JSON.stringify(config));
 
@@ -93,6 +96,28 @@ describe('db', () => {
       expect(db.open).toHaveBeenCalledTimes(1);
       expect(db.initialize).toHaveBeenCalledTimes(1);
       expect(SQLiteDatabaseAdapter).not.toHaveBeenCalled();
+    });
+
+    test('passes the current application title to DynamoDB', async () => {
+      read.mockResolvedValue(JSON.stringify(dynamodb));
+      jest.mocked(loadAppConfig).mockResolvedValue({ title: 'Meine Videos' });
+      await loadDb();
+      expect(DynamoDBDatabaseAdapter).toHaveBeenCalledWith(dynamodb.conf, 'Meine Videos');
+    });
+
+    test('uses the server startup configuration without rereading it for DynamoDB', async () => {
+      read.mockResolvedValue(JSON.stringify(dynamodb));
+      await loadDb({ title: 'Shared startup title' });
+      expect(DynamoDBDatabaseAdapter).toHaveBeenCalledWith(dynamodb.conf, 'Shared startup title');
+      expect(loadAppConfig).not.toHaveBeenCalled();
+    });
+
+    test('fails before opening DynamoDB when application configuration cannot be read', async () => {
+      read.mockResolvedValue(JSON.stringify(dynamodb));
+      const error = new Error('Invalid application configuration');
+      jest.mocked(loadAppConfig).mockRejectedValueOnce(error);
+      await expect(loadDb()).rejects.toBe(error);
+      expect(DynamoDBDatabaseAdapter).not.toHaveBeenCalled();
     });
 
     test('allows a retry after initialization fails and closes the failed adapter', async () => {

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { startServer } from '@/server';
+import { loadConfig as loadAppConfig } from '@/app';
 import { ensureInstanceSalt } from '@/util/instanceSalt';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 import { loadDb, resetDb } from '@/db';
@@ -13,6 +14,8 @@ import { AuthService } from '@/service/AuthService';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
+
+jest.mock('@/app', () => ({ loadConfig: jest.fn() }));
 
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
 
@@ -30,6 +33,7 @@ describe('startServer', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-server-'));
     await writeFile(join(directory, 'index.html'), 'VideoVault');
+    jest.mocked(loadAppConfig).mockReset().mockResolvedValue(null);
     jest.mocked(ensureInstanceSalt).mockReset().mockResolvedValue('ab'.repeat(32));
     jest.mocked(loadDb).mockResolvedValue(new InMemoryDatabaseAdapter());
     jest.mocked(loadStorage).mockResolvedValue(new StorageWrapper(new InMemoryStorageAdapter()));
@@ -58,12 +62,13 @@ describe('startServer', () => {
       await request(running.server)
         .get('/bootstrap')
         .expect('Cache-Control', 'no-store')
-        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32) });
+        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' } });
     }
     expect(ensureInstanceSalt).toHaveBeenCalledWith();
     expect(ensureInstanceSalt).toHaveBeenCalledTimes(1);
     expect(jest.mocked(ensureInstanceSalt).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
     expect(loadDb).toHaveBeenCalledTimes(1);
+    expect(loadDb).toHaveBeenCalledWith({ title: 'VideoVault' });
     expect(loadStorage).toHaveBeenCalledTimes(1);
     expect(AuthService.prototype.initialize).toHaveBeenCalledTimes(1);
     const first = running.close();
@@ -97,15 +102,28 @@ describe('startServer', () => {
     await request(running.server).get('/').expect(200, 'VideoVault');
   });
 
+  test('loads application settings once and serves the configured title in bootstrap', async () => {
+    jest.mocked(loadAppConfig).mockResolvedValueOnce({ title: 'Meine Videos' });
+    running = await startServer({ port: 0, host: '127.0.0.1', staticDirectory: directory });
+    for (let i = 0; i < 2; i++) {
+      await request(running.server)
+        .get('/bootstrap')
+        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'Meine Videos' } });
+    }
+    expect(loadAppConfig).toHaveBeenCalledTimes(1);
+    expect(loadDb).toHaveBeenCalledWith({ title: 'Meine Videos' });
+  });
+
   test.each([-1, 65536, 1.5, NaN])('rejects invalid port %s before initializing adapters', async (port) => {
     await expect(startServer({ port })).rejects.toThrow(RangeError);
     expect(loadDb).not.toHaveBeenCalled();
     expect(startTemporaryFileCleanup).not.toHaveBeenCalled();
   });
 
-  test.each(['instanceSalt', 'db', 'storage', 'auth'] as const)('cleans up resources after %s initialization fails', async (step) => {
+  test.each(['instanceSalt', 'app', 'db', 'storage', 'auth'] as const)('cleans up resources after %s initialization fails', async (step) => {
     const error = new Error('Initialization failed');
     if (step === 'instanceSalt') jest.mocked(ensureInstanceSalt).mockRejectedValueOnce(error);
+    if (step === 'app') jest.mocked(loadAppConfig).mockRejectedValueOnce(error);
     if (step === 'db') jest.mocked(loadDb).mockRejectedValueOnce(error);
     if (step === 'storage') jest.mocked(loadStorage).mockRejectedValueOnce(error);
     if (step === 'auth') jest.mocked(AuthService.prototype.initialize).mockRejectedValueOnce(error);

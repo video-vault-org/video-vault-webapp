@@ -135,9 +135,9 @@ describe('DynamoDBDatabaseAdapter', () => {
     expect(await db.findAllUsers()).toEqual([user]);
   });
 
-  test('initialize preserves rows and accepts tables provisioned from the CLI template', async () => {
+  test('an explicit table prefix overrides the title and preserves manually provisioned tables', async () => {
     const tablePrefix = 'precreated-';
-    const isolated = new DynamoDBDatabaseAdapter({ ...config, tablePrefix });
+    const isolated = new DynamoDBDatabaseAdapter({ ...config, tablePrefix }, 'A different title');
     for (const definition of createTableInputs) {
       await transport!.send(new CreateTableCommand({ ...definition, TableName: definition.TableName.replace('video-vault-', tablePrefix) } as CreateTableCommandInput));
     }
@@ -157,6 +157,24 @@ describe('DynamoDBDatabaseAdapter', () => {
       expect(await db.findAllUsers()).toEqual([]);
     } finally {
       await isolated.close();
+    }
+  });
+
+  test('derives all table names from the application title and isolates them from the default tables', async () => {
+    const titled = new DynamoDBDatabaseAdapter(config, 'Meine Videos');
+    const customUser = { ...user, userId: 'custom-title-user', username: 'custom-title-user' };
+    try {
+      await titled.open();
+      await titled.initialize();
+      await titled.createUser(customUser);
+      expect(await titled.findOneUserByUsername({ username: customUser.username })).toEqual(customUser);
+      expect(await db.findOneUserByUserId({ userId: customUser.userId })).toBeNull();
+      for (const name of ['users', 'usernames', 'videos', 'comments', 'login-attempts']) {
+        const description = await transport!.send(new DescribeTableCommand({ TableName: `meine-videos-${name}` }));
+        expect(description.Table?.TableName).toBe(`meine-videos-${name}`);
+      }
+    } finally {
+      await titled.close();
     }
   });
 

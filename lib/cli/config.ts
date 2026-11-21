@@ -5,12 +5,19 @@ import { loadConfig as loadDatabaseConfig, saveConfig as saveDatabaseConfig } fr
 import { DatabaseConfig } from '@/db/config/DatabaseConfig';
 import { loadConfig as loadStorageConfig, saveConfig as saveStorageConfig } from '@/storage';
 import { StorageConfig } from '@/storage/config/StorageConfig';
+import { loadConfig as loadAppConfig, saveConfig as saveAppConfig } from '@/app';
+import { AppConfig, appConfigSchema, DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
+import { dynamoTablePrefix } from '@/app/dynamoTablePrefix';
 
 const text = z.string().trim().min(1, 'Please enter a value');
 const secret = z.string().min(1, 'Please enter a value');
 const optionalText = z.string().optional();
 const endpoint = z.url({ protocol: /^https?$/ }).optional();
 const port = z.coerce.number().int().min(1).max(65535);
+const tablePrefix = z
+  .string()
+  .max(241)
+  .regex(/^[A-Za-z0-9_.-]*$/);
 
 /** Asks a single question, applies its default on empty input and validates the resulting value. */
 async function ask<T>(question: prompts.PromptObject, schema: z.ZodType<T>): Promise<T> {
@@ -37,7 +44,7 @@ async function askOptional(message: string, initial?: string, password = false, 
 }
 
 /** Prompts for the database adapter before asking only for its supported settings. */
-async function readDatabaseConfig(existing?: DatabaseConfig | null): Promise<DatabaseConfig> {
+async function readDatabaseConfig(existing: DatabaseConfig | null, title: string): Promise<DatabaseConfig> {
   const type = await ask(
     {
       type: 'select',
@@ -54,10 +61,13 @@ async function readDatabaseConfig(existing?: DatabaseConfig | null): Promise<Dat
     },
     z.enum(['sqlite', 'postgresql', 'mongo', 'dynamodb', 'in-memory'])
   );
+
   if (type === 'in-memory') return { type };
+
   if (type === 'sqlite') {
     return { type, conf: { filePath: await askText('SQLite file path', existing?.type === type ? existing.conf.filePath : './video-vault.db') } };
   }
+
   if (type === 'postgresql') {
     const conf = existing?.type === type ? existing.conf : {};
     return {
@@ -71,6 +81,7 @@ async function readDatabaseConfig(existing?: DatabaseConfig | null): Promise<Dat
       }
     };
   }
+
   if (type === 'mongo') {
     const conf = existing?.type === type ? existing.conf : undefined;
     return {
@@ -82,18 +93,20 @@ async function readDatabaseConfig(existing?: DatabaseConfig | null): Promise<Dat
       }
     };
   }
+
   const conf = existing?.type === type ? existing.conf : {};
   const config: DatabaseConfig = {
     type,
     conf: {
       region: await askText('DynamoDB region', conf.region ?? 'eu-central-1'),
       endpoint: await askOptional('DynamoDB endpoint', conf.endpoint, false, true),
-      tablePrefix: await askText('DynamoDB table prefix', conf.tablePrefix ?? 'video-vault-'),
+      tablePrefix: await ask({ type: 'text', name: 'value', message: 'DynamoDB table prefix', initial: conf.tablePrefix ?? dynamoTablePrefix(title) }, tablePrefix),
       accessKeyId: await askOptional('DynamoDB access key ID (leave empty to use the AWS credential chain)', conf.accessKeyId),
       secretAccessKey: await askOptional('DynamoDB secret access key', conf.secretAccessKey, true),
       sessionToken: await askOptional('DynamoDB session token', conf.sessionToken, true)
     }
   };
+
   if (!!config.conf.accessKeyId !== !!config.conf.secretAccessKey || (config.conf.sessionToken && !config.conf.accessKeyId)) {
     throw new Error('DynamoDB credentials require both access key ID and secret access key');
   }
@@ -116,11 +129,15 @@ async function readStorageConfig(existing?: StorageConfig | null): Promise<Stora
     },
     z.enum(['local', 's3', 'in-memory'])
   );
+
   if (type === 'in-memory') return { type };
+
   if (type === 'local') {
     return { type, conf: { basePath: await askText('Local storage base path', existing?.type === type ? existing.conf.basePath : './storage') } };
   }
+
   const conf = existing?.type === type ? existing.conf : undefined;
+
   return {
     type,
     conf: {
@@ -145,22 +162,31 @@ async function configExists(path: string): Promise<boolean> {
 }
 
 /**
- * Configures the database, then storage, using existing values or defaults for empty answers.
- * Collects both configurations before writing ./conf/db.json and ./conf/storage.json through their saveConfig functions.
+ * Configures application title, database and storage, using existing values or defaults for empty answers.
+ * Collects all configurations before writing ./conf/app.json, ./conf/db.json and ./conf/storage.json through their saveConfig functions.
+ * The application title supplies the default DynamoDB prefix; existing or explicitly entered prefixes take precedence.
+ * Existing database and storage configurations can be skipped before their settings are loaded or prompted.
  * Requests confirmation before replacing existing files. Creates ./conf on first use. No database or storage connection is opened.
  * @throws If input is cancelled or invalid, an existing config cannot be loaded, or saving fails.
  */
 async function initializeConfig(): Promise<void> {
-  const database = await readDatabaseConfig(await loadDatabaseConfig());
-  const storage = await readStorageConfig(await loadStorageConfig());
-  const existingFiles = await Promise.all(['./conf/db.json', './conf/storage.json'].map(configExists));
-  if (existingFiles.some(Boolean)) {
+  const existingApp = await loadAppConfig();
+  const app: AppConfig = { title: await ask({ type: 'text', name: 'value', message: 'Application title (default for the DynamoDB table prefix)', initial: existingApp?.title ?? DEFAULT_APP_TITLE }, appConfigSchema.shape.title) };
+  const databaseExists = await configExists('./conf/db.json');
+  const configureDatabase = !databaseExists || (await ask({ type: 'confirm', name: 'value', message: 'Database configuration already exists. Reconfigure?', initial: false }, z.boolean()));
+  const database = configureDatabase ? await readDatabaseConfig(await loadDatabaseConfig(), app.title) : undefined;
+  const storageExists = await configExists('./conf/storage.json');
+  const configureStorage = !storageExists || (await ask({ type: 'confirm', name: 'value', message: 'Storage configuration already exists. Reconfigure?', initial: false }, z.boolean()));
+  const storage = configureStorage ? await readStorageConfig(await loadStorageConfig()) : undefined;
+  const appExists = await configExists('./conf/app.json');
+  if (appExists || (configureDatabase && databaseExists) || (configureStorage && storageExists)) {
     const confirmed = await ask({ type: 'confirm', name: 'value', message: 'Replace existing configuration files?', initial: false }, z.boolean());
     if (!confirmed) throw new Error('Configuration replacement declined');
   }
   await mkdir('./conf', { recursive: true });
-  await saveDatabaseConfig(database);
-  await saveStorageConfig(storage);
+  await saveAppConfig(app);
+  if (database) await saveDatabaseConfig(database);
+  if (storage) await saveStorageConfig(storage);
 }
 
 export { initializeConfig };
