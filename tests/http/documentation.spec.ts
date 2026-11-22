@@ -98,7 +98,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/video/catalog']).toBeUndefined();
     expect(document.paths['/api/video/delete/{videoId}'].delete.description).toContain('lastModified');
     expect(document.paths['/api/video/{since}'].get.description).toContain('tombstones');
-    expect(ids).toHaveLength(38);
+    expect(ids).toHaveLength(39);
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });
@@ -107,6 +107,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     const document = (await app.inject('/docs/json')).json();
     expect(document.components.securitySchemes.bearerAuth).toEqual({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' });
     expect(document.paths['/login'].post.security).toEqual([]);
+    expect(document.paths['/api/user/initialize-keys'].post.description).toContain('admin');
     expect(document.paths['/api/user/all'].get.description).toContain('Requires role: admin');
     expect(document.paths['/api/video/upload/{videoId}'].post.description).toContain('Requires role: editor');
     expect(document.paths['/api/comment/change/{commentId}'].patch.description).toContain('Requires role: moderator');

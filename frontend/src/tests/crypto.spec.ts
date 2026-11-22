@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeAll, expect, test, vi } from 'vitest';
 import {
+  createKeys,
   bytes,
   concat,
   base64,
@@ -27,9 +28,30 @@ let keys: Keys;
 
 beforeAll(async () => {
   keys = {
-    encryption: await crypto.subtle.generateKey({ name: 'AES-KW', length: 256 }, true, ['wrapKey', 'unwrapKey']),
-    auth: await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign', 'verify'])
+    encryption: await crypto.subtle.generateKey({ name: 'AES-KW', length: 256 }, true, [
+      'wrapKey',
+      'unwrapKey'
+    ]),
+    auth: await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, true, [
+      'sign',
+      'verify'
+    ])
   };
+});
+
+test('generates independent 256-bit encryption and authentication keys with fresh values', async () => {
+  const first = await createKeys();
+  const second = await createKeys();
+  const raw = async function (key: CryptoKey) {
+    return new Uint8Array(await crypto.subtle.exportKey('raw', key));
+  };
+  expect(first.encryption.algorithm).toMatchObject({ name: 'AES-KW', length: 256 });
+  expect(first.auth.algorithm).toMatchObject({ name: 'HMAC', length: 256 });
+  expect(await raw(first.encryption)).toHaveLength(32);
+  expect(await raw(first.auth)).toHaveLength(32);
+  expect(await raw(first.encryption)).not.toEqual(await raw(first.auth));
+  expect(await raw(first.encryption)).not.toEqual(await raw(second.encryption));
+  expect(await raw(first.auth)).not.toEqual(await raw(second.auth));
 });
 
 test('canonical JSON sorts nested keys and refuses non-JSON numbers', () => {
@@ -133,7 +155,8 @@ test('reads full ciphertext chunks but returns exactly a cross-boundary plaintex
   const cipher = bytes(await (await encrypt(new Blob([plain]), 'video', 'v.video', keys)).arrayBuffer());
 
   vi.mocked(request).mockImplementation(async (_path, init) => {
-    if (init?.method === 'HEAD') return new Response(null, { headers: { 'Content-Length': String(cipher.length) } });
+    if (init?.method === 'HEAD')
+      return new Response(null, { headers: { 'Content-Length': String(cipher.length) } });
     const header = new Headers(init?.headers).get('Range')!;
     const [from, to] = range(header, cipher.length);
     return new Response(cipher.slice(from, to + 1), {

@@ -1,7 +1,7 @@
 import argon2 from 'argon2-browser/dist/argon2-bundled.min.js';
 import type { Keys, User, Video, Comment } from './types';
 
-const MEM_COST = 19*1024;
+const MEM_COST = 19 * 1024;
 
 const CHUNK = 34 * 1024,
   WRAPPED = 40,
@@ -36,7 +36,10 @@ const unbase64 = function (text: string): Uint8Array<ArrayBuffer> {
 
 const random = (length: number) => crypto.getRandomValues(new Uint8Array(length));
 
-const derive = async function (password: string, salt: string | Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+const derive = async function (
+  password: string,
+  salt: string | Uint8Array
+): Promise<Uint8Array<ArrayBuffer>> {
   const result = await argon2.hash({
     pass: utf8(password),
     salt: typeof salt === 'string' ? utf8(salt) : salt,
@@ -67,6 +70,20 @@ const loginHash = async function (password: string, username: string, salt: stri
   }
 };
 
+/** Generates independent 256-bit archive keys in the browser; only wrapped keys leave the client. */
+const createKeys = async function (): Promise<Keys> {
+  return {
+    encryption: await crypto.subtle.generateKey({ name: 'AES-KW', length: 256 }, true, [
+      'wrapKey',
+      'unwrapKey'
+    ]),
+    auth: await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, true, [
+      'sign',
+      'verify'
+    ])
+  };
+};
+
 const unlock = async function (password: string, user: User): Promise<Keys> {
   const raw = await derive(password, unbase64(user.passwordKeySalt));
   try {
@@ -74,10 +91,15 @@ const unlock = async function (password: string, user: User): Promise<Keys> {
     const wrapped = unbase64(user.userKey);
     if (wrapped.length !== 80) throw new Error('Invalid user key');
     return {
-      encryption: await crypto.subtle.unwrapKey('raw', wrapped.slice(0, 40), wrapping, 'AES-KW', 'AES-KW', true, [
-        'wrapKey',
-        'unwrapKey'
-      ]),
+      encryption: await crypto.subtle.unwrapKey(
+        'raw',
+        wrapped.slice(0, 40),
+        wrapping,
+        'AES-KW',
+        'AES-KW',
+        true,
+        ['wrapKey', 'unwrapKey']
+      ),
       auth: await crypto.subtle.unwrapKey(
         'raw',
         wrapped.slice(40),
@@ -154,7 +176,9 @@ const sign = async function (item: Video | Comment, keys: Keys): Promise<string>
 };
 
 const verify = async function (item: Video | Comment, keys: Keys): Promise<void> {
-  if (!(await crypto.subtle.verify('HMAC', keys.auth, unbase64(item.hmac), utf8(canonical(projection(item))))))
+  if (
+    !(await crypto.subtle.verify('HMAC', keys.auth, unbase64(item.hmac), utf8(canonical(projection(item)))))
+  )
     throw new Error('integrity');
 };
 
@@ -162,7 +186,8 @@ const layout = function (size: number) {
   if (!Number.isSafeInteger(size) || size < WRAPPED + OVERHEAD) throw new Error('Invalid encrypted file');
   const count = Math.ceil((size - WRAPPED) / STRIDE),
     last = size - WRAPPED - (count - 1) * STRIDE;
-  if (last < OVERHEAD || last > STRIDE || (count > 1 && last === OVERHEAD)) throw new Error('Invalid encrypted chunks');
+  if (last < OVERHEAD || last > STRIDE || (count > 1 && last === OVERHEAD))
+    throw new Error('Invalid encrypted chunks');
   return { count, length: (count - 1) * CHUNK + last - OVERHEAD };
 };
 
@@ -176,7 +201,10 @@ const encrypt = async function (
   keys: Keys,
   onProgress?: (n: number) => void
 ): Promise<Blob> {
-  const fileKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  const fileKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
+    'encrypt',
+    'decrypt'
+  ]);
   const parts: BlobPart[] = [await crypto.subtle.wrapKey('raw', fileKey, keys.encryption, 'AES-KW')];
   const count = Math.max(1, Math.ceil(blob.size / CHUNK));
   const usedIVs = new Set<string>();
@@ -201,7 +229,9 @@ const encrypt = async function (
 
 const unwrapFile = async function (header: Uint8Array, keys: Keys): Promise<CryptoKey> {
   if (header.length !== 40) throw new Error('Invalid file key');
-  return crypto.subtle.unwrapKey('raw', concat(header), keys.encryption, 'AES-KW', 'AES-GCM', false, ['decrypt']);
+  return crypto.subtle.unwrapKey('raw', concat(header), keys.encryption, 'AES-KW', 'AES-GCM', false, [
+    'decrypt'
+  ]);
 };
 
 const decryptChunk = async function (
@@ -267,6 +297,7 @@ export {
   derive,
   loginHash,
   unlock,
+  createKeys,
   passwordAttributes,
   canonical,
   sign,

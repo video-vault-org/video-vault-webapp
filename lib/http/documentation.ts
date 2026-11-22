@@ -7,6 +7,7 @@ import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 const summaries: Record<string, string> = {
   'GET /bootstrap': 'Get public application and metadata settings and the instance salt',
   'POST /login': 'Log in',
+  'POST /api/user/initialize-keys': 'Initialize your archive keys once',
   'POST /api/user/add': 'Create a user',
   'GET /api/user/me': 'Get your account',
   'GET /api/user/all': 'List users',
@@ -80,6 +81,8 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
           : roles.length
             ? `Requires role: ${roles.join(' or ')}.`
             : 'Requires an authenticated user.';
+      if (url === '/api/user/initialize-keys')
+        description += ' Stores the first wrapped archive keys and password-key salt for the current admin only. Requires an empty userKey; concurrent or repeated initialization returns 409. The login proof is unchanged.';
       if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';
       if (url === '/api/video/change/files/:videoId')
         description += ' Upload first. Supply videoMimeType and/or thumbnailMimeType, plus lastModified and hmac. Only selected files are replaced. Failures may leave partial Storage changes; temporary files remain for retry.';

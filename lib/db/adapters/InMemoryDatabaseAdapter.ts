@@ -68,6 +68,14 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     user.userKey = userKey;
   }
 
+  public async initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<boolean> {
+    const user = this.users.find((user) => user.userId === userId && user.admin && user.userKey === '');
+    if (!user) return false;
+    user.passwordKeySalt = passwordKeySalt;
+    user.userKey = userKey;
+    return true;
+  }
+
   public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
     const user = this.users.find((user) => user.userId === userId);
     if (!user) {

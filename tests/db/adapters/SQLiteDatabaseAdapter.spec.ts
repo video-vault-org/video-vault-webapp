@@ -180,6 +180,29 @@ describe('SQLiteDatabaseAdapter', () => {
     });
   });
 
+  test('initializeUsersKeysByUserId initializes an admin once atomically and preserves the login proof', async () => {
+    const pending = { ...user, userId: 'pending-admin', username: 'pending-admin', admin: true, userKey: '', passwordKeySalt: '' };
+    await db.createUser(pending);
+    const outcomes = await Promise.all([
+      db.initializeUsersKeysByUserId({ userId: pending.userId, userKey: 'wrapped-first', passwordKeySalt: 'salt-first' }),
+      db.initializeUsersKeysByUserId({ userId: pending.userId, userKey: 'wrapped-second', passwordKeySalt: 'salt-second' })
+    ]);
+    expect(outcomes.filter(Boolean)).toHaveLength(1);
+    const index = outcomes[0] ? 'first' : 'second';
+    expect(await db.findOneUserByUserId({ userId: pending.userId })).toEqual({ ...pending, userKey: `wrapped-${index}`, passwordKeySalt: `salt-${index}` });
+    expect(await db.initializeUsersKeysByUserId({ userId: pending.userId, userKey: 'replacement', passwordKeySalt: 'replacement' })).toBe(false);
+  });
+
+  test('initializeUsersKeysByUserId rejects missing users and uninitialized non-admins', async () => {
+    const pending = { ...user, userId: 'pending-reader', username: 'pending-reader', admin: false, userKey: '', passwordKeySalt: '' };
+    await db.createUser(pending);
+    for (const userId of [pending.userId, 'missing']) {
+      expect(await db.initializeUsersKeysByUserId({ userId, userKey: 'wrapped', passwordKeySalt: 'salt' })).toBe(false);
+    }
+    expect(await db.findOneUserByUserId({ userId: pending.userId })).toEqual(pending);
+    expect(await db.findOneUserByUserId({ userId: 'missing' })).toBeNull();
+  });
+
   describe('users', () => {
     const { userId, username } = user;
 

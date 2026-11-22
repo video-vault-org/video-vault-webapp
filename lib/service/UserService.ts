@@ -1,5 +1,6 @@
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { hashPassword } from '@/util/password';
 
 /**
@@ -67,6 +68,17 @@ class UserService {
    */
   public async changeUsersPassword({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void> {
     await this.db.changeUsersPasswordByUserId({ userId, loginHash: await hashPassword(loginHash), passwordKeySalt, userKey });
+  }
+
+  /**
+   * Stores browser-generated wrapped archive keys once for the initially uninitialized admin.
+   * An atomic conditional write prevents concurrent first logins from replacing each other's keys.
+   * @throws DatabaseConflictError if initialization is not allowed or has already completed.
+   */
+  public async initializeUsersKeys({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<void> {
+    if (!(await this.db.initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }))) {
+      throw new DatabaseConflictError('Archive keys are already initialized or initialization is not allowed');
+    }
   }
 
   /**

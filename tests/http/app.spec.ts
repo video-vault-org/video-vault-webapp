@@ -38,6 +38,7 @@ const commentBody = { commentId: 'new-comment', videoId: 'v1', content: 'New com
 
 // Each entry checks every role and an unauthenticated request against the same real route.
 const protectedRoutes = [
+  ['post', '/api/user/initialize-keys', 'admin', { passwordKeySalt: Buffer.alloc(32).toString('base64'), userKey: Buffer.alloc(80).toString('base64') }, 409],
   ['post', '/api/user/add', 'admin', { ...password, userId: 'new-user', username: 'new-user', displayName: 'New User' }, 201],
   ['get', '/api/user/all', 'admin', undefined, 200],
   ['get', '/api/user/find/target', 'admin', undefined, 200],
@@ -104,6 +105,19 @@ describe('Fastify backend', () => {
   });
 
   const headers = (role: Role = 'reader') => ({ Authorization: `Bearer ${tokens[role]}` });
+
+  test('initializes the current admin keys once, accepts an empty profile and rejects malformed envelopes', async () => {
+    await db.changeUsersPasswordByUserId({ userId: 'admin', loginHash: storedHash, userKey: '', passwordKeySalt: '' });
+    const me = await app.inject({ method: 'GET', url: '/api/user/me', headers: headers('admin') });
+    expect(me.statusCode).toBe(200);
+    expect(me.json()).toMatchObject({ userKey: '', passwordKeySalt: '' });
+    const attributes = { passwordKeySalt: Buffer.alloc(32).toString('base64'), userKey: Buffer.alloc(80).toString('base64') };
+    const malformed = await app.inject({ method: 'POST', url: '/api/user/initialize-keys', headers: headers('admin'), payload: { ...attributes, userKey: 'bad' } });
+    expect(malformed.statusCode).toBe(400);
+    const results = await Promise.all([0, 1].map(() => app.inject({ method: 'POST', url: '/api/user/initialize-keys', headers: headers('admin'), payload: attributes })));
+    expect(results.map((result) => result.statusCode).sort()).toEqual([204, 409]);
+    expect(await db.findOneUserByUserId({ userId: 'admin' })).toMatchObject({ ...attributes, loginHash: storedHash });
+  });
 
   beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), 'video-vault-http-'));

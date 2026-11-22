@@ -239,6 +239,25 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     await this.update('users', { userId }, { loginHash, passwordKeySalt, userKey });
   }
 
+  public async initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<boolean> {
+    try {
+      await this.documentClient().send(
+        new UpdateCommand({
+          TableName: this.table('users'),
+          Key: { userId },
+          UpdateExpression: 'SET #salt = :salt, #key = :key',
+          ConditionExpression: 'attribute_exists(userId) AND #admin = :admin AND #key = :empty',
+          ExpressionAttributeNames: { '#salt': 'passwordKeySalt', '#key': 'userKey', '#admin': 'admin' },
+          ExpressionAttributeValues: { ':salt': passwordKeySalt, ':key': userKey, ':admin': true, ':empty': '' }
+        })
+      );
+      return true;
+    } catch (error) {
+      if (isError(error, 'ConditionalCheckFailedException')) return false;
+      throw error;
+    }
+  }
+
   public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
     await this.update('users', { userId }, { admin });
   }

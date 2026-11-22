@@ -27,7 +27,7 @@ const videoTombstone = object({
 });
 const videoRecord = Type.Union([video, videoTombstone]);
 const comment = object({ commentId: id, userId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, edited: Type.Boolean(), deleted: Type.Boolean(), hmac: text });
-const user = object({ userId: id, username, displayName: text, passwordKeySalt: text, userKey: text, admin: Type.Boolean(), editor: Type.Boolean(), moderator: Type.Boolean() });
+const user = object({ userId: id, username, displayName: text, passwordKeySalt: Type.String({ maxLength: 4096 }), userKey: Type.String({ maxLength: 4096 }), admin: Type.Boolean(), editor: Type.Boolean(), moderator: Type.Boolean() });
 const commentChange = object({ content: Type.String({ maxLength: 1_000_000 }), lastModified: date, hmac: text });
 const videoChange = { lastModified: date, hmac: text };
 const error = object({ error: Type.String() });

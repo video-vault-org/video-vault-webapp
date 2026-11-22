@@ -2,6 +2,7 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { Comment } from '@/domain/Comment';
 import { User } from '@/domain/User';
 import { UserService } from '@/service/UserService';
+import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { verifyPassword } from '@/util/password';
 
 describe('UserService', () => {
@@ -35,6 +36,19 @@ describe('UserService', () => {
   beforeEach(() => {
     db = new InMemoryDatabaseAdapter();
     service = new UserService(db);
+  });
+
+  test('initializes wrapped keys once without changing the login proof', async () => {
+    await db.createUser({ ...user, admin: true, userKey: '', passwordKeySalt: '' });
+    await service.initializeUsersKeys({ userId, userKey: 'wrapped', passwordKeySalt: 'salt' });
+    expect(await db.findOneUserByUserId({ userId })).toMatchObject({ loginHash: user.loginHash, userKey: 'wrapped', passwordKeySalt: 'salt' });
+    await expect(service.initializeUsersKeys({ userId, userKey: 'other', passwordKeySalt: 'other' })).rejects.toBeInstanceOf(DatabaseConflictError);
+  });
+
+  test('propagates key initialization database errors', async () => {
+    const error = new Error('Unavailable');
+    jest.spyOn(db, 'initializeUsersKeysByUserId').mockRejectedValueOnce(error);
+    await expect(service.initializeUsersKeys({ userId, userKey: 'wrapped', passwordKeySalt: 'salt' })).rejects.toBe(error);
   });
 
   afterEach(() => {

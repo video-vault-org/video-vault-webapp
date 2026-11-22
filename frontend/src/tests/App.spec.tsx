@@ -5,13 +5,17 @@ import App from '../App';
 import { config, video } from './fixtures';
 import { BOOTSTRAP, TOKEN } from '../lib/api';
 import * as cache from '../lib/cache';
-import { verify, decryptText } from '../lib/crypto';
+import { createKeys, passwordAttributes, unlock, verify, decryptText } from '../lib/crypto';
 
 vi.mock('../lib/crypto', async () => {
   const actual = await vi.importActual('../lib/crypto');
   return {
     ...actual,
     loginHash: vi.fn().mockResolvedValue('login-hash'),
+    createKeys: vi.fn().mockResolvedValue({ encryption: {}, auth: {} }),
+    passwordAttributes: vi
+      .fn()
+      .mockResolvedValue({ loginHash: 'client-proof', passwordKeySalt: 'new-salt', userKey: 'new-wrapped' }),
     unlock: vi.fn().mockResolvedValue({ encryption: {}, auth: {} }),
     verify: vi.fn().mockResolvedValue(undefined),
     decryptText: vi.fn(async (value: string) => (value === 'ciphertext' ? 'A walk' : 'By the river'))
@@ -36,6 +40,7 @@ let calls: string[];
 beforeEach(async () => {
   await cache.removePrefix('');
   calls = [];
+  vi.clearAllMocks();
 
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const path = String(input);
@@ -43,7 +48,8 @@ beforeEach(async () => {
     if (path === '/bootstrap') return new Response(JSON.stringify(config));
     if (path === '/login') return new Response(JSON.stringify({ token }));
     if (path === '/api/user/me') return new Response(JSON.stringify(user));
-    if (path.startsWith('/api/video/')) return new Response(JSON.stringify([{ ...video, plainTitle: undefined, plainDescription: undefined }]));
+    if (path.startsWith('/api/video/'))
+      return new Response(JSON.stringify([{ ...video, plainTitle: undefined, plainDescription: undefined }]));
     throw new Error(`Unexpected ${path}`);
   });
 });
@@ -63,7 +69,10 @@ test('logs in, loads since=0, stores ciphertext only and grays out forbidden act
   expect(localStorage.getItem(TOKEN)).toBe(token);
   expect(screen.getByRole('banner').querySelector('img')).toHaveAttribute('src', '/logo.png');
   expect(screen.getByRole('contentinfo').querySelector('img')).toHaveAttribute('src', '/videovault-logo.png');
-  expect(screen.getByRole('link', { name: /Sicherheitsarchitektur/ })).toHaveAttribute('href', '/SECURITY-ARCHITECTURE.html');
+  expect(screen.getByRole('link', { name: /Sicherheitsarchitektur/ })).toHaveAttribute(
+    'href',
+    '/SECURITY-ARCHITECTURE.html'
+  );
   expect(calls).toContain('/api/video/0');
   expect(screen.getByRole('button', { name: /Video hinzufügen/ })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Benutzerverwaltung' })).toBeDisabled();
@@ -74,6 +83,57 @@ test('logs in, loads since=0, stores ciphertext only and grays out forbidden act
   });
   await actor.click(screen.getByRole('button', { name: /Aktualisieren/ }));
   await waitFor(() => expect(calls).toContain(`/api/video/${Date.parse(video.lastModified)}`));
+});
+
+test.each([204, 409])(
+  'initializes empty admin keys on first login and unlocks only the stored envelope (HTTP %i)',
+  async (status) => {
+    let reads = 0;
+    const stored = { ...user, admin: true, passwordKeySalt: 'stored-salt', userKey: 'stored-wrapped' };
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) === '/api/user/me') {
+        reads++;
+        return new Response(
+          JSON.stringify(reads === 1 ? { ...stored, userKey: '', passwordKeySalt: '' } : stored)
+        );
+      }
+      if (String(input) === '/api/user/initialize-keys') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          passwordKeySalt: 'new-salt',
+          userKey: 'new-wrapped'
+        });
+        return new Response(null, { status });
+      }
+      return original(input, init);
+    });
+    await login();
+    expect(createKeys).toHaveBeenCalledOnce();
+    expect(passwordAttributes).toHaveBeenCalledWith('SomePassword1!', user.username, config.instanceSalt, {
+      encryption: {},
+      auth: {}
+    });
+    expect(unlock).toHaveBeenCalledWith('SomePassword1!', stored);
+    expect(JSON.parse(localStorage.getItem('videovault.user')!)).toEqual(stored);
+  }
+);
+
+test('does not unlock or cache generated keys when initial persistence fails', async () => {
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input) === '/api/user/me')
+      return new Response(JSON.stringify({ ...user, admin: true, userKey: '', passwordKeySalt: '' }));
+    if (String(input) === '/api/user/initialize-keys') return new Response(null, { status: 500 });
+    return original(input, init);
+  });
+  const actor = userEvent.setup();
+  render(<App />);
+  await actor.type(await screen.findByLabelText('Benutzername'), 'reader');
+  await actor.type(screen.getByLabelText('Passwort'), 'SomePassword1!');
+  await actor.click(screen.getByRole('button', { name: 'Anmelden' }));
+  await screen.findByRole('alert');
+  expect(unlock).not.toHaveBeenCalled();
+  expect(localStorage.getItem('videovault.user')).toBeNull();
 });
 
 test('searches decrypted content and switches all navigation language', async () => {
@@ -115,7 +175,9 @@ test('invitation links are scrubbed and require a password change before the cat
   const actor = userEvent.setup();
   render(<App />);
   await actor.click(await screen.findByRole('button', { name: 'Einladung / Reset öffnen' }));
-  expect(await screen.findByRole('heading', { name: 'Bitte lege jetzt dein eigenes Passwort fest.' })).toBeVisible();
+  expect(
+    await screen.findByRole('heading', { name: 'Bitte lege jetzt dein eigenes Passwort fest.' })
+  ).toBeVisible();
   expect(location.hash).toBe('');
   expect(calls).not.toContain('/api/video/0');
   expect(screen.queryByRole('heading', { name: 'A walk' })).not.toBeInTheDocument();

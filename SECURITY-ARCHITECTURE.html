@@ -393,8 +393,13 @@
                 Zero-Knowledge-Beweisverfahren.
               </p>
               <p>
-                Die Ersteinrichtung ist eine Ausnahme: Ein lokales Einrichtungsprogramm verarbeitet das erste Admin-Passwort und erzeugt die ursprünglichen Archivschlüssel. Auf dem ausführenden Rechner liegen diese während der Einrichtung offen im
-                Arbeitsspeicher.
+                Bei der Ersteinrichtung verarbeitet ein lokales Einrichtungsprogramm das erste Admin-Passwort und speichert den Login-Prüfwert. Die Schlüsselfelder bleiben zunächst leer. Beim ersten erfolgreichen Anmelden erzeugt dein Browser die
+                beiden unabhängigen 32-Byte-Archivschlüssel und einen zufälligen Passwortschlüssel-Salt. Er verpackt die Schlüssel mit dem lokal aus deinem Passwort abgeleiteten Passwortschlüssel. Nur der Salt und die verpackten Schlüssel werden
+                gespeichert; die offenen Archivschlüssel verlassen den Browser nicht.
+              </p>
+              <p>
+                Die erste Schlüsselablage ist atomar und nur für das eigene Admin-Konto mit leerem userKey erlaubt. Bei gleichzeitigen Erst-Anmeldungen wird nur ein Schlüsselpaar gespeichert. Die Browser laden anschließend die gespeicherten Schlüssel
+                und entsperren sie mit dem Passwort. Bis dies erfolgreich abgeschlossen ist, bleibt das Archiv in der Oberfläche gesperrt.
               </p>
               <div class="note">
                 <strong>Ein gemeinsames Archiv hat gemeinsame Schlüssel.</strong> Über die Benutzerverwaltung hinzugefügte Konten erhalten dieselben Archivschlüssel, jeweils unter ihrem eigenen Passwort geschützt. Rollen regeln den Serverzugriff; sie
@@ -853,7 +858,14 @@
                 <figcaption>During normal web use, the server side handles encrypted content and controls access. Your browser handles plaintext.</figcaption>
               </figure>
               <p>During normal sign-in, the server receives neither your plaintext password nor the unwrapped archive keys. This property is called <strong>zero knowledge</strong> here. It is not a mathematical zero-knowledge proof protocol.</p>
-              <p>Initial setup is an exception: a local setup program processes the first administrator’s password and generates the original archive keys. These are present in plaintext in memory on the computer running setup.</p>
+              <p>
+                During initial setup, a local setup program processes the first administrator’s password and stores the sign-in verifier. The key fields remain empty. On the first successful sign-in, your browser generates the two independent 32-byte
+                archive keys and a random password-key salt. It wraps the keys using the password key derived locally from your password. Only the salt and wrapped keys are stored; the unwrapped archive keys never leave the browser.
+              </p>
+              <p>
+                The first key write is atomic and allowed only for an admin’s own account with an empty userKey. Concurrent first sign-ins store only one key pair. The browsers then load the stored keys and unlock them with the password. The
+                interface keeps the archive locked until this succeeds.
+              </p>
               <div class="note">
                 <strong>A shared archive has shared keys.</strong> Accounts added through user management receive the same archive keys, each protected by its own password. Roles control server access; they do not create separate cryptographic
                 compartments.

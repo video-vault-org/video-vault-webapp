@@ -141,6 +141,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     await this.query('UPDATE users SET "loginHash" = $2, "passwordKeySalt" = $3, "userKey" = $4 WHERE "userId" = $1', [userId, loginHash, passwordKeySalt, userKey]);
   }
 
+  public async initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<boolean> {
+    return (await this.query(`UPDATE users SET "passwordKeySalt" = $2, "userKey" = $3 WHERE "userId" = $1 AND admin = TRUE AND "userKey" = '' RETURNING "userId"`, [userId, passwordKeySalt, userKey])).length === 1;
+  }
+
   public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
     await this.query('UPDATE users SET admin = $2 WHERE "userId" = $1', [userId, admin]);
   }

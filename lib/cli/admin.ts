@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import prompts from 'prompts';
 import { z } from 'zod';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
@@ -66,12 +66,11 @@ const readAdminInput = async function (): Promise<{ username: string; displayNam
 /**
  * Creates the first admin, refusing to run if any admin already exists.
  * A UUID v4 identifies the user. LoginHash is Argon2id(password, instanceSalt + username), producing 32 raw bytes.
- * Both Argon2id derivations use v19, 19456 KiB, 2 passes and parallelism 1 (OWASP minimum profile).
- * A separate passwordKey uses a random 32-byte passwordKeySalt.
- * Independent random 32-byte AES and HMAC keys are each wrapped with passwordKey using RFC 3394 AES-256-KW without padding.
- * userKey is the Base64-encoded concatenation of the wrapped AES key followed by the wrapped HMAC key (40 bytes each).
- * LoginHash and passwordKeySalt are also Base64-encoded; UserService additionally hashes loginHash with scrypt.
- * Password is never stored. The instance salt is read from ./.salt (created if absent). Temporary secret buffers are cleared after use.
+ * Argon2id uses v19, 19456 KiB, 2 passes and parallelism 1 (OWASP minimum profile).
+ * UserService additionally hashes the Base64 loginHash with scrypt. No archive keys are generated here.
+ * userKey and passwordKeySalt remain empty until the first authenticated browser login initializes them.
+ * Password is never stored. The instance salt is read from ./.salt (created if absent).
+ * The temporary loginHash buffer is cleared after use.
  * Enforces 12–4096 characters and three of four character categories; rejects known breached passwords.
  * Checks HIBP using only a five-hex SHA-1 prefix; unavailable checks allow initialization with a warning.
  * The initial user has only the admin role.
@@ -87,36 +86,21 @@ const initializeAdmin = async function (db: DatabaseAdapter, input: unknown): Pr
   const userId = randomUUID();
   if (await db.findOneUserByUserId({ userId })) throw new Error('User ID already exists');
   const instanceSalt = await ensureInstanceSalt();
-  const passwordKeySalt = randomBytes(32);
   const loginHash = await deriveKey(password, instanceSalt + username);
-  let passwordKey: Buffer | undefined;
-  let aesKey: Buffer | undefined;
-  let hmacKey: Buffer | undefined;
   try {
-    passwordKey = await deriveKey(password, passwordKeySalt);
-    aesKey = randomBytes(32);
-    const aesCipher = createCipheriv('id-aes256-wrap', passwordKey, Buffer.alloc(8, 0xa6));
-    const wrappedAesKey = Buffer.concat([aesCipher.update(aesKey), aesCipher.final()]);
-    hmacKey = randomBytes(32);
-    const hmacCipher = createCipheriv('id-aes256-wrap', passwordKey, Buffer.alloc(8, 0xa6));
-    const wrappedHmacKey = Buffer.concat([hmacCipher.update(hmacKey), hmacCipher.final()]);
-    const userKey = Buffer.concat([wrappedAesKey, wrappedHmacKey]);
     await new UserService(db).createUser({
       userId,
       username,
       displayName,
       loginHash: loginHash.toString('base64'),
-      passwordKeySalt: passwordKeySalt.toString('base64'),
-      userKey: userKey.toString('base64'),
+      passwordKeySalt: '',
+      userKey: '',
       admin: true,
       editor: false,
       moderator: false
     });
   } finally {
     loginHash.fill(0);
-    passwordKey?.fill(0);
-    aesKey?.fill(0);
-    hmacKey?.fill(0);
   }
 };
 

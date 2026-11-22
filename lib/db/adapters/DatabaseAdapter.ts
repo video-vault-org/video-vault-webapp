@@ -58,6 +58,12 @@ interface DatabaseAdapter {
   changeUsersPasswordByUserId({ userId, loginHash, passwordKeySalt, userKey }: { userId: string; loginHash: string; passwordKeySalt: string; userKey: string }): Promise<void>;
 
   /**
+   * Atomically stores the first wrapped archive keys and their password-key salt for an admin with an empty userKey.
+   * Returns false if the user is missing, is not an admin or already has keys. Never changes loginHash.
+   */
+  initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<boolean>;
+
+  /**
    * Changes the users admin role flag, matched by its userId
    * @param userId The id of the user to be changed
    * @param admin The new admin role state (boolean)

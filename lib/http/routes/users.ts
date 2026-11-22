@@ -67,6 +67,22 @@ const userRoutes = function (app: FastifyInstance, users: UserService, auth: Aut
     return reply.code(204).send(null);
   });
 
+  /** POST /api/user/initialize-keys — Authenticated admins only. Stores the first wrapped keys for their own account once; never changes the login proof. */
+  router.post(
+    '/initialize-keys',
+    {
+      onRequest: admin,
+      schema: {
+        body: object({ passwordKeySalt: Type.String({ pattern: '^[A-Za-z0-9+/]{43}=$' }), userKey: Type.String({ pattern: '^[A-Za-z0-9+/]{107}=$' }) }),
+        response: noContent
+      }
+    },
+    async (request, reply) => {
+      await users.initializeUsersKeys({ userId: currentUser(request).userId, ...request.body });
+      return reply.code(204).send(null);
+    }
+  );
+
   /** PATCH /api/user/change/password/:userId — Admins only. Changes another user's password attributes. */
   router.patch('/change/password/:userId', { onRequest: admin, schema: { params: userParams, body: password, response: noContent } }, async (request, reply) => {
     await requireUser(request.params.userId);

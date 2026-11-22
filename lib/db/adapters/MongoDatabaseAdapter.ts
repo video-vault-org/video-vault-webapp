@@ -73,6 +73,11 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await this.write(async () => (await this.users()).updateOne({ userId }, { $set: { loginHash, passwordKeySalt, userKey } }));
   }
 
+  public async initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<boolean> {
+    const result = await (await this.users()).updateOne({ userId, admin: true, userKey: '' }, { $set: { passwordKeySalt, userKey } });
+    return result.matchedCount === 1;
+  }
+
   public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
     await this.write(async () => (await this.users()).updateOne({ userId }, { $set: { admin } }));
   }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { bootstrap, clearToken, json, TOKEN, tokenValid } from './lib/api';
-import { decryptText, loginHash, unlock, verify } from './lib/crypto';
+import { ApiError, bootstrap, clearToken, json, TOKEN, tokenValid } from './lib/api';
+import { createKeys, decryptText, loginHash, passwordAttributes, unlock, verify } from './lib/crypto';
 import { get, removePrefix, emptyCatalog, mergeCatalog, saveCatalog, type Catalog } from './lib/cache';
 import { excerpt, filterVideos, formatValue, sortVideos } from './lib/catalog';
 import { clearMedia, installMediaBridge } from './lib/mediaBridge';
@@ -58,7 +58,10 @@ const Login = function ({
         </h2>
         <p className="muted">
           {cached
-            ? t('Dein Passwort entsperrt die Schlüssel nur lokal.', 'Your password unlocks the keys locally only.')
+            ? t(
+                'Dein Passwort entsperrt die Schlüssel nur lokal.',
+                'Your password unlocks the keys locally only.'
+              )
             : t(
                 'Nur du und deine berechtigten Mitnutzer können die Inhalte entschlüsseln.',
                 'Only you and authorized fellow users can decrypt the content.'
@@ -75,6 +78,22 @@ const Login = function ({
                   loginHash: await loginHash(password, username, config.instanceSalt)
                 });
                 localStorage.setItem(TOKEN, result.token);
+                user = await json<User>('/api/user/me');
+              }
+              if (user.userKey === '') {
+                const generated = await createKeys();
+                const { passwordKeySalt, userKey } = await passwordAttributes(
+                  password,
+                  user.username,
+                  config.instanceSalt,
+                  generated
+                );
+                try {
+                  await json('/api/user/initialize-keys', { passwordKeySalt, userKey });
+                } catch (error) {
+                  // Another first login may already have stored its keys. Always reload and unlock the winner.
+                  if (!(error instanceof ApiError && error.status === 409)) throw error;
+                }
                 user = await json<User>('/api/user/me');
               }
               const keys = await unlock(password, user);
@@ -357,7 +376,11 @@ const Vault = function ({
         </div>
         <section className="video-grid">
           {filtered.map((v, index) => (
-            <article className="video-card" key={v.videoId} style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}>
+            <article
+              className="video-card"
+              key={v.videoId}
+              style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
+            >
               <button
                 className="tile-preview"
                 onClick={() => setSelected(v)}
@@ -368,7 +391,11 @@ const Vault = function ({
               </button>
               <div className="card-body">
                 <small className="recorded">
-                  {formatValue(v.recorded, { type: config.meta.recorded.withTime ? 'datetime' : 'date' }, language)}
+                  {formatValue(
+                    v.recorded,
+                    { type: config.meta.recorded.withTime ? 'datetime' : 'date' },
+                    language
+                  )}
                 </small>
                 <h2>{v.plainTitle}</h2>
                 <p>{excerpt(v.plainDescription)}</p>
@@ -388,7 +415,10 @@ const Vault = function ({
                 : t('Platz für deine Erinnerungen.', 'Room for your memories.')}
             </h2>
             <p>
-              {t('Ändere die Filter oder füge ein erstes Video hinzu.', 'Change the filters or add your first video.')}
+              {t(
+                'Ändere die Filter oder füge ein erstes Video hinzu.',
+                'Change the filters or add your first video.'
+              )}
             </p>
           </div>
         )}
@@ -427,7 +457,13 @@ const Vault = function ({
         />
       )}
       {admin && user.admin && (
-        <UserManagement current={user} keys={keys} config={config} close={() => setAdmin(false)} updated={updated} />
+        <UserManagement
+          current={user}
+          keys={keys}
+          config={config}
+          close={() => setAdmin(false)}
+          updated={updated}
+        />
       )}
     </>
   );
@@ -576,7 +612,9 @@ const Application = function () {
         <main className="loading">
           <ErrorMessage text={task.error} />
           <button disabled={task.pending} onClick={() => void start()}>
-            {task.pending ? t('Konfiguration laden …', 'Loading configuration …') : t('Erneut versuchen', 'Retry')}
+            {task.pending
+              ? t('Konfiguration laden …', 'Loading configuration …')
+              : t('Erneut versuchen', 'Retry')}
           </button>
         </main>
       ) : session ? (

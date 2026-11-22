@@ -160,6 +160,10 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
     this.write('UPDATE users SET "loginHash" = $2, "passwordKeySalt" = $3, "userKey" = $4 WHERE "userId" = $1', [userId, loginHash, passwordKeySalt, userKey]);
   }
 
+  public async initializeUsersKeysByUserId({ userId, passwordKeySalt, userKey }: { userId: string; passwordKeySalt: string; userKey: string }): Promise<boolean> {
+    return this.findOne((row) => row, `UPDATE users SET "passwordKeySalt" = $2, "userKey" = $3 WHERE "userId" = $1 AND admin = 1 AND "userKey" = '' RETURNING "userId"`, [userId, passwordKeySalt, userKey]) !== null;
+  }
+
   public async changeUsersAdminRoleByUserId({ userId, admin }: { userId: string; admin: boolean }): Promise<void> {
     this.write('UPDATE users SET admin = $2 WHERE "userId" = $1', [userId, admin]);
   }
