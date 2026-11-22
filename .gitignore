@@ -10,3 +10,16 @@ video-vault.db
 /.salt.*.tmp
 
 AGENTS.md
+
+/frontend/dist
+/public/assets
+/public/index.html
+/public/sw.js
+/public/precache.json
+/public/manifest.webmanifest
+/public/logo.png
+/public/favicon.png
+
+/public/icon-*.png
+/frontend/playwright-report
+/frontend/test-results

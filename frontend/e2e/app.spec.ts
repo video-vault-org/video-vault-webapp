@@ -1,0 +1,177 @@
+import { test, expect, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+const login = async function (page: Page, username = 'admin') {
+  await page.goto('/');
+  await page.getByLabel('Benutzername', { exact: true }).fill(username);
+  await page.getByLabel('Passwort', { exact: true }).fill('VaultTesting123!');
+  await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ein Sommer am See', exact: true })).toBeVisible();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+};
+
+test.beforeEach(async ({ context }) => {
+  await context.route('https://api.pwnedpasswords.com/**', (route) =>
+    route.fulfill({ body: 'NONMATCHING:0', contentType: 'text/plain' })
+  );
+});
+
+test('real Argon2 unlocks backend keys, ciphertext survives offline reload and locale changes', async ({
+  page,
+  context
+}) => {
+  const errors: string[] = [];
+
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await login(page, 'reader');
+  await expect(page.getByRole('button', { name: /Video hinzufügen/ })).toBeDisabled();
+  await expect(page.locator('.tile-preview img').first()).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Personen', exact: true }).fill('Familie');
+  await expect(page.locator('.video-card')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Zurücksetzen', exact: true }).click();
+  await expect(page.locator('.video-card')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Sprache wechseln' }).click();
+  await expect(page.getByRole('button', { name: /Add video/ })).toBeDisabled();
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByLabel('Password', { exact: true }).fill('VaultTesting123!');
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ein Sommer am See' })).toBeVisible();
+  await expect(page.getByText('Offline catalog', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+  await expect(page.locator('.tile-preview img')).toHaveCount(3);
+  await page.screenshot({ path: '/tmp/vault-gallery.png', fullPage: true, animations: 'disabled' });
+});
+
+test('decrypts only requested full chunks for native video playback and a streamed download', async ({ page }) => {
+  await login(page);
+  const ranges: string[] = [];
+
+  page.on('request', (r) => {
+    if (r.url().includes('/api/video/file/')) ranges.push(r.headers()['range'] ?? r.method());
+  });
+
+  await page.getByRole('button', { name: 'Mehr Details', exact: true }).first().click();
+  const player = page.locator('video');
+  await expect(player).toBeVisible();
+  await expect.poll(() => player.evaluate((v) => (v as HTMLVideoElement).duration)).toBeGreaterThan(0);
+  await player.evaluate((v) => {
+    (v as HTMLVideoElement).currentTime = 1;
+
+    (v as HTMLVideoElement).play().catch(() => {});
+  });
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Herunterladen', exact: true }).click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  expect(await readFile(path!)).toEqual(await readFile(resolve('e2e/fixtures/sample.mp4')));
+  expect(ranges).toContain('HEAD');
+  expect(ranges.some((r) => r === 'bytes=0-39')).toBe(true);
+  expect(ranges.some((r) => r.startsWith('bytes=40-'))).toBe(true);
+});
+
+test('posts, edits and soft-deletes authenticated encrypted comments', async ({ page }) => {
+  await login(page);
+  await page.getByRole('button', { name: 'Mehr Details', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Kommentare', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Kommentare', exact: true });
+  await dialog.getByLabel('Dein Kommentar').fill('Browser encrypted comment');
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByText('Browser encrypted comment', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'Kommentar bearbeiten', exact: true }).fill('Edited comment');
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByText('Edited comment', { exact: true })).toBeVisible();
+
+  page.once('dialog', (d) => d.accept());
+
+  await dialog.getByRole('button', { name: 'Löschen', exact: true }).click();
+  await expect(dialog.getByText('Gelöscht · unverifizierte Löschmarkierung')).toBeVisible();
+});
+
+test('analyzes local MP4, encrypts upload, changes metadata/files and deletes the video', async ({ page }) => {
+  await login(page);
+  await page.getByRole('button', { name: /Video hinzufügen/ }).click();
+  let dialog = page.getByRole('dialog', { name: 'Video hinzufügen', exact: true });
+  await dialog.getByLabel('Titel', { exact: true }).fill('Browser upload');
+  await dialog.getByLabel('Beschreibung', { exact: true }).fill('Encrypted browser description');
+  await dialog.getByLabel('Aufgezeichnet', { exact: true }).fill('2026-11-01');
+  await dialog.getByLabel('Personen *', { exact: true }).fill('Ada\nBob');
+  await dialog.getByLabel('Videodatei', { exact: true }).setInputFiles('e2e/fixtures/sample.mp4');
+  await dialog.getByLabel('Thumbnail', { exact: true }).setInputFiles('../logo.png');
+  await expect(dialog.getByText('Geschätzte Browser-Unterstützung:', { exact: false })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Browser upload', exact: true })).toBeVisible();
+  const card = page
+    .locator('.video-card')
+    .filter({ has: page.getByRole('heading', { name: 'Browser upload', exact: true }) });
+  await card.getByRole('button', { name: 'Mehr Details', exact: true }).click();
+  await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Video bearbeiten', exact: true });
+  await dialog.getByLabel('Titel', { exact: true }).fill('Browser upload edited');
+  await dialog.getByLabel('Beschreibung', { exact: true }).fill('Updated encrypted description');
+  await dialog.getByLabel('Thumbnail ersetzen (optional)', { exact: true }).setInputFiles('../logo.png');
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Browser upload edited', exact: true })).toBeVisible();
+  await page
+    .locator('.video-card')
+    .filter({ has: page.getByRole('heading', { name: 'Browser upload edited', exact: true }) })
+    .getByRole('button', { name: 'Mehr Details', exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Browser upload edited', exact: true })
+      .getByText('Updated encrypted description', { exact: true })
+  ).toBeVisible();
+
+  page.once('dialog', (d) => d.accept());
+
+  await page.getByRole('button', { name: 'Löschen', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Browser upload edited', exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole('main').getByRole('heading', { name: 'Browser upload edited', exact: true })
+  ).not.toBeVisible();
+});
+
+test('creates an invitation, changes the invited password and can log in with the new credentials', async ({
+  page,
+  browser
+}) => {
+  await login(page);
+  await page.getByRole('button', { name: 'Benutzerverwaltung', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Benutzerverwaltung', exact: true });
+  await dialog.getByRole('button', { name: 'Nutzer hinzufügen', exact: true }).click();
+  await dialog.getByLabel('Anzeigename', { exact: true }).fill('Invited Reader');
+  await dialog.getByLabel('Benutzername', { exact: true }).fill('invited-reader');
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  const field = dialog.getByRole('textbox', { name: 'Einladungs- oder Reset-Link' });
+  await expect(field).toBeVisible();
+  const link = await field.inputValue();
+  const other = await browser.newContext({ baseURL: 'http://127.0.0.1:4217' });
+  await other.route('https://api.pwnedpasswords.com/**', (r) => r.fulfill({ body: 'NOTFOUND:0' }));
+  const invited = await other.newPage();
+  await invited.goto(link);
+  await invited.getByRole('button', { name: 'Einladung / Reset öffnen', exact: true }).click();
+  await invited.getByLabel('Neues Passwort', { exact: true }).fill('NewVaultPassword123!');
+  await invited.getByLabel('Passwort wiederholen', { exact: true }).fill('NewVaultPassword123!');
+  await invited.getByRole('button', { name: 'Passwort speichern', exact: true }).click();
+  await expect(invited.getByRole('heading', { name: 'Ein Sommer am See', exact: true })).toBeVisible();
+  expect(new URL(invited.url()).hash).toBe('');
+  await invited.getByRole('button', { name: 'Abmelden', exact: true }).click();
+  await invited.getByLabel('Benutzername', { exact: true }).fill('invited-reader');
+  await invited.getByLabel('Passwort', { exact: true }).fill('NewVaultPassword123!');
+  await invited.getByRole('button', { name: 'Anmelden', exact: true }).click();
+  await expect(invited.getByRole('heading', { name: 'Ein Sommer am See', exact: true })).toBeVisible();
+  await expect(invited.getByRole('button', { name: /Video hinzufügen/ })).toBeDisabled();
+  await other.close();
+});
+
+test('keeps the mobile archive within the viewport and offers the same account actions', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, 'reader');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Mein Konto', exact: true })).toBeVisible();
+  await page.screenshot({ path: '/tmp/vault-mobile.png', fullPage: true, animations: 'disabled' });
+});

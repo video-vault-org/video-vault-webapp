@@ -22,11 +22,14 @@
     "lint": "eslint '**/*.ts'",
     "test": "jest --runInBand --verbose --detectOpenHandles --forceExit",
     "qa": "npm run lint && npm run audit && npm run test",
-    "build": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
+    "build": "npm run build:backend && npm run build:frontend",
     "start": "node built/lib/index.js",
     "admin:init": "node built/lib/initialize-admin.js",
     "config:init": "node built/lib/initialize-config.js",
-    "meta:init": "node built/lib/initialize-meta.js"
+    "meta:init": "node built/lib/initialize-meta.js",
+    "build:backend": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
+    "build:frontend": "npm --prefix frontend run build && node scripts/build-frontend.mjs",
+    "test:frontend": "npm --prefix frontend test"
   },
   "repository": {
     "type": "git",

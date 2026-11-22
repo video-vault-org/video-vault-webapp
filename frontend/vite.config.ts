@@ -1,0 +1,48 @@
+import { defineConfig } from 'vitest/config';
+import { readdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+const config = defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(Date.now().toString()) },
+  build: {
+    rollupOptions: {
+      input: { app: resolve(import.meta.dirname, 'index.html'), sw: resolve(import.meta.dirname, 'src/sw.ts') },
+      output: { entryFileNames: (chunk) => (chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js') }
+    }
+  },
+  server: {
+    proxy: { '/api': 'http://localhost:3000', '/login': 'http://localhost:3000', '/bootstrap': 'http://localhost:3000' }
+  },
+  plugins: [
+    {
+      name: 'offline-assets',
+
+      async closeBundle() {
+        const root = resolve(import.meta.dirname, 'dist');
+
+        const files = async function (path: string): Promise<string[]> {
+          const entries = await readdir(resolve(root, path), { withFileTypes: true });
+          return (
+            await Promise.all(
+              entries.map((e) => (e.isDirectory() ? files(`${path}${e.name}/`) : [`/${path}${e.name}`]))
+            )
+          ).flat();
+        };
+
+        await writeFile(
+          resolve(root, 'precache.json'),
+          JSON.stringify((await files('')).filter((p) => p !== '/precache.json'))
+        );
+      }
+    }
+  ],
+  test: {
+    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
+    environment: 'jsdom',
+    setupFiles: ['src/tests/setup.ts'],
+    exclude: ['node_modules/**', 'dist/**'],
+    pool: 'forks',
+    maxWorkers: 2
+  }
+});
+
+export default config;
