@@ -58,7 +58,7 @@ describe('startServer', () => {
     running = undefined;
     occupying = undefined;
     jest.restoreAllMocks();
-    for (const key of ['PORT', 'HOST', 'STATIC_DIRECTORY', 'VIDEO_UPLOAD_LIMIT_BYTES', 'THUMBNAIL_UPLOAD_LIMIT_BYTES', 'JWT_TTL_SECONDS']) {
+    for (const key of ['VIDEO_VAULT_PORT', 'HOST', 'STATIC_DIRECTORY', 'VIDEO_UPLOAD_LIMIT_BYTES', 'THUMBNAIL_UPLOAD_LIMIT_BYTES', 'JWT_TTL_SECONDS']) {
       if (environment[key] === undefined) delete process.env[key];
       else process.env[key] = environment[key];
     }
@@ -107,7 +107,7 @@ describe('startServer', () => {
   });
 
   test('loads port, host and static directory from the environment', async () => {
-    process.env.PORT = '0';
+    process.env.VIDEO_VAULT_PORT = '0';
     process.env.HOST = '127.0.0.1';
     process.env.STATIC_DIRECTORY = directory;
     running = await startServer();
@@ -203,5 +203,18 @@ describe('startServer', () => {
     await expect(startServer({ port: 0, staticDirectory: directory })).rejects.toBe(error);
     expect(loadDb).not.toHaveBeenCalled();
     expect(startTemporaryFileCleanup).not.toHaveBeenCalled();
+  });
+
+  test('an explicit port overrides even an invalid VIDEO_VAULT_PORT', async () => {
+    process.env.VIDEO_VAULT_PORT = 'invalid';
+    running = await startServer({ port: 0, host: '127.0.0.1', staticDirectory: directory });
+    expect((running.server.address() as AddressInfo).port).toBeGreaterThan(0);
+  });
+
+  test('rejects an invalid VIDEO_VAULT_PORT before initializing adapters', async () => {
+    process.env.VIDEO_VAULT_PORT = 'invalid';
+    await expect(startServer({ staticDirectory: directory })).rejects.toThrow('Invalid VIDEO_VAULT_PORT');
+    expect(loadDb).not.toHaveBeenCalled();
+    expect(prepareFrontend).not.toHaveBeenCalled();
   });
 });

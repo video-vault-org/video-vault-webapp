@@ -15,7 +15,13 @@ npm start
 
 The root build compiles the backend, builds `frontend/dist`, and copies it to `public`. Existing unrelated public files are preserved; generated assets are replaced. No CDN is used for application dependencies, fonts, crypto or MediaInfo's WASM.
 
-For UI development use `npm --prefix frontend run dev` alongside the backend on port 3000. Vite proxies `/api`, `/login`, `/bootstrap` and the fixed footer image `/videovault-logo.png`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
+For UI development use `npm --prefix frontend run dev` alongside the backend on port 3210 (the default). For a different backend port, set `BACKEND_URL`, e.g. `BACKEND_URL=http://localhost:4000 npm --prefix frontend run dev`. Vite proxies `/api`, `/login`, `/bootstrap` and the fixed footer image `/videovault-logo.png`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
+
+## Server port
+
+`npm start` asks for the server port in an interactive terminal. Press Enter to use **3210**. The choice applies to that start and is not saved. Without an interactive terminal (including redirected output), startup uses 3210 automatically.
+
+To start without a prompt, set `VIDEO_VAULT_PORT`, for example `VIDEO_VAULT_PORT=4000 npm start`. The previous `PORT` variable is no longer used. Values must be integers from 0 to 65535; 0 requests an automatically assigned port. The interactive prompt accepts ports 1–65535. Code calling `startServer({ port })` explicitly takes precedence over the environment and skips the prompt.
 
 ## Custom logo and icons
 

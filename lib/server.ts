@@ -1,3 +1,4 @@
+import { readServerPort } from '@/cli/server';
 import { prepareFrontend } from '@/images';
 import { Server } from 'node:http';
 import { loadDb, resetDb } from '@/db';
@@ -16,7 +17,8 @@ import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
 
 /**
  * Ensures ./.salt exists, initializes configured adapters and one AuthService, then starts the HTTP server.
- * PORT defaults to 3000; HOST to 0.0.0.0; STATIC_DIRECTORY to ./public.
+ * VIDEO_VAULT_PORT sets the port; otherwise prompts on an interactive terminal (default 3210) or uses 3210 without a terminal.
+ * An explicit port option skips the prompt and overrides VIDEO_VAULT_PORT. HOST defaults to 0.0.0.0; STATIC_DIRECTORY to ./public.
  * VIDEO_UPLOAD_LIMIT_BYTES and THUMBNAIL_UPLOAD_LIMIT_BYTES override the 2 GiB and 20 MiB defaults.
  * JWT_TTL_SECONDS overrides the default one-hour token lifetime.
  * Temporary files with ctime older than 24 hours are cleaned on startup and hourly.
@@ -25,18 +27,15 @@ import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
  * @returns The listening server and an idempotent close function that stops temporary-file cleanup and closes the database.
  * @throws If configuration, initialization or listening fails; initialized resources are closed on failure.
  */
-const startServer = async function ({
-  port = Number(process.env.PORT ?? 3000),
-  host = process.env.HOST ?? '0.0.0.0',
-  staticDirectory = process.env.STATIC_DIRECTORY ?? './public'
-}: { port?: number; host?: string; staticDirectory?: string } = {}): Promise<{
+const startServer = async function ({ port, host = process.env.HOST ?? '0.0.0.0', staticDirectory = process.env.STATIC_DIRECTORY ?? './public' }: { port?: number; host?: string; staticDirectory?: string } = {}): Promise<{
   server: Server;
   close: () => Promise<void>;
 }> {
   const app = createHttpServer();
   try {
+    const listenPort = port ?? (await readServerPort());
+    if (!Number.isInteger(listenPort) || listenPort < 0 || listenPort > 65535) throw new RangeError('Invalid port');
     const instanceSalt = await ensureInstanceSalt();
-    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
     const appConfig = (await loadAppConfig()) ?? { title: DEFAULT_APP_TITLE };
     const metaConfig = (await loadMetaConfig()) ?? DEFAULT_META_CONFIG;
     await prepareFrontend({ staticDirectory });
@@ -56,7 +55,7 @@ const startServer = async function ({
         maxThumbnailBytes: process.env.THUMBNAIL_UPLOAD_LIMIT_BYTES === undefined ? undefined : Number(process.env.THUMBNAIL_UPLOAD_LIMIT_BYTES)
       }
     );
-    await app.listen({ port, host });
+    await app.listen({ port: listenPort, host });
     const server = app.server;
     const stopCleanup = startTemporaryFileCleanup({ logger: app.log });
     let closing: Promise<void> | undefined;

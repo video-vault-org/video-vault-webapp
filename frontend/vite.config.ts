@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3210';
+
 const config = defineConfig({
   define: { __BUILD_ID__: JSON.stringify(Date.now().toString()) },
   build: {
@@ -12,10 +14,10 @@ const config = defineConfig({
   },
   server: {
     proxy: {
-      '/videovault-logo.png': 'http://localhost:3000',
-      '/api': 'http://localhost:3000',
-      '/login': 'http://localhost:3000',
-      '/bootstrap': 'http://localhost:3000'
+      '/videovault-logo.png': backendUrl,
+      '/api': backendUrl,
+      '/login': backendUrl,
+      '/bootstrap': backendUrl
     }
   },
   plugins: [
