@@ -13,7 +13,7 @@ jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
 
 const instanceSalt = 'ab'.repeat(32);
 
-const input = { username: 'alice', displayName: 'Alice', password: 'p\u00e4ssword-\ud83d\udd10' };
+const input = { username: 'alice', displayName: 'Alice', password: 'P\u00e4ssword-123\ud83d\udd10' };
 const uuid = '5eaef793-3886-49b1-8947-5216b6746fb3';
 const existing = { userId: uuid, username: 'existing', displayName: 'Existing', loginHash: 'unused', passwordKeySalt: 'unused', userKey: 'unused', admin: false, editor: false, moderator: false };
 
@@ -23,6 +23,8 @@ describe('interactive admin initialization', () => {
 
   beforeEach(() => {
     db = new InMemoryDatabaseAdapter();
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('OTHERHASH:1\r\n'));
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     jest.mocked(prompts).mockReset();
     jest.mocked(ensureInstanceSalt).mockReset().mockResolvedValue(instanceSalt);
   });
@@ -138,6 +140,10 @@ describe('interactive admin initialization', () => {
     { ...input, userId: 'supplied-id' },
     { ...input, userKey: 'supplied-key' },
     { ...input, password: '' },
+    { ...input, password: 'Short1!' },
+    { ...input, password: 'alllowercaseletters' },
+    { ...input, password: 'LowerAndUppercase' },
+    { ...input, password: 'A1!' + 'x'.repeat(4094) },
     { ...input, instanceSalt: 'supplied-instanceSalt' },
     { ...input, username: 'ab' },
     { ...input, username: 'a' },
@@ -193,5 +199,63 @@ describe('interactive admin initialization', () => {
     const error = new Error('DB unavailable');
     jest.spyOn(db, 'findAllUsers').mockRejectedValueOnce(error);
     await expect(initializeAdmin(db, input)).rejects.toBe(error);
+  });
+
+  test.each([
+    ['Short1!', 'Please enter 12 to 4096 characters'],
+    ['Aa1!' + 'x'.repeat(4093), 'Please enter 12 to 4096 characters'],
+    ['LowerAndUppercase', 'Please use at least three character types: uppercase letters, lowercase letters, numbers, special characters'],
+    ['lowercase12  ', 'Please use at least three character types: uppercase letters, lowercase letters, numbers, special characters'],
+    ['Ää1234567890', true],
+    ['lowercase12!', true],
+    ['😀'.repeat(10) + 'Aa1', true],
+    ['😀'.repeat(5) + 'Aa1!', 'Please enter 12 to 4096 characters'],
+    ['Aa1!' + 'x'.repeat(4092), true]
+  ])('validates password prompt strength for %j', async (password, expected) => {
+    jest.mocked(prompts).mockResolvedValueOnce(input);
+    await readAdminInput();
+    const question = (jest.mocked(prompts).mock.calls[0][0] as prompts.PromptObject[])[2];
+    expect(await question.validate!(password, {}, question)).toBe(expected);
+    expect(fetch).toHaveBeenCalledTimes(expected === true ? 1 : 0);
+  });
+
+  test('the prompt rejects breached passwords without exposing the password or complete hash', async () => {
+    const digest = crypto.createHash('sha1').update(input.password).digest('hex').toUpperCase();
+    jest.mocked(fetch).mockResolvedValueOnce(new Response(`${digest.slice(5)}:42\r\n`));
+    jest.mocked(prompts).mockResolvedValueOnce(input);
+    await readAdminInput();
+    const question = (jest.mocked(prompts).mock.calls[0][0] as prompts.PromptObject[])[2];
+    expect(await question.validate!(input.password, {}, question)).toBe('This password appears in known data breaches. Please choose another password');
+    expect(fetch).toHaveBeenCalledWith(`https://api.pwnedpasswords.com/range/${digest.slice(0, 5)}`, expect.objectContaining({ headers: { 'Add-Padding': 'true' }, signal: expect.any(AbortSignal) }));
+    expect(JSON.stringify(jest.mocked(fetch).mock.calls)).not.toContain(input.password);
+    expect(JSON.stringify(jest.mocked(fetch).mock.calls)).not.toContain(digest);
+  });
+
+  test('direct initialization also refuses breached passwords without creating keys or accounts', async () => {
+    const digest = crypto.createHash('sha1').update(input.password).digest('hex').toUpperCase();
+    jest.mocked(fetch).mockResolvedValueOnce(new Response(`${digest.slice(5)}:2`));
+    const random = jest.spyOn(crypto, 'randomBytes');
+    await expect(initializeAdmin(db, input)).rejects.toThrow('known data breaches');
+    expect(random).not.toHaveBeenCalled();
+    expect(ensureInstanceSalt).not.toHaveBeenCalled();
+    expect(await db.findAllUsers()).toEqual([]);
+  });
+
+  test('ignores padding entries with a zero count and unmatched hash suffixes', async () => {
+    const digest = crypto.createHash('sha1').update(input.password).digest('hex').toUpperCase();
+    jest.mocked(fetch).mockResolvedValueOnce(new Response(`${digest.slice(5)}:0\r\nOTHERHASH:42`));
+    await initializeAdmin(db, input);
+    expect(await db.findAllUsers()).toHaveLength(1);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  test.each(['network', 'http', 'body'] as const)('allows initialization with a sanitized warning when the breach check fails (%s)', async (failure) => {
+    if (failure === 'network') jest.mocked(fetch).mockRejectedValueOnce(new Error(input.password));
+    if (failure === 'http') jest.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 503 }));
+    if (failure === 'body') jest.mocked(fetch).mockResolvedValueOnce({ ok: true, text: jest.fn().mockRejectedValue(new Error(input.password)) } as unknown as Response);
+    await initializeAdmin(db, input);
+    expect(await db.findAllUsers()).toHaveLength(1);
+    expect(console.warn).toHaveBeenCalledWith('Warning: The breached-password check was unavailable. The password was allowed anyway.');
+    expect(JSON.stringify(jest.mocked(console.warn).mock.calls)).not.toContain(input.password);
   });
 });

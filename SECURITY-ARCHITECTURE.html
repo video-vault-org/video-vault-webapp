@@ -894,7 +894,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
               </p>
               <h3>Passwortregeln und Einladungen</h3>
               <p>
-                Das Frontend verlangt mindestens 12 Zeichen und drei von vier Kategorien (Groß-/Kleinbuchstaben, Zahlen, Sonderzeichen). Diese UI-Regel ersetzt keine zusätzliche serverseitige Richtlinie. Beim Absenden prüft der Browser Pwned
+                Das Frontend und die Admin-Initialisierung verlangen mindestens 12 Zeichen und drei von vier Kategorien (Groß-/Kleinbuchstaben, Zahlen, Sonderzeichen). Die CLI prüft die Vorgaben sowohl bei der Passworteingabe als auch beim Anlegen des ersten Admins; reguläre API-Anfragen erhalten weiterhin nur den clientseitig abgeleiteten loginHash. Beim Absenden prüfen Browser bzw. Admin-CLI Pwned
                 Passwords über die Range-API: Nur fünf Hex-Zeichen des SHA-1-Hashes werden mit <code>Add-Padding: true</code> übertragen; der vollständige Vergleich bleibt lokal. SHA-1 dient ausschließlich der Suche, nicht der Passwortableitung. Der
                 Dienst sieht IP-Adresse und Präfix. Treffer werden abgelehnt; bei Ausfall wird mit Warnung fortgefahren.
               </p>
@@ -1522,7 +1522,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
               </p>
               <h3>Password rules and invitations</h3>
               <p>
-                The frontend requires at least 12 characters and three of four categories (uppercase, lowercase, numbers, special characters). This UI rule does not replace an additional server-side policy. On submission, the browser queries the
+                The frontend and admin initialization require at least 12 characters and three of four categories (uppercase, lowercase, numbers, special characters). The CLI enforces the policy both in the password prompt and when creating the initial admin; normal API requests still receive only the client-derived loginHash. On submission, the browser or admin CLI queries the
                 Pwned Passwords range API: only five hexadecimal SHA-1 characters are sent, with <code>Add-Padding: true</code>; the full comparison stays local. SHA-1 is used for lookup only, never password derivation. The service sees the IP
                 address and prefix. Breached passwords are rejected; outages allow continuation with a warning.
               </p>
