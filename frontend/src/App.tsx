@@ -13,7 +13,7 @@ import { VideoForm } from './components/VideoForm';
 import { Account, PasswordChange, UserManagement } from './components/Accounts';
 
 const REPO = 'https://github.com/video-vault-org/video-vault-webapp';
-const SECURITY = `${REPO}/blob/main/SECURITY-ARCHITECTURE.html`;
+const SECURITY = '/SECURITY-ARCHITECTURE.html';
 const cachedUserKey = 'videovault.user';
 
 const Login = function ({

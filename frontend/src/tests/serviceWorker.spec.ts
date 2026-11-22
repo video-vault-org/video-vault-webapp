@@ -16,8 +16,7 @@ beforeEach(async () => {
   open = vi.fn().mockResolvedValue({ addAll });
   remove = vi.fn().mockResolvedValue(true);
   vi.stubGlobal('self', {
-    addEventListener: (type: string, handler: (event: { waitUntil: (promise: Promise<unknown>) => void }) => void) =>
-      handlers.set(type, handler),
+    addEventListener: (type: string, handler: (event: { waitUntil: (promise: Promise<unknown>) => void }) => void) => handlers.set(type, handler),
     skipWaiting,
     clients: { claim }
   });
@@ -31,10 +30,7 @@ beforeEach(async () => {
       }
     }
   );
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(new Response(JSON.stringify(['/index.html', '/logo.png', '/icon-32.png'])))
-  );
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(['/index.html', '/logo.png', '/icon-32.png', '/SECURITY-ARCHITECTURE.html']))));
   await import('../sw');
 });
 
@@ -53,13 +49,30 @@ test('versions the app cache by build and image content and reloads every precac
   expect(fetch).toHaveBeenCalledWith('/precache.json', { cache: 'no-store' });
   expect(open).toHaveBeenCalledWith(expect.stringMatching(/^vault-shell-.+-__VIDEOVAULT_IMAGES_VERSION__$/));
   const requests = addAll.mock.calls[0][0] as Request[];
-  expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
-    '/index.html',
-    '/logo.png',
-    '/icon-32.png'
-  ]);
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual(['/index.html', '/logo.png', '/icon-32.png', '/SECURITY-ARCHITECTURE.html']);
   expect(requests.every((request) => request.cache === 'reload')).toBe(true);
   expect(addAll.mock.invocationCallOrder[0]).toBeLessThan(skipWaiting.mock.invocationCallOrder[0]);
+});
+
+test('serves the security document from the app cache without a network request', async () => {
+  const document = new Response('<html>Security architecture</html>', {
+    headers: { 'Content-Type': 'text/html' }
+  });
+  const match = vi.fn().mockResolvedValue(document);
+  open.mockResolvedValueOnce({ match });
+  Object.assign(self, { location: { origin: 'https://vault.test' } });
+  const request = new Request('https://vault.test/SECURITY-ARCHITECTURE.html');
+  let response: Promise<Response> | undefined;
+  const handler = handlers.get('fetch') as unknown as (event: { request: Request; respondWith: (promise: Promise<Response>) => void }) => void;
+  handler({
+    request,
+    respondWith: (promise) => {
+      response = promise;
+    }
+  });
+  expect(await response).toBe(document);
+  expect(match).toHaveBeenCalledWith(request);
+  expect(fetch).not.toHaveBeenCalled();
 });
 
 test('a failed image fetch does not activate the new worker or remove the old cache', async () => {
