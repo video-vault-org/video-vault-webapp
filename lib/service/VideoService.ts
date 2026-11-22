@@ -44,13 +44,14 @@ class VideoService {
   }
 
   /**
-   * Deletes the video metadata, then its comments, then its video and thumbnail files.
-   * Stops on the first failure; earlier successful deletions are not rolled back.
+   * Persists a permanent, unverified deletion tombstone, then deletes comments and stored files.
+   * Stops on the first failure; earlier changes are not rolled back. Repeating deletion retries cleanup while preserving the first tombstone timestamp.
    * @param videoId The ID of the video to delete.
+   * @param lastModified The client-provided deletion timestamp.
    * @throws If a database or storage deletion fails.
    */
-  public async deleteVideo({ videoId }: { videoId: string }): Promise<void> {
-    await this.db.deleteVideoByVideoId({ videoId });
+  public async deleteVideo({ videoId, lastModified }: { videoId: string; lastModified: Date }): Promise<void> {
+    await this.db.deleteVideoByVideoId({ videoId, lastModified });
     await this.db.deleteCommentsByVideoId({ videoId });
     await this.storage.deleteFiles({ videoId });
   }
@@ -126,7 +127,7 @@ class VideoService {
   /**
    * Finds a video by its ID.
    * @param videoId The ID of the video to find.
-   * @returns The video metadata, or null if no matching video exists.
+   * @returns The video metadata (including a deletion tombstone), or null if no matching video exists.
    * @throws If the database query fails.
    */
   public async findVideo({ videoId }: { videoId: string }): Promise<Video | null> {
@@ -136,7 +137,7 @@ class VideoService {
   /**
    * Finds videos modified on or after the given date.
    * @param since The earliest modification date to include, inclusive.
-   * @returns The matching video metadata, or an empty array if none match.
+   * @returns The matching video metadata including deletion tombstones, or an empty array if none match.
    * @throws If the database query fails.
    */
   public async findVideosLastModified({ since }: { since: Date }): Promise<Video[]> {
@@ -144,21 +145,12 @@ class VideoService {
   }
 
   /**
-   * Finds all videos without sorting or pagination.
-   * @returns All video metadata, or an empty array if no videos exist.
+   * Finds all active videos without sorting or pagination.
+   * @returns All active video metadata, excluding tombstones, or an empty array if no active videos exist.
    * @throws If the database query fails.
    */
   public async findAllVideos(): Promise<Video[]> {
-    return await this.db.findAllVideos();
-  }
-
-  /**
-   * Finds all current video IDs without loading complete video records.
-   * @returns Video IDs without sorting, or an empty array if no videos exist.
-   * @throws If the database query fails.
-   */
-  public async findAllVideoIds(): Promise<string[]> {
-    return await this.db.findAllVideoIds();
+    return (await this.db.findAllVideos()).filter((video) => !video.deleted);
   }
 
   /** Returns encrypted video size without loading its bytes; available to authenticated playback clients. */

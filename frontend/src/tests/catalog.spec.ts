@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { compare, excerpt, filterVideos, sortVideos, formatValue } from '../lib/catalog';
-import { emptyCatalog, mergeCatalog, get, put, removePrefix } from '../lib/cache';
+import { emptyCatalog, mergeCatalog, saveCatalog, saveThumbnail, get, put, removePrefix } from '../lib/cache';
 import { validateMetadata } from '../components/MetadataFields';
 import type { Bootstrap, PlainVideo } from '../lib/types';
 import { config, video } from './fixtures';
@@ -70,10 +70,38 @@ describe('offline ciphertext storage', () => {
     const raw = { ...video };
     delete (raw as Partial<PlainVideo>).plainTitle;
     delete (raw as Partial<PlainVideo>).plainDescription;
-    const result = mergeCatalog({ videos: [{ ...raw, videoId: 'removed' }], since: '0' }, [raw], ['v1']);
-    expect(result).toEqual({ videos: [raw], since: String(Date.parse(video.lastModified)) });
-    expect(mergeCatalog(result, [], [])).toEqual({ videos: [], since: result.since });
+    const tombstone = { ...raw, videoId: 'removed', deleted: true, lastModified: '2026-03-01T00:00:00Z' };
+    const result = mergeCatalog({ videos: [tombstone], since: '0' }, [raw, tombstone]);
+    expect(result).toEqual({ videos: [raw], since: String(Date.parse(tombstone.lastModified)) });
+    expect(mergeCatalog(result, [raw, tombstone])).toEqual(result);
+    expect(mergeCatalog(result, [{ ...tombstone, videoId: raw.videoId }])).toEqual({ videos: [], since: result.since });
+    expect(mergeCatalog(emptyCatalog(), [tombstone])).toEqual({ videos: [], since: result.since });
     expect(emptyCatalog()).toEqual({ videos: [], since: '0' });
+  });
+
+  test('saves the catalog and removes only thumbnails of tombstoned videos', async () => {
+    await put('sync:thumb:removed', new Uint8Array([1]));
+    await put('sync:thumb:kept', new Uint8Array([2]));
+    await put('other:thumb:removed', new Uint8Array([3]));
+    const catalog = { videos: [], since: '123' };
+    await saveCatalog('sync:', catalog, ['removed']);
+    expect(await get('sync:catalog')).toEqual(catalog);
+    expect(await get('sync:thumb:removed')).toBeUndefined();
+    expect(Array.from((await get<Uint8Array>('sync:thumb:kept'))!)).toEqual([2]);
+    expect(Array.from((await get<Uint8Array>('other:thumb:removed'))!)).toEqual([3]);
+  });
+
+  test('late thumbnail responses cannot repopulate deleted entries or replace newer versions', async () => {
+    const bytes = new Blob(['encrypted']);
+    await saveCatalog('late:', { videos: [video], since: '0' }, []);
+    await saveThumbnail('late:', video.videoId, video.lastModified, bytes);
+    expect(await get('late:thumb:' + video.videoId)).toHaveProperty('version', video.lastModified);
+    await saveCatalog('late:', { videos: [], since: '1' }, [video.videoId]);
+    await saveThumbnail('late:', video.videoId, video.lastModified, bytes);
+    expect(await get('late:thumb:' + video.videoId)).toBeUndefined();
+    await saveCatalog('late:', { videos: [{ ...video, lastModified: '2026-11-01T00:00:00Z' }], since: '2' }, []);
+    await saveThumbnail('late:', video.videoId, video.lastModified, bytes);
+    expect(await get('late:thumb:' + video.videoId)).toBeUndefined();
   });
 
   test('persists independently per account and can clear one account only', async () => {

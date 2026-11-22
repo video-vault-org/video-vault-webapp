@@ -3,10 +3,12 @@ import { Video } from '@/domain/Video';
 import { VideoService } from '@/service/VideoService';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
+
 const logger = { warn: jest.fn() };
 
 describe('VideoService', () => {
   const video: Video = {
+    deleted: false,
     videoId: 'v1',
     title: 'Original title',
     description: 'Encrypted description',
@@ -123,11 +125,11 @@ describe('VideoService', () => {
       const deleteComments = jest.spyOn(db, 'deleteCommentsByVideoId').mockResolvedValue(undefined);
       const deleteFiles = jest.spyOn(storage, 'deleteFiles').mockResolvedValue(undefined);
 
-      await expect(service.deleteVideo({ videoId })).resolves.toBeUndefined();
+      await expect(service.deleteVideo({ videoId, lastModified })).resolves.toBeUndefined();
 
       for (const operation of [deleteVideo, deleteComments, deleteFiles]) {
         expect(operation).toHaveBeenCalledTimes(1);
-        expect(operation).toHaveBeenCalledWith({ videoId });
+        expect(operation).toHaveBeenCalledWith(operation === deleteVideo ? { videoId, lastModified } : { videoId });
       }
       expect(deleteVideo.mock.invocationCallOrder[0]).toBeLessThan(deleteComments.mock.invocationCallOrder[0]);
       expect(deleteComments.mock.invocationCallOrder[0]).toBeLessThan(deleteFiles.mock.invocationCallOrder[0]);
@@ -141,9 +143,9 @@ describe('VideoService', () => {
       const failingOperation = { metadata: deleteVideo, comments: deleteComments, files: deleteFiles }[step];
       failingOperation.mockRejectedValueOnce(error);
 
-      await expect(service.deleteVideo({ videoId })).rejects.toBe(error);
+      await expect(service.deleteVideo({ videoId, lastModified })).rejects.toBe(error);
 
-      expect(failingOperation).toHaveBeenCalledWith({ videoId });
+      expect(failingOperation).toHaveBeenCalledWith(step === 'metadata' ? { videoId, lastModified } : { videoId });
       if (step === 'metadata') {
         expect(deleteComments).not.toHaveBeenCalled();
       }
@@ -256,7 +258,7 @@ describe('VideoService', () => {
   ] as const)('%s propagates database errors', async (method, dbMethod) => {
     const error = new Error('Database unavailable');
     jest.spyOn(db, dbMethod).mockRejectedValueOnce(error);
-    const parameters = { videoId, title: 'New title', description: 'New encrypted description', metadata: {}, recorded: new Date(75), mimetype: 'application/octet-stream', lastModified, hmac };
+    const parameters = { deleted: false, videoId, title: 'New title', description: 'New encrypted description', metadata: {}, recorded: new Date(75), mimetype: 'application/octet-stream', lastModified, hmac };
 
     await expect(service[method](parameters)).rejects.toBe(error);
   });
@@ -302,7 +304,7 @@ describe('VideoService', () => {
     test.each([[[]], [[video, { ...video, videoId: 'v2' }]]])('returns all videos %j', async (result) => {
       const find = jest.spyOn(db, 'findAllVideos').mockResolvedValueOnce(result);
 
-      await expect(service.findAllVideos()).resolves.toBe(result);
+      await expect(service.findAllVideos()).resolves.toEqual(result);
 
       expect(find).toHaveBeenCalledTimes(1);
       expect(find).toHaveBeenCalledWith();
@@ -316,21 +318,22 @@ describe('VideoService', () => {
     });
   });
 
-  describe('findAllVideoIds', () => {
-    test.each([[[]], [['v1', 'v2']]])('returns the IDs from the dedicated database method %j', async (ids) => {
-      const find = jest.spyOn(db, 'findAllVideoIds').mockResolvedValueOnce(ids);
-      const full = jest.spyOn(db, 'findAllVideos');
-      await expect(service.findAllVideoIds()).resolves.toBe(ids);
-      expect(find).toHaveBeenCalledTimes(1);
-      expect(find).toHaveBeenCalledWith();
-      expect(full).not.toHaveBeenCalled();
-    });
+  test('findAllVideos excludes deletion tombstones while synchronization includes them', async () => {
+    const tombstone = { ...video, videoId: 'deleted', deleted: true, title: '', description: '', meta: {}, videoMimeType: '', thumbnailMimeType: '', recorded: new Date(0), lastModified, hmac: '' };
+    await db.postVideo(video);
+    await db.postVideo(tombstone);
+    expect(await service.findAllVideos()).toEqual([video]);
+    expect(await service.findVideosLastModified({ since: new Date(0) })).toContainEqual(tombstone);
+  });
 
-    test('propagates database errors', async () => {
-      const error = new Error('Database unavailable');
-      jest.spyOn(db, 'findAllVideoIds').mockRejectedValueOnce(error);
-      await expect(service.findAllVideoIds()).rejects.toBe(error);
-    });
+  test('a failed physical cleanup leaves the tombstone for sync and can be retried', async () => {
+    await db.postVideo(video);
+    const cleanup = jest.spyOn(storage, 'deleteFiles').mockRejectedValueOnce(new Error('Storage unavailable')).mockResolvedValueOnce(undefined);
+    await expect(service.deleteVideo({ videoId, lastModified })).rejects.toThrow('Storage unavailable');
+    expect(await db.findOneVideoByVideoId({ videoId })).toMatchObject({ deleted: true, lastModified, hmac: '' });
+    await service.deleteVideo({ videoId, lastModified: new Date(lastModified.getTime() + 1) });
+    expect(await db.findOneVideoByVideoId({ videoId })).toMatchObject({ deleted: true, lastModified, hmac: '' });
+    expect(cleanup).toHaveBeenCalledTimes(2);
   });
 
   describe('readVideoFileRange', () => {

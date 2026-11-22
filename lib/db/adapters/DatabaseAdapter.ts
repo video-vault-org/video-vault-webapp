@@ -102,7 +102,7 @@ interface DatabaseAdapter {
   deleteUserByUserId({ userId }: { userId: string }): Promise<void>;
 
   /**
-   * Posts a new video
+   * Posts a new video. Its videoId must be unique, including permanently retained tombstones.
    * @param video The video to be posted
    * @throws DatabaseConflictError if an adapter's uniqueness constraint is violated.
    */
@@ -159,27 +159,24 @@ interface DatabaseAdapter {
   findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null>;
 
   /**
-   * Finds all video lastModified since
+   * Finds all video changes, including deletion tombstones, lastModified since
    * @param since The date since you want the videos from
    */
   findManyVideosLastModified({ since }: { since: Date }): Promise<Video[]>;
 
   /**
-   * Finds all videos
+   * Finds all video records, including deletion tombstones.
    */
   findAllVideos(): Promise<Video[]>;
 
   /**
-   * Finds every current video ID without loading the other video attributes.
-   * No sorting or pagination; returns an empty array if no videos exist.
+   * Atomically replaces an existing active video with a permanent deletion tombstone.
+   * Sets deleted=true; clears title, description, MIME types and hmac; sets meta={} and recorded=new Date(0).
+   * Stores the supplied lastModified. Missing and already deleted videos are unchanged.
+   * Tombstones have no valid HMAC and must not be decrypted or treated as verified content.
+   * This does not remove files or comments; VideoService coordinates that cleanup.
    */
-  findAllVideoIds(): Promise<string[]>;
-
-  /**
-   * Deletes a video by its videoId
-   * @param videoId The id of the video to be deleted
-   */
-  deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void>;
+  deleteVideoByVideoId({ videoId, lastModified }: { videoId: string; lastModified: Date }): Promise<void>;
 
   /**
    * Posts a comment

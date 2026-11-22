@@ -95,7 +95,10 @@ describe('Swagger UI and OpenAPI documentation', () => {
         ids.push(operation.operationId);
       }
     }
-    expect(ids).toHaveLength(39);
+    expect(document.paths['/api/video/catalog']).toBeUndefined();
+    expect(document.paths['/api/video/delete/{videoId}'].delete.description).toContain('lastModified');
+    expect(document.paths['/api/video/{since}'].get.description).toContain('tombstones');
+    expect(ids).toHaveLength(38);
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });

@@ -128,7 +128,20 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
 
   page.once('dialog', (d) => d.accept());
 
+  const deletion = page.waitForRequest(
+    (request) => request.method() === 'DELETE' && request.url().includes('/api/video/delete/')
+  );
   await page.getByRole('button', { name: 'Löschen', exact: true }).click();
+  const deletedRequest = await deletion;
+  const deletedId = new URL(deletedRequest.url()).pathname.split('/').at(-1);
+  expect(Number.isFinite(Date.parse(deletedRequest.postDataJSON().lastModified))).toBe(true);
+  const token = await page.evaluate(() => localStorage.getItem('videovault.token'));
+  await expect(page.getByRole('dialog', { name: 'Browser upload edited', exact: true })).not.toBeVisible();
+  const changes = await page.request.get('/api/video/0', { headers: { authorization: `Bearer ${token}` } });
+  expect(changes.status()).toBe(200);
+  expect(await changes.json()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ videoId: deletedId, deleted: true, title: '', hmac: '' })])
+  );
   await expect(page.getByRole('dialog', { name: 'Browser upload edited', exact: true })).not.toBeVisible();
   await expect(
     page.getByRole('main').getByRole('heading', { name: 'Browser upload edited', exact: true })

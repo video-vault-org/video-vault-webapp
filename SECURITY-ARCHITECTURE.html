@@ -855,8 +855,13 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                 Beim Soft-Delete setzt das Backend <code>deleted=true</code> und <code>content=''</code>. Das gilt für eigene Kommentare, Moderation und die Kommentare eines gelöschten Nutzers. Da der Server keinen masterAuthKey besitzt, kann er kein
                 neues gültiges HMAC für den geänderten Datensatz erzeugen; der bisherige HMAC-Wert darf nicht als gültiger Nachweis interpretiert werden.
               </p>
+              <p>
+                Videos werden ebenfalls als dauerhafte Tombstones gespeichert: <code>deleted=true</code>, <code>title=description=videoMimeType=thumbnailMimeType=hmac=''</code>, <code>meta={}</code> und <code>recorded=new Date(0)</code> (HTTP: <code>1970-01-01T00:00:00.000Z</code>).
+                Der Editor sendet beim Löschen die aktuelle Zeit als <code>lastModified</code>. Der Adapter setzt die Löschmarkierung atomar; spätere Änderungen stellen das Video nicht wieder her. Wiederholtes Löschen behält den ersten Löschzeitpunkt und versucht die Datei- und Kommentarbereinigung erneut.
+                Videodatei, Thumbnail und Kommentare werden entfernt; der kleine Datenbankeintrag bleibt ohne Ablaufzeit erhalten, damit auch lange offline gewesene Clients die Löschung erkennen. Aktive Videos haben <code>deleted=false</code>; dieses Flag ist Bestandteil ihres Metadaten-HMACs.
+              </p>
               <div class="note open">
-                <strong>Tombstones sind ausdrücklich nicht kryptografisch verifiziert.</strong> Der Client zeigt sie als serverseitige Löschmarkierung und nicht als authentisierten Kommentar an. Er versucht nicht, den leeren Inhalt zu entschlüsseln.
+                <strong>Tombstones sind ausdrücklich nicht kryptografisch verifiziert.</strong> Der Client zeigt sie als serverseitige Löschmarkierung und nicht als authentisierten Kommentar an. Video-Tombstones entfernen das Video aus der Anzeige. Der Client versucht weder ihren HMAC zu verifizieren noch ihre leeren Textfelder zu entschlüsseln.
                 Auch die verbleibenden Tombstone-Metadaten sind damit nicht kryptografisch bestätigt. Ein manipulierter Server kann folglich Inhalte als gelöscht verbergen; die Architektur verhindert keine Löschung oder Unterdrückung von Daten.
               </div>
             </section>
@@ -877,9 +882,9 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                 Kontos; normales Abmelden lässt den verschlüsselten Cache bestehen.
               </p>
               <p>
-                Die Synchronisation lädt zunächst <code>/api/video/0</code>, später Änderungen ab der höchsten bekannten lastModified. <code>/api/video/catalog</code> liefert angemeldeten Nutzern die aktuellen IDs für den Löschabgleich. Ciphertext
-                und Cursor werden gemeinsam erst nach erfolgreicher Integritätsprüfung gespeichert. Der Abgleich ist kein kryptografischer Nachweis gegen Unterdrückung von Daten, kein transaktionaler Snapshot und kein Schutz gegen falsche
-                Client-Uhren oder rückdatierte Änderungen.
+                Die Synchronisation lädt zunächst <code>/api/video/0</code>, später Änderungen ab der höchsten bekannten <code>lastModified</code>, einschließlich dauerhafter Video-Tombstones. Ein zusätzlicher ID-Katalogabruf entfällt.
+                Tombstones entfernen Videos und zwischengespeicherte verschlüsselte Thumbnails; auch ihre Zeitstempel setzen den Synchronisierungsstand weiter. Katalog, Zeitstempel und Thumbnail-Löschungen werden atomar in IndexedDB gespeichert, nachdem aktive Datensätze die Integritätsprüfung bestanden haben; Tombstones bleiben ausdrücklich unverifiziert.
+                Der Abgleich ist kein kryptografischer Nachweis gegen Unterdrückung von Daten, kein transaktionaler Snapshot und kein Schutz gegen falsche Client-Uhren oder rückdatierte Änderungen. Änderungen müssen weiterhin korrekt fortschreitende Client-Zeitstempel verwenden.
               </p>
               <h3>Range-Wiedergabe und Download</h3>
               <p>
@@ -1479,8 +1484,13 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                 For soft deletion, the backend sets <code>deleted=true</code> and <code>content=''</code>. This applies to own-comment deletion, moderation and deletion of a user’s comments. Without masterAuthKey, the server cannot produce a new
                 valid HMAC for the modified record; the old HMAC must not be treated as valid evidence.
               </p>
+              <p>
+                Videos also use permanent tombstones: <code>deleted=true</code>, <code>title=description=videoMimeType=thumbnailMimeType=hmac=''</code>, <code>meta={}</code> and <code>recorded=new Date(0)</code> (HTTP: <code>1970-01-01T00:00:00.000Z</code>).
+                The editor supplies the current time as <code>lastModified</code> when deleting. The adapter atomically marks the video deleted; later edits cannot restore it. Repeated deletion retains the original deletion timestamp and retries file and comment cleanup.
+                Video files, thumbnails and comments are removed; the small database record remains indefinitely, allowing clients returning after a long offline period to discover the deletion. Active videos have <code>deleted=false</code>, included in their metadata HMAC.
+              </p>
               <div class="note open">
-                <strong>Tombstones are explicitly not cryptographically verified.</strong> The client displays a server-side deletion marker rather than an authenticated comment and does not attempt to decrypt the empty content. Remaining tombstone
+                <strong>Tombstones are explicitly not cryptographically verified.</strong> The client displays a server-side deletion marker rather than an authenticated comment and does not attempt to decrypt the empty content. Video tombstones remove the video from view without HMAC verification or text decryption. Remaining tombstone
                 metadata is not cryptographically confirmed either. A malicious server can consequently hide content by marking it deleted; this architecture does not prevent deletion or suppression of data.
               </div>
             </section>
@@ -1500,8 +1510,9 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                 stored there. Business metadata, including recorded, remains unencrypted as on the server. “Clear offline data” removes this account’s cache; ordinary logout retains the encrypted cache.
               </p>
               <p>
-                Synchronization first requests <code>/api/video/0</code>, then changes since the highest known lastModified. <code>/api/video/catalog</code> provides authenticated users with current IDs to remove deleted entries. Ciphertext and
-                cursor are persisted together only after successful integrity checks. Reconciliation is not cryptographic proof against suppression, a transactional snapshot, or protection against incorrect client clocks or backdated changes.
+                Synchronization first requests <code>/api/video/0</code>, then changes since the highest known <code>lastModified</code>, including permanent video tombstones. No separate ID catalog request is needed.
+                Tombstones remove videos and cached encrypted thumbnails; their timestamps also advance the watermark. Catalog, watermark and thumbnail removals are committed atomically in IndexedDB after active records pass integrity checks; tombstones remain explicitly unverified.
+                Synchronization is not cryptographic proof against suppression, a transactional snapshot, or protection against incorrect client clocks or backdated changes. Changes still require correctly advancing client timestamps.
               </p>
               <h3>Range playback and download</h3>
               <p>

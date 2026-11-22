@@ -24,10 +24,15 @@ import { User } from '@/domain/User';
 import { Video } from '@/domain/Video';
 
 type Key = NonNullable<QueryCommandInput['ExclusiveStartKey']>;
+
 type Item = Key;
+
 type Transaction = NonNullable<TransactWriteCommandInput['TransactItems']>;
+
 type Table = 'users' | 'usernames' | 'videos' | 'comments' | 'login-attempts';
+
 type StoredVideo = Omit<Video, 'recorded' | 'lastModified'> & { recorded: number; lastModified: number; videoPartition: string };
+
 type StoredComment = Omit<Comment, 'created' | 'lastModified'> & { created: number; lastModified: number; createdKey: string };
 
 const byVideo = 'CommentsByVideo';
@@ -286,23 +291,28 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { title, lastModified: timestamp(lastModified), hmac });
+    await this.update('videos', { videoPartition, videoId }, { title, lastModified: timestamp(lastModified), hmac }, { field: 'deleted', value: false });
   }
 
   public async changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { description, lastModified: timestamp(lastModified), hmac });
+    await this.update('videos', { videoPartition, videoId }, { description, lastModified: timestamp(lastModified), hmac }, { field: 'deleted', value: false });
   }
 
   public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { meta: metadata, lastModified: timestamp(lastModified), hmac });
+    await this.update('videos', { videoPartition, videoId }, { meta: metadata, lastModified: timestamp(lastModified), hmac }, { field: 'deleted', value: false });
   }
 
   public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { lastModified: timestamp(lastModified), hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) });
+    await this.update(
+      'videos',
+      { videoPartition, videoId },
+      { lastModified: timestamp(lastModified), hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) },
+      { field: 'deleted', value: false }
+    );
   }
 
   public async changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
-    await this.update('videos', { videoPartition, videoId }, { recorded: timestamp(recorded), lastModified: timestamp(lastModified), hmac });
+    await this.update('videos', { videoPartition, videoId }, { recorded: timestamp(recorded), lastModified: timestamp(lastModified), hmac }, { field: 'deleted', value: false });
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {
@@ -331,12 +341,13 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     return (await this.scan<StoredVideo>('videos')).map(decodeVideo);
   }
 
-  public async findAllVideoIds(): Promise<string[]> {
-    return (await this.scan<Pick<StoredVideo, 'videoId'>>('videos', 'videoId')).map(({ videoId }) => videoId);
-  }
-
-  public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
-    await this.documentClient().send(new DeleteCommand({ TableName: this.table('videos'), Key: { videoPartition, videoId } }));
+  public async deleteVideoByVideoId({ videoId, lastModified }: { videoId: string; lastModified: Date }): Promise<void> {
+    await this.update(
+      'videos',
+      { videoPartition, videoId },
+      { deleted: true, title: '', description: '', meta: {}, videoMimeType: '', thumbnailMimeType: '', recorded: 0, lastModified: timestamp(lastModified), hmac: '' },
+      { field: 'deleted', value: false }
+    );
   }
 
   public async postComment(comment: Comment): Promise<void> {
@@ -517,11 +528,11 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     return (Item as T | undefined) ?? null;
   }
 
-  private async scan<T>(table: Table, projection?: string): Promise<T[]> {
+  private async scan<T>(table: Table): Promise<T[]> {
     const items: T[] = [];
     let cursor: Key | undefined = undefined;
     do {
-      const page: ScanCommandOutput = await this.documentClient().send(new ScanCommand({ TableName: this.table(table), ExclusiveStartKey: cursor, ...(projection ? { ProjectionExpression: projection } : {}) }));
+      const page: ScanCommandOutput = await this.documentClient().send(new ScanCommand({ TableName: this.table(table), ExclusiveStartKey: cursor }));
       for (const item of page.Items ?? []) {
         items.push(item as T);
       }
@@ -548,7 +559,7 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     }
   }
 
-  private async update(table: Table, Key: Key, changes: Item, guard?: { field: string; value: string }): Promise<void> {
+  private async update(table: Table, Key: Key, changes: Item, guard?: { field: string; value: string | boolean }): Promise<void> {
     const names: Record<string, string> = { '#key': Object.keys(Key)[0] };
     const values: Item = {};
     const assignments = Object.entries(changes).map(([field, value], index) => {

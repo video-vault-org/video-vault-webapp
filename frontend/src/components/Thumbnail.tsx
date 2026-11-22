@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { get, put } from '../lib/cache';
+import { get, saveThumbnail } from '../lib/cache';
 import { request } from '../lib/api';
 import { decrypt } from '../lib/crypto';
 import type { Keys, Video } from '../lib/types';
@@ -41,7 +41,7 @@ const Thumbnail = function ({ video, keys, namespace }: { video: Video; keys: Ke
       let data = cached?.version === video.lastModified ? cached.bytes : undefined;
       if (!data) {
         data = await (await request(`/api/video/thumbnail/${video.videoId}`)).blob();
-        await put(id, { version: video.lastModified, bytes: data });
+        await saveThumbnail(namespace, video.videoId, video.lastModified, data);
       }
       const plain = await decrypt(data, 'thumbnail', `${video.videoId}.thumbnail`, keys);
       url = URL.createObjectURL(

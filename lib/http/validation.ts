@@ -12,7 +12,20 @@ const metadata = Type.Record(Type.String(), Type.Unknown());
 const passwordProperties = { loginHash: text, passwordKeySalt: text, userKey: text };
 const password = object(passwordProperties);
 const videoProperties = { videoId: id, title: text, description: Type.String({ minLength: 1, maxLength: 1_000_000 }), meta: metadata, videoMimeType: text, thumbnailMimeType: text, recorded: date, lastModified: date, hmac: text };
-const video = object(videoProperties);
+const video = object({ ...videoProperties, deleted: Type.Boolean({ const: false, default: false }) });
+const videoTombstone = object({
+  videoId: id,
+  title: Type.Literal(''),
+  description: Type.Literal(''),
+  meta: object({}),
+  videoMimeType: Type.Literal(''),
+  thumbnailMimeType: Type.Literal(''),
+  recorded: Type.Literal('1970-01-01T00:00:00.000Z'),
+  lastModified: date,
+  hmac: Type.Literal(''),
+  deleted: Type.Literal(true)
+});
+const videoRecord = Type.Union([video, videoTombstone]);
 const comment = object({ commentId: id, userId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, edited: Type.Boolean(), deleted: Type.Boolean(), hmac: text });
 const user = object({ userId: id, username, displayName: text, passwordKeySalt: text, userKey: text, admin: Type.Boolean(), editor: Type.Boolean(), moderator: Type.Boolean() });
 const commentChange = object({ content: Type.String({ maxLength: 1_000_000 }), lastModified: date, hmac: text });
@@ -33,4 +46,4 @@ const sinceDate = function (value: string): Date {
   return parsed;
 };
 
-export { Type, object, id, text, username, date, metadata, passwordProperties, password, video, videoChange, comment, commentChange, user, errorResponses, noContent, videoInput, sinceDate };
+export { Type, object, id, text, username, date, metadata, passwordProperties, password, video, videoRecord, videoChange, comment, commentChange, user, errorResponses, noContent, videoInput, sinceDate };

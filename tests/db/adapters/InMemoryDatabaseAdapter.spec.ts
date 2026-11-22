@@ -20,6 +20,7 @@ describe('InMemoryDatabaseAdapter', () => {
   const otherUser: User = { ...user, userId: 'u2', username: 'bob' };
 
   const video: Video = {
+    deleted: false,
     videoId: 'v1',
     title: 'Original',
     description: 'Encrypted description',
@@ -228,39 +229,40 @@ describe('InMemoryDatabaseAdapter', () => {
       expect(await db.findManyVideosLastModified({ since: new Date(400) })).toEqual([]);
     });
 
-    test('findAllVideoIds returns only IDs without using findAllVideos or exposing mutable storage', async () => {
-      const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full video loading is not allowed'));
-      try {
-        const ids = await db.findAllVideoIds();
-        expect(ids).toHaveLength(2);
-        expect(ids).toEqual(expect.arrayContaining([video.videoId, otherVideo.videoId]));
-        ids.pop();
-        expect(await db.findAllVideoIds()).toHaveLength(2);
-        expect(full).not.toHaveBeenCalled();
-      } finally {
-        full.mockRestore();
-      }
-    });
-
-    test('findAllVideoIds reflects deletions and returns an empty array for an empty collection', async () => {
-      await db.deleteVideoByVideoId({ videoId: video.videoId });
-      expect(await db.findAllVideoIds()).toEqual([otherVideo.videoId]);
-      await db.deleteVideoByVideoId({ videoId: otherVideo.videoId });
-      expect(await db.findAllVideoIds()).toEqual([]);
-      await db.postVideo({ ...video, videoId: 'v3' });
-      expect(await db.findAllVideoIds()).toEqual(['v3']);
-    });
-
     test('findAllVideos returns every video', async () => {
       expect(await db.findAllVideos()).toHaveLength(2);
       expect(await db.findAllVideos()).toEqual(expect.arrayContaining([video, otherVideo]));
     });
 
-    test('deleteVideoByVideoId removes only the matching video and can be repeated', async () => {
-      await db.deleteVideoByVideoId({ videoId });
-      await db.deleteVideoByVideoId({ videoId });
+    test('deleteVideoByVideoId permanently clears content and preserves the first deletion timestamp', async () => {
+      const lastModified = new Date(200);
+      const tombstone = { ...video, deleted: true, title: '', description: '', meta: {}, videoMimeType: '', thumbnailMimeType: '', recorded: new Date(0), lastModified, hmac: '' };
+      await db.deleteVideoByVideoId({ videoId, lastModified });
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(tombstone);
+      expect(await db.findOneVideoByVideoId({ videoId: otherVideo.videoId })).toEqual(otherVideo);
+      expect(await db.findManyVideosLastModified({ since: lastModified })).toContainEqual(tombstone);
+      await db.deleteVideoByVideoId({ videoId, lastModified: new Date(300) });
+      await db.deleteVideoByVideoId({ videoId: 'missing', lastModified });
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(tombstone);
+      expect(await db.findAllVideos()).toHaveLength(2);
+    });
 
-      expect(await db.findAllVideos()).toEqual([otherVideo]);
+    test('postVideo cannot reuse the ID of a permanently deleted video', async () => {
+      await db.deleteVideoByVideoId({ videoId, lastModified: new Date(200) });
+      await expect(db.postVideo(video)).rejects.toBeInstanceOf(DatabaseConflictError);
+      expect(await db.findOneVideoByVideoId({ videoId })).toMatchObject({ deleted: true, hmac: '', lastModified: new Date(200) });
+    });
+
+    test('video edits cannot restore or modify a tombstone', async () => {
+      await db.deleteVideoByVideoId({ videoId, lastModified: new Date(200) });
+      const tombstone = await db.findOneVideoByVideoId({ videoId });
+      const changes = { videoId, lastModified: new Date(300), hmac: 'changed' };
+      await db.changeVideosTitleByVideoId({ ...changes, title: 'Changed' });
+      await db.changeVideosDescriptionByVideoId({ ...changes, description: 'Changed' });
+      await db.changeVideosMetadataByVideoId({ ...changes, metadata: { changed: true } });
+      await db.changeVideosMimetypesByVideoId({ ...changes, videoMimeType: 'video/webm', thumbnailMimeType: 'image/jpeg' });
+      await db.changeVideosRecordedByVideoId({ ...changes, recorded: new Date(300) });
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(tombstone);
     });
   });
 

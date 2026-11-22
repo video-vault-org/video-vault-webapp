@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bootstrap, clearToken, json, TOKEN, tokenValid } from './lib/api';
 import { decryptText, loginHash, unlock, verify } from './lib/crypto';
-import { get, put, removePrefix, emptyCatalog, mergeCatalog, type Catalog } from './lib/cache';
+import { get, removePrefix, emptyCatalog, mergeCatalog, saveCatalog, type Catalog } from './lib/cache';
 import { excerpt, filterVideos, formatValue, sortVideos } from './lib/catalog';
 import { clearMedia, installMediaBridge } from './lib/mediaBridge';
 import { readInvitation, type Invitation } from './lib/password';
@@ -11,6 +11,7 @@ import { Thumbnail } from './components/Thumbnail';
 import { VideoOverlay } from './components/VideoOverlay';
 import { VideoForm } from './components/VideoForm';
 import { Account, PasswordChange, UserManagement } from './components/Accounts';
+
 const REPO = 'https://github.com/video-vault-org/video-vault-webapp';
 const SECURITY = `${REPO}/blob/main/SECURITY-ARCHITECTURE.html`;
 const cachedUserKey = 'videovault.user';
@@ -165,6 +166,7 @@ const Vault = function ({
     async (items: Video[]) => {
       const plain: PlainVideo[] = [];
       for (const item of items) {
+        if (item.deleted) continue;
         await verify(item, keys);
         plain.push({
           ...item,
@@ -189,12 +191,19 @@ const Vault = function ({
         }
         try {
           const updates = await json<Video[]>(`/api/video/${previous.since}`),
-            ids = await json<string[]>('/api/video/catalog'),
-            next = mergeCatalog(previous, updates, ids),
+            next = mergeCatalog(previous, updates),
             plain = await decode(next.videos);
-          await put(namespace + 'catalog', next);
+          await saveCatalog(
+            namespace,
+            next,
+            updates.filter((video) => video.deleted).map((video) => video.videoId)
+          );
           if (active.current) {
             setVideos(plain);
+            setSelected((old) => (old ? plain.find((video) => video.videoId === old.videoId) : undefined));
+            setForm((old) =>
+              old && old !== 'new' && !plain.some((video) => video.videoId === old.videoId) ? undefined : old
+            );
             setOffline(false);
           }
         } catch (error) {

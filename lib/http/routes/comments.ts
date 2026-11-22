@@ -21,6 +21,7 @@ const commentRoutes = function (app: FastifyInstance, comments: CommentService, 
   const requireComment = async (commentId: string, userId?: string) => {
     const item = await comments.findComment({ commentId });
     if (!item || (userId !== undefined && item.userId !== userId)) throw new HttpError(404, 'Comment not found');
+    if ((await videos.findVideo({ videoId: item.videoId }))?.deleted) throw new HttpError(404, 'Video not found');
     return item;
   };
 
@@ -30,7 +31,8 @@ const commentRoutes = function (app: FastifyInstance, comments: CommentService, 
     { schema: { body: object({ commentId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, hmac: text }), response: { 201: comment, ...errorResponses } } },
     async (request, reply) => {
       const input = request.body;
-      if (!(await videos.findVideo({ videoId: input.videoId }))) throw new HttpError(404, 'Video not found');
+      const parent = await videos.findVideo({ videoId: input.videoId });
+      if (!parent || parent.deleted) throw new HttpError(404, 'Video not found');
       if (await comments.findComment({ commentId: input.commentId })) throw new HttpError(409, 'Comment already exists');
       const item = { ...input, created: new Date(input.created), lastModified: new Date(input.lastModified), userId: currentUser(request).userId, edited: false, deleted: false };
       await comments.submitComment(item);
@@ -50,6 +52,7 @@ const commentRoutes = function (app: FastifyInstance, comments: CommentService, 
     },
     async (request) => {
       try {
+        if ((await videos.findVideo({ videoId: request.params.videoId }))?.deleted) throw new HttpError(404, 'Video not found');
         const [items, cursor] = await comments.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId: request.params.videoId, paginationCursor: request.query.cursor, paginationSize: request.query.pagesize });
         return { comments: items.map(publicComment), cursor };
       } catch (error) {

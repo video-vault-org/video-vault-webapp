@@ -5,6 +5,7 @@ import App from '../App';
 import { config, video } from './fixtures';
 import { BOOTSTRAP, TOKEN } from '../lib/api';
 import * as cache from '../lib/cache';
+import { verify, decryptText } from '../lib/crypto';
 
 vi.mock('../lib/crypto', async () => {
   const actual = await vi.importActual('../lib/crypto');
@@ -42,7 +43,6 @@ beforeEach(async () => {
     if (path === '/bootstrap') return new Response(JSON.stringify(config));
     if (path === '/login') return new Response(JSON.stringify({ token }));
     if (path === '/api/user/me') return new Response(JSON.stringify(user));
-    if (path === '/api/video/catalog') return new Response(JSON.stringify(['v1']));
     if (path.startsWith('/api/video/'))
       return new Response(JSON.stringify([{ ...video, plainTitle: undefined, plainDescription: undefined }]));
     throw new Error(`Unexpected ${path}`);
@@ -117,4 +117,36 @@ test('invitation links are scrubbed and require a password change before the cat
   expect(location.hash).toBe('');
   expect(calls).not.toContain('/api/video/0');
   expect(screen.queryByRole('heading', { name: 'A walk' })).not.toBeInTheDocument();
+});
+
+test('a tombstone prunes the offline video and thumbnail and advances the watermark without decrypting it', async () => {
+  const actor = await login();
+  const namespace = `${config.instanceSalt}:u1:`;
+  await waitFor(async () => expect(await cache.get(namespace + 'catalog')).toBeDefined());
+  await cache.put(namespace + 'thumb:v1', new Uint8Array([1]));
+  const tombstone = {
+    ...video,
+    deleted: true,
+    title: '',
+    description: '',
+    meta: {},
+    videoMimeType: '',
+    thumbnailMimeType: '',
+    recorded: '1970-01-01T00:00:00.000Z',
+    lastModified: '2026-11-01T00:00:00.000Z',
+    hmac: ''
+  };
+  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify([tombstone])));
+  vi.mocked(verify).mockClear();
+  vi.mocked(decryptText).mockClear();
+  await actor.click(screen.getByRole('button', { name: /Aktualisieren/ }));
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'A walk' })).not.toBeInTheDocument());
+  expect(await cache.get(namespace + 'catalog')).toEqual({
+    videos: [],
+    since: String(Date.parse(tombstone.lastModified))
+  });
+  expect(await cache.get(namespace + 'thumb:v1')).toBeUndefined();
+  expect(verify).not.toHaveBeenCalledWith(expect.objectContaining({ deleted: true }), expect.anything());
+  expect(decryptText).not.toHaveBeenCalledWith('', expect.anything(), expect.anything(), expect.anything());
+  expect(calls).not.toContain('/api/video/catalog');
 });

@@ -73,6 +73,7 @@ for (const [id, title, description, date, people] of [
   ['v3', 'Ein Abend im Garten', 'Gutes Essen, lange Gespräche und ein ganz besonderer Abend.', '2026-06-09', ['Familie']]
 ]) {
   const item = {
+    deleted: false,
     videoId: id,
     title: encrypt(Buffer.from(title), 'title', id).toString('base64'),
     description: encrypt(Buffer.from(description), 'description', id).toString('base64'),

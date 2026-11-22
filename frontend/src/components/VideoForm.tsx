@@ -78,7 +78,8 @@ const VideoForm = function ({
             thumbnailMimeType: '',
             recorded: new Date(recorded).toISOString(),
             lastModified: new Date().toISOString(),
-            hmac: ''
+            hmac: '',
+            deleted: false
           };
       if (existing) await verify(state, keys);
       const metadata = validateMetadata(config.meta.fields, meta);

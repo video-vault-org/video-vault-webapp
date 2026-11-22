@@ -93,7 +93,11 @@ const VideoOverlay = function ({
                 )
               )
                 void task.run(async () => {
-                  await json(`/api/video/delete/${video.videoId}`, undefined, 'DELETE');
+                  await json(
+                    `/api/video/delete/${video.videoId}`,
+                    { lastModified: new Date().toISOString() },
+                    'DELETE'
+                  );
                   await removed();
                   close();
                 });

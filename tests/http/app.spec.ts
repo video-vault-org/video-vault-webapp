@@ -15,14 +15,26 @@ import { createApp } from '@/http/app';
 import { hashPassword, verifyPassword } from '@/util/password';
 import { deriveKey } from '@/util/deriveKey';
 
+type Role = 'reader' | 'admin' | 'editor' | 'moderator' | 'editor2' | 'target';
+
 const instant = '2026-01-01T00:00:00.000Z';
-const video = { videoId: 'v1', title: 'Video', description: 'Encrypted description', meta: { duration: 10 }, videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', recorded: new Date(50), lastModified: new Date(instant), hmac: 'video-hmac' };
+const video = {
+  deleted: false,
+  videoId: 'v1',
+  title: 'Video',
+  description: 'Encrypted description',
+  meta: { duration: 10 },
+  videoMimeType: 'video/mp4',
+  thumbnailMimeType: 'image/png',
+  recorded: new Date(50),
+  lastModified: new Date(instant),
+  hmac: 'video-hmac'
+};
 const change = { lastModified: instant, hmac: 'changed-hmac' };
 const loginHash = Buffer.from('client-password-hash').toString('base64');
 const password = { loginHash, passwordKeySalt: 'salt', userKey: 'encrypted-key' };
 const comment = { commentId: 'c1', videoId: 'v1', userId: 'reader', content: 'Comment', created: new Date(instant), lastModified: new Date(instant), hmac: 'comment-hmac', edited: false, deleted: false };
 const commentBody = { commentId: 'new-comment', videoId: 'v1', content: 'New comment', created: instant, lastModified: instant, hmac: 'new-hmac' };
-type Role = 'reader' | 'admin' | 'editor' | 'moderator' | 'editor2' | 'target';
 
 // Each entry checks every role and an unauthenticated request against the same real route.
 const protectedRoutes = [
@@ -51,7 +63,7 @@ const protectedRoutes = [
   ['post', '/api/video/upload/v1', 'editor', undefined, 400],
   ['patch', '/api/video/change/files/v1', 'editor', { ...change, videoMimeType: 'video/webm' }, 404],
   ['patch', '/api/video/change/recorded/v1', 'editor', { ...change, recorded: '2025-03-12T10:20:30+02:00' }, 204],
-  ['delete', '/api/video/delete/v1', 'editor', undefined, 204],
+  ['delete', '/api/video/delete/v1', 'editor', { lastModified: instant }, 204],
   ['get', '/api/video/0', 'any', undefined, 200],
   ['get', '/api/video/file/v1', 'any', undefined, 200],
   ['get', '/api/video/thumbnail/v1', 'any', undefined, 200],
@@ -637,7 +649,7 @@ describe('Fastify backend', () => {
   });
 
   test('deleting a video also deletes its comments and both stored files', async () => {
-    await request(app.server).delete('/api/video/delete/v1').set(headers('editor')).expect(204);
+    await request(app.server).delete('/api/video/delete/v1').set(headers('editor')).send({ lastModified: instant }).expect(204);
     expect(await db.findOneCommentByCommentId({ commentId: 'c1' })).toBeNull();
     expect(await videos.readThumbnailFile({ videoId: 'v1' })).toBeNull();
     expect(await videos.readVideoFileRange({ videoId: 'v1' })).toBeNull();
@@ -680,6 +692,8 @@ describe('Fastify backend', () => {
   ] as const)('%s %s returns 404 for missing resources', async (method, path) => {
     const all = makeUser('admin');
     await db.changeUsersEditorRoleByUserId({ userId: all.userId, editor: true });
-    await request(app.server)[method](path).set(headers('admin')).expect(404);
+    const call = request(app.server)[method](path).set(headers('admin'));
+    if (path === '/api/video/delete/missing') call.send({ lastModified: instant });
+    await call.expect(404);
   });
 });

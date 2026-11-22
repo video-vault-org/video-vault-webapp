@@ -26,6 +26,7 @@ describe('DynamoDBDatabaseAdapter', () => {
   const otherUser: User = { ...user, userId: 'u2', username: 'bob' };
 
   const video: Video = {
+    deleted: false,
     videoId: 'v1',
     title: 'Original',
     description: 'Encrypted description',
@@ -351,39 +352,40 @@ describe('DynamoDBDatabaseAdapter', () => {
       expect(await db.findManyVideosLastModified({ since: new Date(400) })).toEqual([]);
     });
 
-    test('findAllVideoIds returns only IDs without using findAllVideos or exposing mutable storage', async () => {
-      const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full video loading is not allowed'));
-      try {
-        const ids = await db.findAllVideoIds();
-        expect(ids).toHaveLength(2);
-        expect(ids).toEqual(expect.arrayContaining([video.videoId, otherVideo.videoId]));
-        ids.pop();
-        expect(await db.findAllVideoIds()).toHaveLength(2);
-        expect(full).not.toHaveBeenCalled();
-      } finally {
-        full.mockRestore();
-      }
-    });
-
-    test('findAllVideoIds reflects deletions and returns an empty array for an empty collection', async () => {
-      await db.deleteVideoByVideoId({ videoId: video.videoId });
-      expect(await db.findAllVideoIds()).toEqual([otherVideo.videoId]);
-      await db.deleteVideoByVideoId({ videoId: otherVideo.videoId });
-      expect(await db.findAllVideoIds()).toEqual([]);
-      await db.postVideo({ ...video, videoId: 'v3' });
-      expect(await db.findAllVideoIds()).toEqual(['v3']);
-    });
-
     test('findAllVideos returns every video', async () => {
       expect(await db.findAllVideos()).toHaveLength(2);
       expect(await db.findAllVideos()).toEqual(expect.arrayContaining([video, otherVideo]));
     });
 
-    test('deleteVideoByVideoId removes only the matching video and can be repeated', async () => {
-      await db.deleteVideoByVideoId({ videoId });
-      await db.deleteVideoByVideoId({ videoId });
+    test('deleteVideoByVideoId permanently clears content and preserves the first deletion timestamp', async () => {
+      const lastModified = new Date(200);
+      const tombstone = { ...video, deleted: true, title: '', description: '', meta: {}, videoMimeType: '', thumbnailMimeType: '', recorded: new Date(0), lastModified, hmac: '' };
+      await db.deleteVideoByVideoId({ videoId, lastModified });
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(tombstone);
+      expect(await db.findOneVideoByVideoId({ videoId: otherVideo.videoId })).toEqual(otherVideo);
+      expect(await db.findManyVideosLastModified({ since: lastModified })).toContainEqual(tombstone);
+      await db.deleteVideoByVideoId({ videoId, lastModified: new Date(300) });
+      await db.deleteVideoByVideoId({ videoId: 'missing', lastModified });
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(tombstone);
+      expect(await db.findAllVideos()).toHaveLength(2);
+    });
 
-      expect(await db.findAllVideos()).toEqual([otherVideo]);
+    test('postVideo cannot reuse the ID of a permanently deleted video', async () => {
+      await db.deleteVideoByVideoId({ videoId, lastModified: new Date(200) });
+      await expect(db.postVideo(video)).rejects.toBeInstanceOf(DatabaseConflictError);
+      expect(await db.findOneVideoByVideoId({ videoId })).toMatchObject({ deleted: true, hmac: '', lastModified: new Date(200) });
+    });
+
+    test('video edits cannot restore or modify a tombstone', async () => {
+      await db.deleteVideoByVideoId({ videoId, lastModified: new Date(200) });
+      const tombstone = await db.findOneVideoByVideoId({ videoId });
+      const changes = { videoId, lastModified: new Date(300), hmac: 'changed' };
+      await db.changeVideosTitleByVideoId({ ...changes, title: 'Changed' });
+      await db.changeVideosDescriptionByVideoId({ ...changes, description: 'Changed' });
+      await db.changeVideosMetadataByVideoId({ ...changes, metadata: { changed: true } });
+      await db.changeVideosMimetypesByVideoId({ ...changes, videoMimeType: 'video/webm', thumbnailMimeType: 'image/jpeg' });
+      await db.changeVideosRecordedByVideoId({ ...changes, recorded: new Date(300) });
+      expect(await db.findOneVideoByVideoId({ videoId })).toEqual(tombstone);
     });
   });
 
@@ -696,30 +698,6 @@ describe('DynamoDBDatabaseAdapter service pagination', () => {
     expect(next.input.IndexName).toBe('CommentsByVideo');
   });
 
-  test('findAllVideoIds projects only videoId on every scan page without using an index', async () => {
-    const first = { videoPartition: 'videos', videoId: 'a' };
-    const second = { videoPartition: 'videos', videoId: 'b' };
-    send
-      .mockResolvedValueOnce({ Items: [{ videoId: 'a' }], LastEvaluatedKey: first })
-      .mockResolvedValueOnce({ Items: [], LastEvaluatedKey: second })
-      .mockResolvedValueOnce({ Items: [{ videoId: 'c' }] });
-    expect(await adapter.findAllVideoIds()).toEqual(['a', 'c']);
-    expect(send).toHaveBeenCalledTimes(3);
-    for (const [command] of send.mock.calls) {
-      expect(command).toBeInstanceOf(ScanCommand);
-      expect(command.input.ProjectionExpression).toBe('videoId');
-      expect(command.input.IndexName).toBeUndefined();
-    }
-    expect(send.mock.calls[1][0].input.ExclusiveStartKey).toEqual(first);
-    expect(send.mock.calls[2][0].input.ExclusiveStartKey).toEqual(second);
-  });
-
-  test('findAllVideoIds propagates scan failures rather than returning an incomplete catalog', async () => {
-    const error = new Error('Scan failed');
-    send.mockResolvedValueOnce({ Items: [{ videoId: 'a' }], LastEvaluatedKey: { videoPartition: 'videos', videoId: 'a' } }).mockRejectedValueOnce(error);
-    await expect(adapter.findAllVideoIds()).rejects.toBe(error);
-  });
-
   test('findAllUsers follows scan continuation keys', async () => {
     send.mockResolvedValueOnce({ Items: [{ userId: 'a' }], LastEvaluatedKey: { userId: 'a' } }).mockResolvedValueOnce({ Items: [{ userId: 'b' }] });
 
@@ -730,7 +708,7 @@ describe('DynamoDBDatabaseAdapter service pagination', () => {
 
 describe('DynamoDBDatabaseAdapter error translation', () => {
   const user: User = { userId: 'u1', username: 'alice', displayName: 'Alice', loginHash: 'hash', passwordKeySalt: 'salt', userKey: 'key', admin: false, editor: false, moderator: false };
-  const video: Video = { videoId: 'v1', title: 'Video', description: 'Encrypted description', meta: {}, recorded: new Date(50), lastModified: new Date(100), videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', hmac: 'hmac' };
+  const video: Video = { deleted: false, videoId: 'v1', title: 'Video', description: 'Encrypted description', meta: {}, recorded: new Date(50), lastModified: new Date(100), videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', hmac: 'hmac' };
   let db: DynamoDBDatabaseAdapter;
   let send: jest.SpyInstance;
 

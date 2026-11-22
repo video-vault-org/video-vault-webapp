@@ -46,6 +46,7 @@ interface Video {
   recorded: string;
   lastModified: string;
   hmac: string;
+  deleted: boolean;
 }
 
 interface PlainVideo extends Video {

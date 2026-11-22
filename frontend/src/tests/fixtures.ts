@@ -1,4 +1,5 @@
 import type { Bootstrap, PlainVideo } from '../lib/types';
+
 const config: Bootstrap = {
   version: 1,
   instanceSalt: 'ab'.repeat(32),
@@ -23,6 +24,7 @@ const config: Bootstrap = {
   }
 };
 const video: PlainVideo = {
+  deleted: false,
   videoId: 'v1',
   title: 'ciphertext',
   description: 'cipher-description',

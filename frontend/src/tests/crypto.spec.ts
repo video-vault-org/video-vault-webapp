@@ -64,6 +64,7 @@ test('encrypts title/description independently and verifies metadata projection 
   const title = await encryptText('Title', 'title', 'v', keys),
     description = await encryptText('Description', 'description', 'v', keys),
     video: Video = {
+      deleted: false,
       videoId: 'v',
       title,
       description,

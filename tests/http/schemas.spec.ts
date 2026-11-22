@@ -12,6 +12,7 @@ import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
 
 const account: User = { userId: 'admin', username: 'alice', displayName: 'Alice', loginHash: 'private-hash', passwordKeySalt: 'salt', userKey: 'wrapped-key', admin: true, editor: true, moderator: true };
 const video = {
+  deleted: false,
   videoId: 'video',
   title: 'Video',
   description: 'Encrypted description',
@@ -204,5 +205,22 @@ describe('compiled Fastify request and response schemas', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([{ ...video, recorded: video.recorded.toISOString(), lastModified: video.lastModified.toISOString() }]);
     expect(response.body).not.toContain('internal-secret');
+  });
+
+  test('clients cannot submit a new video already marked as deleted', async () => {
+    const submit = jest.spyOn(videos, 'submitVideo');
+    const response = await app.inject({ method: 'POST', url: '/api/video/submit', headers, payload: { ...video, deleted: true, recorded: video.recorded.toISOString(), lastModified: video.lastModified.toISOString() } });
+    expect(response.statusCode).toBe(400);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  test('sync schemas accept cleared tombstones but reject inconsistent tombstone responses', async () => {
+    const tombstone = { ...video, deleted: true, title: '', description: '', meta: {}, videoMimeType: '', thumbnailMimeType: '', recorded: new Date(0), hmac: '' };
+    const find = jest.spyOn(videos, 'findVideosLastModified').mockResolvedValueOnce([tombstone]);
+    const response = await app.inject({ url: '/api/video/0', headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([{ ...tombstone, recorded: new Date(0).toISOString(), lastModified: video.lastModified.toISOString() }]);
+    find.mockResolvedValueOnce([{ ...tombstone, title: 'uncleared' }]);
+    expect((await app.inject({ url: '/api/video/0', headers })).statusCode).toBe(500);
   });
 });

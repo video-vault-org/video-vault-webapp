@@ -7,7 +7,7 @@ import { authorization } from '../middleware';
 import { HttpError } from '../errors';
 import { parseByteRange } from '../byteRange';
 import { UploadStore } from '../uploads';
-import { Type, object, id, text, video, videoChange, sinceDate, metadata, errorResponses, noContent, videoInput, date } from '../validation';
+import { Type, object, id, text, video, videoRecord, videoChange, sinceDate, metadata, errorResponses, noContent, videoInput, date } from '../validation';
 
 /** Encodes domain timestamps explicitly for the compiled JSON response serializer. */
 const publicVideo = function (item: Video) {
@@ -22,7 +22,7 @@ const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: 
 
   const requireVideo = async (videoId: string) => {
     const item = await videos.findVideo({ videoId });
-    if (!item) throw new HttpError(404, 'Video not found');
+    if (!item || item.deleted) throw new HttpError(404, 'Video not found');
     return item;
   };
 
@@ -30,6 +30,7 @@ const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: 
   router.post('/upload/:videoId', { onRequest: editor, schema: { params, response: { 201: object({ videoId: id }), ...errorResponses } } }, async (request, reply) => {
     const { videoId } = request.params;
     const existing = await videos.findVideo({ videoId });
+    if (existing?.deleted) throw new HttpError(409, 'Video ID belongs to a deleted video');
     await uploads.receive(request, videoId, { allowPartial: existing !== null });
     return reply.code(201).send({ videoId });
   });
@@ -94,15 +95,12 @@ const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: 
     return reply.code(204).send(null);
   });
 
-  /** DELETE /api/video/delete/:videoId — Editors only. Deletes metadata, comments and stored files. */
-  router.delete('/delete/:videoId', { onRequest: editor, schema: { params, response: noContent } }, async (request, reply) => {
-    await requireVideo(request.params.videoId);
-    await videos.deleteVideo(request.params);
+  /** DELETE /api/video/delete/:videoId — Editors only. Persists a permanent tombstone with JSON { lastModified }, then removes comments and files. Repeated deletes retry cleanup without changing the original tombstone. */
+  router.delete('/delete/:videoId', { onRequest: editor, schema: { params, body: object({ lastModified: date }), response: noContent } }, async (request, reply) => {
+    if (!(await videos.findVideo(request.params))) throw new HttpError(404, 'Video not found');
+    await videos.deleteVideo({ ...request.params, lastModified: new Date(request.body.lastModified) });
     return reply.code(204).send(null);
   });
-
-  /** GET /api/video/catalog — Any authenticated user. Current IDs for pruning deleted offline entries; no content is returned. */
-  router.get('/catalog', { schema: { response: { 200: Type.Array(id), ...errorResponses } } }, async () => videos.findAllVideoIds());
 
   /** HEAD /api/video/file/:videoId — Any authenticated user. Encrypted size for authenticated chunk-range playback. */
   router.head('/file/:videoId', { config: { swagger: { exposeHeadRoute: true } }, schema: { params, response: { 200: Type.Null(), ...errorResponses } } }, async (request, reply) => {
@@ -166,8 +164,8 @@ const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: 
     return reply.type('application/octet-stream').send(bytes);
   });
 
-  /** GET /api/video/:since — Any authenticated user. Finds videos modified since an ISO date or Unix millisecond timestamp. */
-  router.get('/:since', { schema: { params: object({ since: Type.Union([date, Type.String({ pattern: '^\\d+$', maxLength: 16 })]) }), response: { 200: Type.Array(video), ...errorResponses } } }, async (request) =>
+  /** GET /api/video/:since — Any authenticated user. Finds video changes including unverified deletion tombstones, since an ISO date or Unix millisecond timestamp. */
+  router.get('/:since', { schema: { params: object({ since: Type.Union([date, Type.String({ pattern: '^\\d+$', maxLength: 16 })]) }), response: { 200: Type.Array(videoRecord), ...errorResponses } } }, async (request) =>
     (await videos.findVideosLastModified({ since: sinceDate(request.params.since) })).map(publicVideo)
   );
 };

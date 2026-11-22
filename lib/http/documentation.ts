@@ -29,14 +29,13 @@ const summaries: Record<string, string> = {
   'PATCH /api/video/change/metadata/:videoId': 'Change video metadata',
   'PATCH /api/video/change/files/:videoId': 'Replace video and/or thumbnail files',
   'PATCH /api/video/change/recorded/:videoId': 'Change the video recording date',
-  'DELETE /api/video/delete/:videoId': 'Delete a video, its comments and files',
-  'GET /api/video/catalog': 'List current video IDs for offline deletion reconciliation',
+  'DELETE /api/video/delete/:videoId': 'Permanently tombstone a video and delete its comments and files',
   'HEAD /api/video/file/:videoId': 'Get the encrypted video byte length',
-  'GET /api/video/all': 'List all videos',
+  'GET /api/video/all': 'List all active videos',
   'GET /api/video/find/:videoId': 'Find a video',
   'GET /api/video/file/:videoId': 'Download encrypted video bytes',
   'GET /api/video/thumbnail/:videoId': 'Download encrypted thumbnail bytes',
-  'GET /api/video/:since': 'Find videos modified since a date',
+  'GET /api/video/:since': 'Find video changes, including permanent deletion tombstones',
   'POST /api/comment/submit': 'Post a comment',
   'GET /api/comments/:videoId': 'List comments, newest first, with cursor pagination',
   'GET /api/comment/find/:commentId': 'Find a comment, including deleted comments',
@@ -84,6 +83,12 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
       if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';
       if (url === '/api/video/change/files/:videoId')
         description += ' Upload first. Supply videoMimeType and/or thumbnailMimeType, plus lastModified and hmac. Only selected files are replaced. Failures may leave partial Storage changes; temporary files remain for retry.';
+      if (url === '/api/video/delete/:videoId')
+        description +=
+          ' Requires JSON { lastModified } with the client deletion timestamp. Stores a permanent, unverified tombstone and clears content before removing files and comments. Repeating deletion retries cleanup without changing the original timestamp.';
+      if (url === '/api/video/:since')
+        description +=
+          ' Includes permanent unverified tombstones (deleted=true, cleared content, empty hmac, recorded at the Unix epoch). Remove these IDs and cached thumbnails locally, and advance the watermark using their lastModified too. Active records have deleted=false.';
       if (url === '/api/video/submit') description += ' Requires both temporary files to have been uploaded with the same videoId.';
       const documented: FastifySchema = {
         ...schema,

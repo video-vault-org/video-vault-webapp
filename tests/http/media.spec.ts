@@ -22,8 +22,11 @@ describe('authenticated media range and offline catalog endpoints', () => {
     const storage = new InMemoryStorageAdapter();
     await writeFile(join(directory, 'seed'), Buffer.from([0, 1, 2, 3, 4]));
     await storage.save(join(directory, 'seed'), 'v1.video');
-    await db.postVideo({ videoId: 'v1', title: 'encrypted', description: 'encrypted', meta: {}, recorded: new Date(0), lastModified: new Date(1), hmac: 'hmac', videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png' });
-    const auth = { authenticate: jest.fn(async ({ token }: { token: string }) => (token === 'reader' ? { userId: 'reader', admin: false, editor: false, moderator: false } : null)), authorize: jest.fn(() => []) } as unknown as AuthService;
+    await db.postVideo({ deleted: false, videoId: 'v1', title: 'encrypted', description: 'encrypted', meta: {}, recorded: new Date(0), lastModified: new Date(1), hmac: 'hmac', videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png' });
+    const auth = {
+      authenticate: jest.fn(async ({ token }: { token: string }) => (['reader', 'editor'].includes(token) ? { userId: token, admin: false, editor: token === 'editor', moderator: false } : null)),
+      authorize: jest.fn((user: { editor: boolean }) => (user.editor ? ['editor'] : []))
+    } as unknown as AuthService;
     app = createApp(
       { auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(storage), db), comments: new CommentService(db) },
       { instanceSalt: 'ab'.repeat(32), staticDirectory: directory, temporaryDirectory: directory, logger: false }
@@ -36,21 +39,49 @@ describe('authenticated media range and offline catalog endpoints', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  test('catalog is available to any authenticated reader, contains only IDs and reflects deletions', async () => {
-    const ids = jest.spyOn(db, 'findAllVideoIds');
-    const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full video loading is not allowed'));
-    expect((await app.inject({ url: '/api/video/catalog' })).statusCode).toBe(401);
-    expect(ids).not.toHaveBeenCalled();
-    expect((await app.inject({ url: '/api/video/catalog', headers })).json()).toEqual(['v1']);
-    await db.deleteVideoByVideoId({ videoId: 'v1' });
-    expect((await app.inject({ url: '/api/video/catalog', headers })).json()).toEqual([]);
-    expect(ids).toHaveBeenCalledTimes(2);
+  test('sync returns permanent unverified tombstones without needing a full catalog scan', async () => {
+    const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full scans are not allowed'));
+    const lastModified = '2026-11-01T00:00:00.000Z';
+    const editor = { authorization: 'Bearer editor' };
+    expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers, payload: { lastModified } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers: editor, payload: {} })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers: editor, payload: { lastModified } })).statusCode).toBe(204);
+    const sync = await app.inject({ url: `/api/video/${Date.parse(lastModified)}`, headers });
+    expect(sync.statusCode).toBe(200);
+    expect(sync.json()).toEqual([{ videoId: 'v1', deleted: true, title: '', description: '', meta: {}, videoMimeType: '', thumbnailMimeType: '', recorded: '1970-01-01T00:00:00.000Z', lastModified, hmac: '' }]);
+    expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers: editor, payload: { lastModified: '2026-11-02T00:00:00.000Z' } })).statusCode).toBe(204);
+    expect((await db.findOneVideoByVideoId({ videoId: 'v1' }))?.lastModified).toEqual(new Date(lastModified));
     expect(full).not.toHaveBeenCalled();
   });
 
-  test('catalog reports a failed ID query as an error instead of an empty catalog', async () => {
-    jest.spyOn(db, 'findAllVideoIds').mockRejectedValueOnce(new Error('Database unavailable'));
-    expect((await app.inject({ url: '/api/video/catalog', headers })).statusCode).toBe(500);
+  test('deleted video IDs cannot be read, changed, commented on or reused', async () => {
+    await db.postComment({ commentId: 'c1', videoId: 'v1', userId: 'reader', content: 'encrypted', created: new Date(1), lastModified: new Date(1), edited: false, deleted: false, hmac: 'hmac' });
+    await db.deleteVideoByVideoId({ videoId: 'v1', lastModified: new Date(2) });
+    const editor = { authorization: 'Bearer editor' };
+    for (const url of ['/api/video/file/v1', '/api/video/thumbnail/v1', '/api/video/find/v1', '/api/comments/v1', '/api/comment/find/c1']) {
+      expect((await app.inject({ url, headers: editor })).statusCode).toBe(404);
+    }
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/comment/submit', headers, payload: { commentId: 'c2', videoId: 'v1', content: 'encrypted', created: new Date(3).toISOString(), lastModified: new Date(3).toISOString(), hmac: 'hmac' } })).statusCode
+    ).toBe(404);
+    expect((await app.inject({ method: 'PATCH', url: '/api/comment/change/own/c1', headers, payload: { content: 'changed', lastModified: new Date(3).toISOString(), hmac: 'hmac' } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'HEAD', url: '/api/video/file/v1', headers })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'PATCH', url: '/api/video/change/title/v1', headers: editor, payload: { title: 'Changed', lastModified: new Date(3).toISOString(), hmac: 'hmac' } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/api/video/upload/v1', headers: editor })).statusCode).toBe(409);
+    const payload = {
+      videoId: 'v1',
+      deleted: false,
+      title: 'encrypted',
+      description: 'encrypted',
+      meta: {},
+      videoMimeType: 'video/mp4',
+      thumbnailMimeType: 'image/png',
+      recorded: new Date(0).toISOString(),
+      lastModified: new Date(3).toISOString(),
+      hmac: 'hmac'
+    };
+    expect((await app.inject({ method: 'POST', url: '/api/video/submit', headers: editor, payload })).statusCode).toBe(409);
+    expect((await app.inject({ url: '/api/video/all', headers: editor })).json()).toEqual([]);
   });
 
   test('HEAD reports size without a response body and remains authenticated', async () => {
