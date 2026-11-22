@@ -20,6 +20,8 @@ import { Type, object, text, username, errorResponses } from './validation';
 import { loggingOptions, HttpLogController } from './logging';
 import { registerDocumentation } from './documentation';
 import { AppConfig, appConfigSchema, DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
+import { MetaConfig, DEFAULT_META_CONFIG, metaConfigSchema } from '@/meta/config/MetaConfig';
+import { metaConfigResponse } from './metaSchema';
 
 /** Creates the native Fastify server and its Pino logger before adapter initialization, so startup errors can be logged. */
 function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
@@ -47,16 +49,28 @@ function createApp(
   {
     instanceSalt,
     appConfig = { title: DEFAULT_APP_TITLE },
+    metaConfig = DEFAULT_META_CONFIG,
     staticDirectory = './public',
     temporaryDirectory = './tmp',
     maxVideoBytes,
     maxThumbnailBytes,
     logger,
     instance
-  }: { instanceSalt: string; appConfig?: AppConfig; staticDirectory?: string; temporaryDirectory?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; logger?: FastifyServerOptions['logger']; instance?: FastifyInstance }
+  }: {
+    instanceSalt: string;
+    appConfig?: AppConfig;
+    metaConfig?: MetaConfig;
+    staticDirectory?: string;
+    temporaryDirectory?: string;
+    maxVideoBytes?: number;
+    maxThumbnailBytes?: number;
+    logger?: FastifyServerOptions['logger'];
+    instance?: FastifyInstance;
+  }
 ): FastifyInstance {
   if (instanceSalt.length !== 64 || !/^[0-9a-f]{64}$/i.test(instanceSalt)) throw new TypeError('Instance salt must contain exactly 64 hexadecimal characters');
   const { title } = appConfigSchema.parse(appConfig);
+  const meta = metaConfigSchema.parse(metaConfig);
   const app = instance ?? createHttpServer({ logger });
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
   const authenticate = authentication(auth);
@@ -72,17 +86,20 @@ function createApp(
   app.register(async (router) => {
     const routes = router.withTypeProvider<TypeBoxTypeProvider>();
 
-    /** GET /bootstrap — Public. Returns protocol version 1, the stable public instance salt and the configured application title. */
+    /** GET /bootstrap — Public. Returns protocol version 1, the public instance salt, application title and frontend metadata configuration. */
     routes.get(
       '/bootstrap',
       {
         schema: {
-          response: { 200: object({ version: Type.Literal(1), instanceSalt: Type.String({ minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' }), app: object({ title: Type.String({ minLength: 1, maxLength: 100 }) }) }), ...errorResponses }
+          response: {
+            200: object({ version: Type.Literal(1), instanceSalt: Type.String({ minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' }), app: object({ title: Type.String({ minLength: 1, maxLength: 100 }) }), meta: metaConfigResponse }),
+            ...errorResponses
+          }
         }
       },
       async (_request, reply) => {
         reply.header('Cache-Control', 'no-store');
-        return { version: 1 as const, instanceSalt, app: { title } };
+        return { version: 1 as const, instanceSalt, app: { title }, meta };
       }
     );
 

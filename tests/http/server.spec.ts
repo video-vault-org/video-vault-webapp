@@ -1,3 +1,4 @@
+import { DEFAULT_META_CONFIG, MetaConfig } from '@/meta/config/MetaConfig';
 import { createServer, Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -6,6 +7,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { startServer } from '@/server';
 import { loadConfig as loadAppConfig } from '@/app';
+import { loadConfig as loadMetaConfig } from '@/meta';
 import { ensureInstanceSalt } from '@/util/instanceSalt';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 import { loadDb, resetDb } from '@/db';
@@ -15,6 +17,7 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 
+jest.mock('@/meta', () => ({ loadConfig: jest.fn() }));
 jest.mock('@/app', () => ({ loadConfig: jest.fn() }));
 
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
@@ -33,6 +36,7 @@ describe('startServer', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-server-'));
     await writeFile(join(directory, 'index.html'), 'VideoVault');
+    jest.mocked(loadMetaConfig).mockReset().mockResolvedValue(null);
     jest.mocked(loadAppConfig).mockReset().mockResolvedValue(null);
     jest.mocked(ensureInstanceSalt).mockReset().mockResolvedValue('ab'.repeat(32));
     jest.mocked(loadDb).mockResolvedValue(new InMemoryDatabaseAdapter());
@@ -62,10 +66,11 @@ describe('startServer', () => {
       await request(running.server)
         .get('/bootstrap')
         .expect('Cache-Control', 'no-store')
-        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' } });
+        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' }, meta: DEFAULT_META_CONFIG });
     }
     expect(ensureInstanceSalt).toHaveBeenCalledWith();
     expect(ensureInstanceSalt).toHaveBeenCalledTimes(1);
+    expect(loadMetaConfig).toHaveBeenCalledTimes(1);
     expect(jest.mocked(ensureInstanceSalt).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
     expect(loadDb).toHaveBeenCalledTimes(1);
     expect(loadDb).toHaveBeenCalledWith({ title: 'VideoVault' });
@@ -108,10 +113,27 @@ describe('startServer', () => {
     for (let i = 0; i < 2; i++) {
       await request(running.server)
         .get('/bootstrap')
-        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'Meine Videos' } });
+        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'Meine Videos' }, meta: DEFAULT_META_CONFIG });
     }
     expect(loadAppConfig).toHaveBeenCalledTimes(1);
     expect(loadDb).toHaveBeenCalledWith({ title: 'Meine Videos' });
+  });
+
+  test('loads metadata settings once at startup and reuses them for bootstrap requests', async () => {
+    const meta: MetaConfig = {
+      ...DEFAULT_META_CONFIG,
+      recorded: { withTime: true, useAsFilter: false },
+      fields: [{ key: 'year', name: 'Year', type: 'number', multiple: false, required: true, showInDetails: true, useAsFilter: true }],
+      sorting: [{ source: 'meta', key: 'year', direction: 'desc' }]
+    };
+    jest.mocked(loadMetaConfig).mockResolvedValueOnce(meta);
+    running = await startServer({ port: 0, host: '127.0.0.1', staticDirectory: directory });
+    for (let index = 0; index < 2; index++) {
+      await request(running.server)
+        .get('/bootstrap')
+        .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' }, meta });
+    }
+    expect(loadMetaConfig).toHaveBeenCalledTimes(1);
   });
 
   test.each([-1, 65536, 1.5, NaN])('rejects invalid port %s before initializing adapters', async (port) => {
@@ -120,10 +142,11 @@ describe('startServer', () => {
     expect(startTemporaryFileCleanup).not.toHaveBeenCalled();
   });
 
-  test.each(['instanceSalt', 'app', 'db', 'storage', 'auth'] as const)('cleans up resources after %s initialization fails', async (step) => {
+  test.each(['instanceSalt', 'app', 'meta', 'db', 'storage', 'auth'] as const)('cleans up resources after %s initialization fails', async (step) => {
     const error = new Error('Initialization failed');
     if (step === 'instanceSalt') jest.mocked(ensureInstanceSalt).mockRejectedValueOnce(error);
     if (step === 'app') jest.mocked(loadAppConfig).mockRejectedValueOnce(error);
+    if (step === 'meta') jest.mocked(loadMetaConfig).mockRejectedValueOnce(error);
     if (step === 'db') jest.mocked(loadDb).mockRejectedValueOnce(error);
     if (step === 'storage') jest.mocked(loadStorage).mockRejectedValueOnce(error);
     if (step === 'auth') jest.mocked(AuthService.prototype.initialize).mockRejectedValueOnce(error);

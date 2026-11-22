@@ -1,3 +1,4 @@
+import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
 import { FastifyInstance } from 'fastify';
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -134,13 +135,16 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(bootstrap.tags).toEqual(['Authentication']);
     expect(bootstrap.description).toContain('Public.');
     const body = dereference(document, bootstrap.responses['200'].content['application/json'].schema);
-    expect(body.required).toEqual(expect.arrayContaining(['version', 'instanceSalt']));
+    expect(body.required).toEqual(expect.arrayContaining(['version', 'instanceSalt', 'meta']));
     expect(body.additionalProperties).toBe(false);
     const salt = dereference(document, (body.properties as Record<string, unknown>).instanceSalt);
     expect(salt).toMatchObject({ type: 'string', minLength: 64, maxLength: 64, pattern: '^[0-9a-fA-F]{64}$' });
     const response = await app.inject('/bootstrap');
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' } });
+    expect(response.json()).toEqual({ version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' }, meta: DEFAULT_META_CONFIG });
+    const meta = dereference(document, (body.properties as Record<string, unknown>).meta);
+    expect(meta.required).toEqual(expect.arrayContaining(['recorded', 'fields', 'sorting']));
+    expect(meta.additionalProperties).toBe(false);
   });
 
   test('documents required video description and recording date and their editor-only update routes', async () => {

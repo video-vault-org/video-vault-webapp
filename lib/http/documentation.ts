@@ -5,7 +5,7 @@ import type { authorization } from './middleware';
 import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 
 const summaries: Record<string, string> = {
-  'GET /bootstrap': 'Get the public application settings and instance salt',
+  'GET /bootstrap': 'Get public application and metadata settings and the instance salt',
   'POST /login': 'Log in',
   'POST /api/user/add': 'Create a user',
   'GET /api/user/me': 'Get your account',
@@ -72,7 +72,7 @@ function registerDocumentation(app: FastifyInstance, { title = DEFAULT_APP_TITLE
       const roles = hooks.flatMap((hook) => (hook as Partial<ReturnType<typeof authorization>>).requiredRoles ?? []);
       const tag = publicRoute ? 'Authentication' : url.startsWith('/api/user/') ? 'Users' : url.startsWith('/api/video/') ? 'Videos' : 'Comments';
       let description = bootstrap
-        ? 'Public. Returns protocol version 1, the configured application title and the stable public instance salt as 64 hexadecimal characters. Cache-Control: no-store. No authentication required.'
+        ? 'Public. Returns protocol version 1, the configured application title, frontend metadata settings and the stable public instance salt as 64 hexadecimal characters. Cache-Control: no-store. No authentication required.'
         : login
           ? 'Public. Supply the client-derived loginHash as Base64.'
           : roles.length

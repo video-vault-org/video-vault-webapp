@@ -14,7 +14,8 @@
   "bin": {
     "videovaultweb": "built/lib/index.js",
     "videovault-admin-init": "built/lib/initialize-admin.js",
-    "videovault-config-init": "built/lib/initialize-config.js"
+    "videovault-config-init": "built/lib/initialize-config.js",
+    "videovault-meta-init": "built/lib/initialize-meta.js"
   },
   "scripts": {
     "audit": "better-npm-audit audit",
@@ -24,7 +25,8 @@
     "build": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
     "start": "node built/lib/index.js",
     "admin:init": "node built/lib/initialize-admin.js",
-    "config:init": "node built/lib/initialize-config.js"
+    "config:init": "node built/lib/initialize-config.js",
+    "meta:init": "node built/lib/initialize-meta.js"
   },
   "repository": {
     "type": "git",

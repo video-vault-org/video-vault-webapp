@@ -538,10 +538,10 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               </p>
               <h3>Öffentlicher Bootstrap für den Client</h3>
               <p>
-                Vor der Anmeldung ruft der Client <code>GET /bootstrap</code> über HTTPS unter derselben Origin auf. Die Route ist ohne Token erreichbar und liefert die Protokollversion, die öffentliche, stabile Instanz-Salt aus
-                <code>./.salt</code> und den Anwendungstitel unter <code>app.title</code>. Ein Beispiel mit einem fiktiven Salt-Wert:
+                Vor der Anmeldung ruft der Client <code>GET /bootstrap</code> über HTTPS unter derselben Origin auf. Die Route ist ohne Token erreichbar und liefert die Protokollversion, die öffentliche, stabile Instanz-Salt aus <code>./.salt</code>,
+                den Anwendungstitel unter <code>app.title</code> sowie die Frontend-Metadatenkonfiguration unter <code>meta</code>. Ein Beispiel mit einem fiktiven Salt-Wert:
               </p>
-              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab", "app": { "title": "VideoVault" } }</code></pre>
+              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab", "app": { "title": "VideoVault" }, "meta": { "recorded": { "withTime": false, "useAsFilter": true }, "fields": [], "sorting": [{ "source": "recorded", "direction": "desc" }, { "source": "title", "direction": "asc" }] } }</code></pre>
               <p>
                 Das Response-Schema bindet die Version an <code>1</code> und die Instanz-Salt an genau 64 Hex-Zeichen. Der Client prüft die unterstützte Version und das Format, bevor er den loginHash ableitet. Er verwendet exakt den gelieferten
                 Hex-Text, ohne Groß-/Kleinschreibung oder Kodierung zu ändern. Die Instanz-Salt ist öffentlich und kein Anmeldegeheimnis.
@@ -554,6 +554,21 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 Die Instanz-Salt wird bei Neustarts nicht rotiert und muss zusammen mit der Datenbank gesichert werden. Bestehende Installationen müssen die bisherige Salt-Datei unter dem neuen Namen <code>./.salt</code> mit unverändertem Inhalt
                 übernehmen. Eine Neuerzeugung verändert die Login-Ableitung vorhandener Nutzer.
               </div>
+              <h3>Öffentliche Frontend-Metadatenkonfiguration</h3>
+              <p>
+                <code>npm run meta:init</code> speichert <code>./conf/meta.json</code>. Bootstrap veröffentlicht diese Konfiguration unter <code>meta</code>: Darstellungs-/Filteroptionen für recorded, Feldschlüssel und Anzeigenamen, Typen und
+                Mehrfachwert-Flags, Pflichtfeld-/Detailanzeige-Flags sowie die geordnete Liste der Sortierfelder mit Richtung. Das sind öffentliche Felddefinitionen, keine Video-Metadatenwerte. Vertrauliche Informationen gehören nicht in Feldnamen
+                oder Anzeigenamen.
+              </p>
+              <p>
+                Diese Einstellungen steuern ausschließlich das spätere Frontend. Pflichtfeld- und Anzeige-Flags sind keine serverseitige Validierung oder Zugriffskontrolle; ausgeblendete Felder werden dadurch nicht aus API-Antworten entfernt.
+                <code>Video.meta</code> bleibt ein beliebiges JSON-Objekt. Authentifizierung und Rollenprüfungen bleiben maßgeblich für API-Zugriffe. Das Frontend muss Namen als Text darstellen und Titel vor einer inhaltlichen Sortierung lokal
+                entschlüsseln. Mehrfachwerte sind freie Arrays; ihre Vergleichsregel bei der Sortierung wird erst bei der Frontend-Implementierung festgelegt.
+              </p>
+              <p>
+                Die Metadatenkonfiguration wird beim Serverstart geladen und für Requests im Speicher gehalten. Ohne Datei gelten recorded ohne Uhrzeit, als Filter aktiviert, keine Meta-Felder sowie recorded absteigend und anschließend Titel
+                aufsteigend. Bestehende Konfigurationen werden vor der Veröffentlichung auf eindeutige Schlüssel, gültige Feldtypen und konsistente Sortierreferenzen geprüft. Änderungen erfordern einen Neustart.
+              </p>
             </section>
             <section id="de-envelope" aria-labelledby="de-envelope-title">
               <span class="badge">Backend implementiert</span>
@@ -1124,9 +1139,9 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               <h3>Public bootstrap for the client</h3>
               <p>
                 Before logging in, the client requests <code>GET /bootstrap</code> over HTTPS from the same origin. This route requires no token and returns the protocol version, the public, stable instance salt from <code>./.salt</code> and the
-                application title under <code>app.title</code>. An example using a fictitious salt value:
+                application title under <code>app.title</code>, plus frontend metadata configuration under <code>meta</code>. An example using a fictitious salt value:
               </p>
-              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab", "app": { "title": "VideoVault" } }</code></pre>
+              <pre><code>{ "version": 1, "instanceSalt": "abababababababababababababababababababababababababababababababab", "app": { "title": "VideoVault" }, "meta": { "recorded": { "withTime": false, "useAsFilter": true }, "fields": [], "sorting": [{ "source": "recorded", "direction": "desc" }, { "source": "title", "direction": "asc" }] } }</code></pre>
               <p>
                 The response schema fixes the version to <code>1</code> and requires exactly 64 hexadecimal characters for the instance salt. The client validates the supported version and salt format before deriving loginHash. It uses the exact
                 hexadecimal text received, without changing case or encoding. The instance salt is public and is not a login secret.
@@ -1139,6 +1154,20 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 The instance salt is not rotated on restart and must be backed up with the database. Existing installations must retain the previous salt file's exact contents under its new name <code>./.salt</code>. Generating a replacement changes
                 login derivation for existing accounts.
               </div>
+              <h3>Public frontend metadata configuration</h3>
+              <p>
+                <code>npm run meta:init</code> saves <code>./conf/meta.json</code>. Bootstrap exposes this configuration under <code>meta</code>: recorded presentation/filter options, field keys and display names, types and multiple-value flags,
+                required/details flags, and the ordered sort fields with their directions. These are public field definitions, not video metadata values. Do not put confidential information in field keys or display names.
+              </p>
+              <p>
+                These settings control the future frontend only. Required and visibility flags are neither server-side validation nor access control; hiding a field does not remove it from API responses. <code>Video.meta</code> remains an arbitrary
+                JSON object. Authentication and role checks continue to govern API access. The frontend must render names as text and locally decrypt titles before sorting by their contents. Multiple values are free arrays; their sorting comparison
+                rule is deferred until frontend implementation.
+              </p>
+              <p>
+                The server loads metadata configuration at startup and keeps it in memory for requests. Missing files default to recorded without time, enabled as a filter, no metadata fields, and sorting by recorded descending followed by title
+                ascending. Existing configurations are checked for unique keys, supported types and consistent sort references before publication. Changes require a restart.
+              </p>
             </section>
             <section id="en-envelope" aria-labelledby="en-envelope-title">
               <span class="badge">Backend implemented</span>

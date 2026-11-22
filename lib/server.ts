@@ -10,6 +10,8 @@ import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 import { ensureInstanceSalt } from '@/util/instanceSalt';
 import { loadConfig as loadAppConfig } from '@/app';
 import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
+import { loadConfig as loadMetaConfig } from '@/meta';
+import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
 
 /**
  * Ensures ./.salt exists, initializes configured adapters and one AuthService, then starts the HTTP server.
@@ -30,6 +32,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
     const instanceSalt = await ensureInstanceSalt();
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
     const appConfig = (await loadAppConfig()) ?? { title: DEFAULT_APP_TITLE };
+    const metaConfig = (await loadMetaConfig()) ?? DEFAULT_META_CONFIG;
     const db = await loadDb(appConfig);
     const storage = await loadStorage();
     const auth = new AuthService(db, { tokenLifetimeSeconds: process.env.JWT_TTL_SECONDS === undefined ? undefined : Number(process.env.JWT_TTL_SECONDS) });
@@ -39,6 +42,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
       {
         instanceSalt,
         appConfig,
+        metaConfig,
         instance: app,
         staticDirectory,
         maxVideoBytes: process.env.VIDEO_UPLOAD_LIMIT_BYTES === undefined ? undefined : Number(process.env.VIDEO_UPLOAD_LIMIT_BYTES),

@@ -8,6 +8,7 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 import { User } from '@/domain/User';
+import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
 
 const account: User = { userId: 'admin', username: 'alice', displayName: 'Alice', loginHash: 'private-hash', passwordKeySalt: 'salt', userKey: 'wrapped-key', admin: true, editor: true, moderator: true };
 const video = {
@@ -133,6 +134,21 @@ describe('compiled Fastify request and response schemas', () => {
     expect(response.statusCode).toBe(400);
     expect(description).not.toHaveBeenCalled();
     expect(recorded).not.toHaveBeenCalled();
+  });
+
+  test('frontend metadata field definitions do not restrict the existing arbitrary-JSON metadata API', async () => {
+    await app.close();
+    const find = jest.spyOn(videos, 'findVideo').mockResolvedValue(video);
+    const change = jest.spyOn(videos, 'changeVideosMetadata').mockResolvedValue(undefined);
+    app = createApp(
+      { auth, users, videos, comments },
+      { instanceSalt: 'ab'.repeat(32), logger: false, metaConfig: { ...DEFAULT_META_CONFIG, fields: [{ key: 'count', name: 'Count', type: 'number', multiple: false, required: true, showInDetails: true, useAsFilter: true }] } }
+    );
+    const metadata = { anything: ['arbitrary', { nested: true }] };
+    const response = await app.inject({ method: 'PATCH', url: '/api/video/change/metadata/video', headers, payload: { metadata, lastModified: '2026-01-01T00:00:00Z', hmac: 'hmac' } });
+    expect(response.statusCode).toBe(204);
+    expect(find).toHaveBeenCalledWith({ videoId: 'video' });
+    expect(change).toHaveBeenCalledWith({ videoId: 'video', metadata, lastModified: new Date('2026-01-01T00:00:00Z'), hmac: 'hmac' });
   });
 
   test('coerces query numbers only and supplies pagination defaults', async () => {

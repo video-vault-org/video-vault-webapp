@@ -1,5 +1,5 @@
 import { access, mkdir } from 'node:fs/promises';
-import prompts from 'prompts';
+import { ask } from './prompt';
 import { z } from 'zod';
 import { loadConfig as loadDatabaseConfig, saveConfig as saveDatabaseConfig } from '@/db';
 import { DatabaseConfig } from '@/db/config/DatabaseConfig';
@@ -18,22 +18,6 @@ const tablePrefix = z
   .string()
   .max(241)
   .regex(/^[A-Za-z0-9_.-]*$/);
-
-/** Asks a single question, applies its default on empty input and validates the resulting value. */
-async function ask<T>(question: prompts.PromptObject, schema: z.ZodType<T>): Promise<T> {
-  const normalize = (value: unknown) => (value === '' || value === undefined ? question.initial : value);
-  const answers = await prompts(
-    { ...question, name: 'value', validate: (value: unknown) => schema.safeParse(normalize(value)).success || 'Please enter a valid value' },
-    {
-      onCancel: () => {
-        throw new Error('Configuration initialization cancelled');
-      }
-    }
-  );
-  // A missing answer also covers incomplete/cancelled responses returned by the prompt implementation.
-  if (!('value' in answers)) throw new Error('Missing configuration answer');
-  return schema.parse(normalize(answers.value));
-}
 
 async function askText(message: string, initial?: string, password = false): Promise<string> {
   return await ask({ type: password ? 'password' : 'text', name: 'value', message, initial }, password ? secret : text);
