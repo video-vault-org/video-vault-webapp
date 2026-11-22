@@ -54,7 +54,7 @@ test('loads subsequent pages, deduplicates IDs, ends at empty cursor and treats 
     });
   const actor = show();
   await actor.click(await screen.findByRole('button', { name: 'Weitere Kommentare laden' }));
-  expect(await screen.findByText('Gelöscht · unverifizierte Löschmarkierung')).toBeVisible();
+  expect(await screen.findByText('Gelöscht')).toBeVisible();
   expect(screen.getAllByText('Decrypted comment')).toHaveLength(1);
   expect(json).toHaveBeenCalledWith('/api/comments/v1?pagesize=50&cursor=next%2Fkey');
   expect(screen.queryByRole('button', { name: 'Weitere Kommentare laden' })).not.toBeInTheDocument();
@@ -108,6 +108,6 @@ test('own deletion uses the owner endpoint and immediately displays an empty tom
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   await actor.click(await screen.findByRole('button', { name: 'Löschen' }));
   await waitFor(() => expect(json).toHaveBeenCalledWith('/api/comment/delete/own/c1', undefined, 'DELETE'));
-  expect(await screen.findByText('Gelöscht · unverifizierte Löschmarkierung')).toBeVisible();
+  expect(await screen.findByText('Gelöscht')).toBeVisible();
   expect(screen.queryByText('Decrypted comment')).not.toBeInTheDocument();
 });

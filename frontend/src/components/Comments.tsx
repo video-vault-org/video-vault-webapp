@@ -99,7 +99,7 @@ const Comments = function ({
               {new Date(c.created).toLocaleString(language)} {c.edited ? t('· bearbeitet', '· edited') : ''}
             </small>
             {c.deleted ? (
-              <p>{t('Gelöscht · unverifizierte Löschmarkierung', 'Deleted · unverified deletion marker')}</p>
+              <p>{t('Gelöscht', 'Deleted')}</p>
             ) : (
               <>
                 <p className="prewrap">{c.plain}</p>

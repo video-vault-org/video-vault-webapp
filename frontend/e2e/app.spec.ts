@@ -88,7 +88,7 @@ test('posts, edits and soft-deletes authenticated encrypted comments', async ({ 
   page.once('dialog', (d) => d.accept());
 
   await dialog.getByRole('button', { name: 'Löschen', exact: true }).click();
-  await expect(dialog.getByText('Gelöscht · unverifizierte Löschmarkierung')).toBeVisible();
+  await expect(dialog.getByText('Gelöscht')).toBeVisible();
 });
 
 test('analyzes local MP4, encrypts upload, changes metadata/files and deletes the video', async ({ page }) => {
