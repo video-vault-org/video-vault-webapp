@@ -14,7 +14,7 @@ const utf8 = (value: string) => encoder.encode(value);
 
 const bytes = (value: ArrayBuffer | Uint8Array) => new Uint8Array(value);
 
-const concat = function (...parts: Uint8Array[]): Uint8Array {
+const concat = function (...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const result = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let offset = 0;
   for (const p of parts) {
@@ -30,13 +30,13 @@ const base64 = function (data: Uint8Array): string {
   return btoa(text);
 };
 
-const unbase64 = function (text: string): Uint8Array {
+const unbase64 = function (text: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 };
 
 const random = (length: number) => crypto.getRandomValues(new Uint8Array(length));
 
-const derive = async function (password: string, salt: string | Uint8Array): Promise<Uint8Array> {
+const derive = async function (password: string, salt: string | Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const result = await argon2.hash({
     pass: utf8(password),
     salt: typeof salt === 'string' ? utf8(salt) : salt,
@@ -181,7 +181,7 @@ const encrypt = async function (
   const count = Math.max(1, Math.ceil(blob.size / CHUNK));
   const usedIVs = new Set<string>();
   for (let i = 0; i < count; i++) {
-    let iv: Uint8Array;
+    let iv: Uint8Array<ArrayBuffer>;
     do {
       iv = random(12);
     } while (usedIVs.has(base64(iv)));
@@ -211,7 +211,7 @@ const decryptChunk = async function (
   identity: string,
   index: number,
   count: number
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   if (data.length < 28) throw new Error('Incomplete chunk');
   return bytes(
     await crypto.subtle.decrypt(
