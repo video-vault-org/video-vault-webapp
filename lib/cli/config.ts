@@ -98,7 +98,7 @@ const readDatabaseConfig = async function (existing: DatabaseConfig | null, titl
 };
 
 /** Prompts for the storage adapter before asking only for its supported settings. */
-const readStorageConfig = async function (existing?: StorageConfig | null): Promise<StorageConfig> {
+const readStorageConfig = async function (existing: StorageConfig | null, title?: string): Promise<StorageConfig> {
   const type = await ask(
     {
       type: 'select',
@@ -128,7 +128,7 @@ const readStorageConfig = async function (existing?: StorageConfig | null): Prom
       region: await askText('S3 region', conf?.region ?? 'eu-central-1'),
       accessKeyId: await askText('S3 access key ID', conf?.accessKeyId),
       secretAccessKey: await askText('S3 secret access key', conf?.secretAccessKey, true),
-      bucket: await askText('S3 bucket', conf?.bucket ?? 'video-vault'),
+      bucket: await askText('S3 bucket', conf?.bucket ?? (title || 'video-vault')),
       endpoint: await askOptional('S3 endpoint', conf?.endpoint, false, true),
       forcePathStyle: await ask({ type: 'toggle', name: 'value', message: 'S3 force path style', initial: conf?.forcePathStyle ?? false, active: 'Yes', inactive: 'No' }, z.boolean())
     }
@@ -148,7 +148,7 @@ const configExists = async function (path: string): Promise<boolean> {
 /**
  * Configures application title, database and storage, using existing values or defaults for empty answers.
  * Collects all configurations before writing ./conf/app.json, ./conf/db.json and ./conf/storage.json through their saveConfig functions.
- * The application title supplies the default DynamoDB prefix; existing or explicitly entered prefixes take precedence.
+ * The application title supplies the default DynamoDB prefix and S3 bucket; existing or explicitly entered values take precedence.
  * Existing database and storage configurations can be skipped before their settings are loaded or prompted.
  * Requests confirmation before replacing existing files. Creates ./conf on first use. No database or storage connection is opened.
  * @throws If input is cancelled or invalid, an existing config cannot be loaded, or saving fails.
@@ -161,7 +161,7 @@ const initializeConfig = async function (): Promise<void> {
   const database = configureDatabase ? await readDatabaseConfig(await loadDatabaseConfig(), app.title) : undefined;
   const storageExists = await configExists('./conf/storage.json');
   const configureStorage = !storageExists || (await ask({ type: 'confirm', name: 'value', message: 'Storage configuration already exists. Reconfigure?', initial: false }, z.boolean()));
-  const storage = configureStorage ? await readStorageConfig(await loadStorageConfig()) : undefined;
+  const storage = configureStorage ? await readStorageConfig(await loadStorageConfig(), app.title) : undefined;
   const appExists = await configExists('./conf/app.json');
   if (appExists || (configureDatabase && databaseExists) || (configureStorage && storageExists)) {
     const confirmed = await ask({ type: 'confirm', name: 'value', message: 'Replace existing configuration files?', initial: false }, z.boolean());

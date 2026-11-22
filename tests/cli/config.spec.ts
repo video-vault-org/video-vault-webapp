@@ -109,7 +109,7 @@ describe('configuration initialization', () => {
   test.each<{ answers: unknown[]; expected: StorageConfig }>([
     { answers: ['in-memory'], expected: { type: 'in-memory' } },
     { answers: ['local', '/data/storage'], expected: { type: 'local', conf: { basePath: '/data/storage' } } },
-    { answers: ['s3', '', 'id', 'secret', '', '', false], expected: { type: 's3', conf: { region: 'eu-central-1', accessKeyId: 'id', secretAccessKey: 'secret', bucket: 'video-vault', endpoint: undefined, forcePathStyle: false } } },
+    { answers: ['s3', '', 'id', 'secret', '', '', false], expected: { type: 's3', conf: { region: 'eu-central-1', accessKeyId: 'id', secretAccessKey: 'secret', bucket: 'VideoVault', endpoint: undefined, forcePathStyle: false } } },
     {
       answers: ['s3', 'us-east-1', 'custom-id', ' secret ', 'bucket', 'http://localhost:9000', true],
       expected: { type: 's3', conf: { region: 'us-east-1', accessKeyId: 'custom-id', secretAccessKey: ' secret ', bucket: 'bucket', endpoint: 'http://localhost:9000', forcePathStyle: true } }
@@ -118,6 +118,17 @@ describe('configuration initialization', () => {
     reply('in-memory', ...inputs);
     await initializeConfig();
     expect(saveStorageConfig).toHaveBeenCalledWith(expected);
+    expect(answers).toHaveLength(0);
+  });
+
+  test.each([
+    { title: 'my-video-archive', bucket: '', expected: 'my-video-archive' },
+    { title: 'my-video-archive', bucket: 'custom-bucket', expected: 'custom-bucket' }
+  ])('uses the current application title as the S3 bucket default and allows overrides ($bucket)', async ({ title, bucket, expected }) => {
+    answers = [title, 'in-memory', 's3', '', 'id', 'secret', bucket, '', false];
+    await initializeConfig();
+    expect(questions.find((question) => question.message === 'S3 bucket')?.initial).toBe(title);
+    expect(saveStorageConfig).toHaveBeenCalledWith({ type: 's3', conf: { region: 'eu-central-1', accessKeyId: 'id', secretAccessKey: 'secret', bucket: expected, endpoint: undefined, forcePathStyle: false } });
     expect(answers).toHaveLength(0);
   });
 
