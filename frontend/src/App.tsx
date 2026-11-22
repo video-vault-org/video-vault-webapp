@@ -566,8 +566,8 @@ const Application = function () {
       {workerWarning && (
         <p className="notice warning" role="status">
           {t(
-            'Der Service Worker konnte nicht gestartet werden. Offline-Modus und Wiedergabe sind nicht verfügbar. Bitte HTTPS und Browser-Einstellungen prüfen.',
-            'The service worker could not start. Offline mode and playback are unavailable. Check HTTPS and browser settings.'
+            'Der Service Worker konnte nicht gestartet werden. Offline-Modus und Wiedergabe sind nicht verfügbar. HTTP auf localhost wird unterstützt. Bitte Browser-Konsole und Browser-Einstellungen prüfen.',
+            'The service worker could not start. Offline mode and playback are unavailable. HTTP on localhost is supported. Check the browser console and browser settings.'
           )}
         </p>
       )}

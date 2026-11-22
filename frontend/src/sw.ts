@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { range } from './lib/ranges';
+import { range } from './lib/byteRange';
 
 const sw = self as unknown as ServiceWorkerGlobalScope,
   cacheName = `vault-shell-${__BUILD_ID__}-__VIDEOVAULT_IMAGES_VERSION__`;

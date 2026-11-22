@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { config, video } from './fixtures';
@@ -151,4 +151,14 @@ test('a tombstone prunes the offline video and thumbnail and advances the waterm
   expect(verify).not.toHaveBeenCalledWith(expect.objectContaining({ deleted: true }), expect.anything());
   expect(decryptText).not.toHaveBeenCalledWith('', expect.anything(), expect.anything(), expect.anything());
   expect(calls).not.toContain('/api/video/catalog');
+});
+
+test('worker failure messages acknowledge HTTP localhost support in both languages', async () => {
+  const actor = userEvent.setup();
+  render(<App />);
+  await screen.findByRole('button', { name: 'Anmelden' });
+  act(() => window.dispatchEvent(new Event('vault:worker-error')));
+  expect(screen.getByRole('status')).toHaveTextContent('HTTP auf localhost wird unterstützt.');
+  await actor.click(screen.getByRole('button', { name: 'Sprache wechseln' }));
+  expect(screen.getByRole('status')).toHaveTextContent('HTTP on localhost is supported.');
 });

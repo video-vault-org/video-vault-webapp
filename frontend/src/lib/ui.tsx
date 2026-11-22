@@ -84,8 +84,8 @@ const errorText = (error: unknown, t: T) =>
                   )
                 : error instanceof Error && error.message === 'secure'
                   ? t(
-                      'Für die Wiedergabe sind HTTPS und ein Service Worker erforderlich.',
-                      'Playback requires HTTPS and a service worker.'
+                      'Für die Wiedergabe sind ein Service Worker sowie HTTPS oder HTTP auf localhost erforderlich.',
+                      'Playback requires a service worker and HTTPS or HTTP on localhost.'
                     )
                   : t(
                       'Vorgang fehlgeschlagen. Bitte Verbindung, Passwort und Daten prüfen.',

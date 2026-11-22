@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { Script } from 'node:vm';
 
 const login = async function (page: Page, username = 'admin') {
   await page.goto('/');
@@ -249,4 +250,22 @@ test('updates cached branding without rebuilding, preserves unrelated caches and
   ).toEqual(original);
   await page.context().setOffline(false);
   await page.request.post('/__test/images/default');
+});
+
+test('registers a self-contained classic service worker over plain HTTP on localhost', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('http://localhost:4217/');
+  await page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated');
+  expect(await page.evaluate(() => window.isSecureContext)).toBe(true);
+  expect(new URL(page.url()).protocol).toBe('http:');
+  expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe('http://localhost:4217/sw.js');
+  const source = await (await page.request.get('http://localhost:4217/sw.js')).text();
+  expect(() => new Script(source)).not.toThrow();
+  expect(source).not.toMatch(/\bimportScripts\s*\(/);
+  await expect(page.getByText(/Der Service Worker konnte nicht gestartet werden/)).not.toBeVisible();
+  await page.context().setOffline(true);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
 });

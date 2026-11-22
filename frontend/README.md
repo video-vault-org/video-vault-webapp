@@ -17,6 +17,8 @@ The root build compiles the backend, builds `frontend/dist`, and copies it to `p
 
 For UI development use `npm --prefix frontend run dev` alongside the backend on port 3210 (the default). For a different backend port, set `BACKEND_URL`, e.g. `BACKEND_URL=http://localhost:4000 npm --prefix frontend run dev`. Vite proxies `/api`, `/login`, `/bootstrap` and the fixed footer image `/videovault-logo.png`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
 
+The production service worker is a self-contained classic script, including its range parser. It does not require module-service-worker support (which Firefox 139 lacks). Plain `http://localhost:3210` and HTTP loopback addresses are supported without a certificate; browsers treat them as secure contexts. Other network hosts require HTTPS for service workers and Web Crypto. No browser security checks are bypassed. Registration failures are reported in the browser console as well as in the UI.
+
 ## Server port
 
 `npm start` asks for the server port in an interactive terminal. Press Enter to use **3210**. The choice applies to that start and is not saved. Without an interactive terminal (including redirected output), startup uses 3210 automatically.
@@ -45,7 +47,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-An installed Chromium can be selected using `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome`. The browser tests use only an in-memory database and a temporary directory. Their deliberately public test credentials are **not** installed in the application's database. Production configuration, `.salt`, storage and JWT keys are untouched. External password lookup is stubbed in tests.
+An installed Chromium can be selected using `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome`. Set `PLAYWRIGHT_BROWSER=firefox` to test with Playwright Firefox; an appropriate patched Firefox binary can be selected with `PLAYWRIGHT_FIREFOX_EXECUTABLE`. The browser tests use only an in-memory database and a temporary directory. Their deliberately public test credentials are **not** installed in the application's database. Production configuration, `.salt`, storage and JWT keys are untouched. External password lookup is stubbed in tests.
 
 ## Storage and security
 

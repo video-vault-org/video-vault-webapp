@@ -1,16 +1,24 @@
 import { defineConfig } from '@playwright/test';
+
+const firefox = process.env.PLAYWRIGHT_BROWSER === 'firefox';
+
 const config = defineConfig({
   testDir: 'e2e',
   workers: 1,
   timeout: 60000,
   use: {
     baseURL: 'http://127.0.0.1:4217',
+    browserName: firefox ? 'firefox' : 'chromium',
     headless: true,
     launchOptions: {
-      ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
-        ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
+      ...((firefox ? process.env.PLAYWRIGHT_FIREFOX_EXECUTABLE : process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE)
+        ? {
+            executablePath: firefox
+              ? process.env.PLAYWRIGHT_FIREFOX_EXECUTABLE
+              : process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+          }
         : {}),
-      args: ['--no-sandbox']
+      args: firefox ? [] : ['--no-sandbox']
     },
     screenshot: 'only-on-failure'
   },

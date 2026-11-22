@@ -1,24 +1,7 @@
 import { CHUNK, WRAPPED, STRIDE, bytes, concat, layout, decryptChunk, unwrapFile } from './crypto';
 import { request } from './api';
+import { range } from './byteRange';
 import type { Keys, Video } from './types';
-
-const range = function (header: string | null, size: number): [number, number] {
-  if (!size) throw new RangeError('range');
-  if (!header) return [0, size - 1];
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header);
-  if (!m || (!m[1] && !m[2])) throw new RangeError('range');
-  const from = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2])),
-    to = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
-  if (
-    !Number.isSafeInteger(from) ||
-    !Number.isSafeInteger(to) ||
-    from > to ||
-    from >= size ||
-    (!m[1] && Number(m[2]) <= 0)
-  )
-    throw new RangeError('range');
-  return [from, to];
-};
 
 const cipherRange = function (from: number, to: number, size: number) {
   const info = layout(size);
