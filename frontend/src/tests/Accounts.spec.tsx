@@ -41,6 +41,7 @@ const fill = async function (password: string, repeat = password) {
 };
 
 test('rejects missing character categories locally before contacting HIBP or the backend', async () => {
+  // noinspection SpellCheckingInspection
   await fill('abcdefghijklmn');
   expect(await screen.findByRole('alert')).toHaveTextContent('drei der vier');
   expect(pwned).not.toHaveBeenCalled();

@@ -13,8 +13,10 @@ import { CommentService } from '../built/lib/service/CommentService.js';
 import { createApp } from '../built/lib/http/app.js';
 import { prepareFrontend } from '../built/lib/images/index.js';
 import { deriveKey } from '../built/lib/util/deriveKey.js';
+
 const root = resolve(import.meta.dirname, '..'),
   directory = await mkdtemp(join(tmpdir(), 'vault-browser-'));
+
 const db = new InMemoryDatabaseAdapter(),
   adapter = new InMemoryStorageAdapter(),
   users = new UserService(db),
@@ -66,6 +68,7 @@ for (const username of ['admin', 'reader']) {
     moderator: username === 'admin'
   });
 }
+
 const sample = await readFile(join(root, 'frontend/e2e/fixtures/sample.mp4')),
   thumbnail = await readFile(join(root, 'logo.png'));
 for (const [id, title, description, date, people] of [
@@ -97,6 +100,7 @@ for (const [id, title, description, date, people] of [
     await adapter.save(path, `${id}.${kind}`);
   }
 }
+
 const staticDirectory = join(directory, 'public');
 const imageDirectory = join(directory, 'img');
 await cp(join(root, 'public'), staticDirectory, { recursive: true });

@@ -7,13 +7,9 @@ describe('backend entrypoint', () => {
 
   beforeEach(() => {
     jest.resetModules();
-
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
-
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
-
     const originalOnce = process.once.bind(process);
-
     jest.spyOn(process, 'once').mockImplementation((event, listener) => (event === 'SIGINT' || event === 'SIGTERM' ? process : originalOnce(event, listener)));
   });
 

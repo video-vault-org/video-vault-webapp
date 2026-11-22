@@ -21,7 +21,7 @@ const Compatibility = function ({ report }: { report: MediaReport }) {
       'H.264-Level über 4.1: ältere Geräte können Probleme haben.',
       'H.264 level above 4.1: older devices may have problems.'
     ),
-    depth: t('Bittiefe ist nicht 8 Bit.', 'Bit depth is not 8-bit.'),
+    depth: t('Bit-Tiefe ist nicht 8 Bit.', 'Bit depth is not 8-bit.'),
     chroma: t('Farbunterabtastung ist nicht 4:2:0.', 'Chroma subsampling is not 4:2:0.'),
     audio: t('Audio ist nicht AAC/MP3.', 'Audio is not AAC/MP3.'),
     missing: t('Keine Videospur erkannt.', 'No video track detected.'),

@@ -42,7 +42,7 @@ beforeEach(async () => {
   calls = [];
   vi.clearAllMocks();
 
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const path = String(input);
     calls.push(path);
     if (path === '/bootstrap') return new Response(JSON.stringify(config));
@@ -220,7 +220,7 @@ test('worker failure messages acknowledge HTTP localhost support in both languag
   const actor = userEvent.setup();
   render(<App />);
   await screen.findByRole('button', { name: 'Anmelden' });
-  act(() => window.dispatchEvent(new Event('vault:worker-error')));
+  await act(() => window.dispatchEvent(new Event('vault:worker-error')));
   expect(screen.getByRole('status')).toHaveTextContent('HTTP auf localhost wird unterstützt.');
   await actor.click(screen.getByRole('button', { name: 'Sprache wechseln' }));
   expect(screen.getByRole('status')).toHaveTextContent('HTTP on localhost is supported.');

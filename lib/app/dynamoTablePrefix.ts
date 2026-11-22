@@ -9,6 +9,7 @@ import { appConfigSchema } from './config/AppConfig';
  */
 const dynamoTablePrefix = function (title: string): string {
   const validated = appConfigSchema.parse({ title }).title;
+  // noinspection SpellCheckingInspection
   const slug = validated
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .normalize('NFKD')

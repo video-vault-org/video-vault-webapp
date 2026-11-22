@@ -48,12 +48,15 @@ test('validates token expiry for local startup only', () => {
 
 test('enforces length and at least three character categories without forcing all four', () => {
   expect(passwordProblems('Short1!')).toContain('length');
+  // noinspection SpellCheckingInspection
   expect(passwordProblems('abcdefghijklmnop')).toContain('categories');
+  // noinspection SpellCheckingInspection
   expect(passwordProblems('Abcdefghijkl1')).toEqual([]);
   expect(passwordProblems(temporaryPassword())).toEqual([]);
 });
 
 test('HIBP sends only a 5-character prefix with padding, and matches suffixes locally', async () => {
+  // noinspection SpellCheckingInspection
   const password = 'Abcdefghijkl1!',
     hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password))), (n) =>
       n.toString(16).padStart(2, '0')
@@ -73,8 +76,10 @@ test('HIBP sends only a 5-character prefix with padding, and matches suffixes lo
 
 test('HIBP ignores padding records and reports outages without blocking policy on its own', async () => {
   const fetch = mockFetch().mockResolvedValue(new Response('OTHER:0'));
+  // noinspection SpellCheckingInspection
   expect(await pwned('Abcdefghijkl1!')).toBe('safe');
   fetch.mockRejectedValue(new TypeError('offline'));
+  // noinspection SpellCheckingInspection
   expect(await pwned('Abcdefghijkl1!')).toBe('unavailable');
 });
 

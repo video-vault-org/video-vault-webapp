@@ -6,4 +6,5 @@ const config = {
   tabWidth: 2
 };
 
+// noinspection JSUnusedGlobalSymbols used by prettiet
 export default config;

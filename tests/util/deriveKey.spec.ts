@@ -25,6 +25,7 @@ describe('deriveKey', () => {
   });
 
   test('measures the salt in UTF-8 bytes, not characters', async () => {
+    // noinspection SpellCheckingInspection
     expect(await deriveKey('password', '\u00e4\u00e4\u00e4\u00e4')).toHaveLength(32);
   });
 });

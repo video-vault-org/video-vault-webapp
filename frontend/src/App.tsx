@@ -6,7 +6,7 @@ import { excerpt, filterVideos, formatValue, sortVideos } from './lib/catalog';
 import { clearMedia, installMediaBridge } from './lib/mediaBridge';
 import { readInvitation, type Invitation } from './lib/password';
 import type { Bootstrap, Keys, PlainVideo, User, Video } from './lib/types';
-import { Dialog, ErrorMessage, Field, LanguageProvider, useLanguage, useTask } from './lib/ui';
+import { ErrorMessage, Field, LanguageProvider, useLanguage, useTask } from './lib/ui';
 import { Thumbnail } from './components/Thumbnail';
 import { VideoOverlay } from './components/VideoOverlay';
 import { VideoForm } from './components/VideoForm';

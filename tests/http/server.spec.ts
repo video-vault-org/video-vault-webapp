@@ -190,7 +190,7 @@ describe('startServer', () => {
     expect(resetDb).toHaveBeenCalledTimes(1);
   });
 
-  test('rejects invalid upload limits from the environment without opening a servcr', async () => {
+  test('rejects invalid upload limits from the environment', async () => {
     process.env.VIDEO_UPLOAD_LIMIT_BYTES = '0';
     await expect(startServer({ port: 0 })).rejects.toThrow(RangeError);
     expect(resetDb).toHaveBeenCalledTimes(1);

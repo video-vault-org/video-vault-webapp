@@ -55,6 +55,7 @@ test('versions the app cache by build and image content and reloads every precac
 });
 
 test('serves the security document from the app cache without a network request', async () => {
+  // noinspection HtmlRequiredLangAttribute
   const document = new Response('<html>Security architecture</html>', {
     headers: { 'Content-Type': 'text/html' }
   });

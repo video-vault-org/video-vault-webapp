@@ -1,10 +1,10 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Comments } from '../components/Comments';
 import { LanguageProvider } from '../lib/ui';
 import { json } from '../lib/api';
-import { decryptText, encryptText, sign, verify } from '../lib/crypto';
+import { encryptText, sign, verify } from '../lib/crypto';
 import type { Comment, Keys, User } from '../lib/types';
 
 vi.mock('../lib/api', async () => ({ ...(await vi.importActual('../lib/api')), json: vi.fn() }));
@@ -56,6 +56,7 @@ test('loads subsequent pages, deduplicates IDs, ends at empty cursor and treats 
   await actor.click(await screen.findByRole('button', { name: 'Weitere Kommentare laden' }));
   expect(await screen.findByText('Gelöscht')).toBeVisible();
   expect(screen.getAllByText('Decrypted comment')).toHaveLength(1);
+  // noinspection SpellCheckingInspection
   expect(json).toHaveBeenCalledWith('/api/comments/v1?pagesize=50&cursor=next%2Fkey');
   expect(screen.queryByRole('button', { name: 'Weitere Kommentare laden' })).not.toBeInTheDocument();
   expect(vi.mocked(verify).mock.calls.every(([item]) => !('deleted' in item && item.deleted))).toBe(true);

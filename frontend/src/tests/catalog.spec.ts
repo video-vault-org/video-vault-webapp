@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { compare, excerpt, filterVideos, sortVideos, formatValue } from '../lib/catalog';
 import { emptyCatalog, mergeCatalog, saveCatalog, saveThumbnail, get, put, removePrefix } from '../lib/cache';
 import { validateMetadata } from '../components/MetadataFields';
-import type { Bootstrap, PlainVideo } from '../lib/types';
+import type { PlainVideo } from '../lib/types';
 import { config, video } from './fixtures';
 
 describe('catalog presentation', () => {

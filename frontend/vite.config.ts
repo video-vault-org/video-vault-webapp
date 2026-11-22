@@ -7,6 +7,7 @@ const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3210';
 
 const buildId = JSON.stringify(Date.now().toString());
 
+// noinspection JSUnusedGlobalSymbols closeBundle used by vite
 const config = defineConfig({
   define: { __BUILD_ID__: buildId },
   build: {

@@ -29,7 +29,7 @@ describe('password hashing', () => {
     await expect(verifyPassword(password, value)).resolves.toBe(false);
   });
 
-  test('verifyPassword rejects noncanonical Base64 and extra fields', async () => {
+  test('verifyPassword rejects non-canonical Base64 and extra fields', async () => {
     const parts = stored.split('$');
     parts[3] += '!';
     await expect(verifyPassword(password, parts.join('$'))).resolves.toBe(false);

@@ -30,4 +30,5 @@ const config = defineConfig({
   }
 });
 
+// noinspection JSUnusedGlobalSymbols used by playwright
 export default config;
