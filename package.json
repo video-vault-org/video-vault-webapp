@@ -20,6 +20,7 @@
   },
   "scripts": {
     "audit": "better-npm-audit audit",
+    "audit:frontend": "npm --prefix frontend run audit",
     "lint": "eslint '**/*.ts'",
     "test": "jest --runInBand --verbose --detectOpenHandles --forceExit",
     "qa": "npm run lint && npm run audit && npm run test",

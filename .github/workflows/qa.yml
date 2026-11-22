@@ -17,13 +17,19 @@ jobs:
           node-version: 26.x
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install
+          npm --prefix frontend install
+          
 
-      #- name: Run lint
-      #  run: npm run lint
+      - name: Audit Backend
+        run: npm run audit
 
-      #- name: Audit
-      #  run: npm run audit
+      - name: Audit Frontend
+        run: npm run audit:frontend
 
-      - name: Run test
+      - name: Run test Backend
         run: npm run test
+
+      - name: Run test Frontend
+        run: npm run test:frontend
