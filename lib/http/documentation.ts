@@ -30,6 +30,8 @@ const summaries: Record<string, string> = {
   'PATCH /api/video/change/files/:videoId': 'Replace video and/or thumbnail files',
   'PATCH /api/video/change/recorded/:videoId': 'Change the video recording date',
   'DELETE /api/video/delete/:videoId': 'Delete a video, its comments and files',
+  'GET /api/video/catalog': 'List current video IDs for offline deletion reconciliation',
+  'HEAD /api/video/file/:videoId': 'Get the encrypted video byte length',
   'GET /api/video/all': 'List all videos',
   'GET /api/video/find/:videoId': 'Find a video',
   'GET /api/video/file/:videoId': 'Download encrypted video bytes',
@@ -103,8 +105,24 @@ function registerDocumentation(app: FastifyInstance, { title = DEFAULT_APP_TITLE
           }
         };
       }
-      if (url === '/api/video/file/:videoId' || url === '/api/video/thumbnail/:videoId') {
+      if (method !== 'HEAD' && (url === '/api/video/file/:videoId' || url === '/api/video/thumbnail/:videoId')) {
         documented.response = { ...(documented.response as Record<string, unknown>), 200: { description: 'Encrypted file bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } } };
+      }
+      if (url === '/api/video/file/:videoId') {
+        const headers = { 'Content-Length': { description: 'Encrypted byte length', schema: { type: 'integer' } }, 'Accept-Ranges': { schema: { type: 'string', example: 'bytes' } } };
+        if (method === 'HEAD') documented.response = { ...(documented.response as Record<string, unknown>), 200: { description: 'Encrypted size without a response body', headers } };
+        else {
+          documented.description += ' Optional Range: bytes=from-to, bytes=from- or bytes=-suffix. Query bounds and Range cannot be combined. Unsatisfiable or multiple ranges return 416.';
+          documented.headers = { type: 'object', properties: { Range: { type: 'string', example: 'bytes=0-39' } }, additionalProperties: true };
+          documented.response = {
+            ...(documented.response as Record<string, unknown>),
+            206: {
+              description: 'Inclusive encrypted byte range',
+              headers: { ...headers, 'Content-Range': { schema: { type: 'string', example: 'bytes 0-39/12345' } } },
+              content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } }
+            }
+          };
+        }
       }
       return { schema: documented, url };
     }

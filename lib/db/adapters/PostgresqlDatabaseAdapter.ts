@@ -220,6 +220,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     return this.query<Video>('SELECT * FROM videos');
   }
 
+  public async findAllVideoIds(): Promise<string[]> {
+    return (await this.query<Pick<Video, 'videoId'>>('SELECT "videoId" FROM videos')).map(({ videoId }) => videoId);
+  }
+
   public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
     await this.query('DELETE FROM videos WHERE "videoId" = $1', [videoId]);
   }

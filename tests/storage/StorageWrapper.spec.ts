@@ -35,6 +35,16 @@ describe('StorageWrapper', () => {
     await adapter.save(source, descriptor);
   }
 
+  test('videoFileSize returns only the encrypted video length or null', async () => {
+    expect(await storage.videoFileSize({ videoId })).toBeNull();
+    await storage.saveVideoFile({ videoId });
+    await storage.saveThumbnailFile({ videoId });
+    expect(await storage.videoFileSize({ videoId })).toBe(video.length);
+    const error = new Error('denied');
+    jest.spyOn(adapter, 'size').mockRejectedValueOnce(error);
+    await expect(storage.videoFileSize({ videoId })).rejects.toBe(error);
+  });
+
   test('deleteTemporaryFiles removes both temporary files and preserves stored and unrelated files', async () => {
     await storage.saveVideoFile({ videoId });
     await storage.saveThumbnailFile({ videoId });

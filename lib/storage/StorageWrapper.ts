@@ -63,6 +63,11 @@ class StorageWrapper {
     await Promise.all(files.map((extension) => fs.rm(`${this.temporaryDirectory}/${videoId}.${extension}`, { force: true })));
   }
 
+  /** Returns the encrypted video's byte length, or null when it is absent. */
+  public async videoFileSize({ videoId }: { videoId: string }): Promise<number | null> {
+    return this.storageAdapter.size(`${videoId}.${VIDEO_EXTENSION}`);
+  }
+
   /**
    * Reads the desired range from the video file for a video
    * @param videoId The id of the video to read the video file range for

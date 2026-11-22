@@ -408,7 +408,7 @@
                 Zero-Knowledge-Beweisprotokoll.
               </div>
               <p>Die lokale Admin-CLI ist die bewusste Bootstrap-Ausnahme: Sie verarbeitet das erste Passwort und erzeugt die ursprünglichen Schlüssel auf dem Rechner der ausführenden Person.</p>
-              <p>Diese Doku unterscheidet den vorhandenen Backend-Stand von der festgelegten Client-Architektur. Beschriebene Client-Verfahren sind dadurch noch nicht implementiert oder unabhängig auditiert.</p>
+              <p>Backend und React-Frontend implementieren die hier beschriebenen Client-Verfahren. Die Umsetzung ist durch Tests geprüft, aber nicht unabhängig sicherheitsauditiert.</p>
             </section>
             <section id="de-keys" aria-labelledby="de-keys-title">
               <h2 id="de-keys-title">02 · Schlüssel und Aufgaben</h2>
@@ -534,7 +534,7 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               </div>
               <p>
                 Der Titel ist öffentliche Anzeigeinformation. Bootstrap gibt nur freigegebene Anwendungsfelder aus, keine Datenbank- oder Storage-Zugangsdaten. Der künftige Client soll den Titel als Text setzen, etwa über <code>document.title</code>,
-                und nicht als HTML interpretieren. Das Objekt <code>app</code> kann später um Logo und Favicon erweitert werden; diese Funktionen sind noch nicht implementiert.
+                und nicht als HTML interpretieren. Das Objekt <code>app</code> kann später um Logo und Favicon erweitert werden; konfigurierbare Logo-/Favicon-Felder sind noch nicht implementiert; das Frontend verwendet mitgelieferte Assets.
               </p>
               <h3>Öffentlicher Bootstrap für den Client</h3>
               <p>
@@ -548,7 +548,8 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               </p>
               <p>
                 Der Server lädt die Instanz-Salt und die Anwendungskonfiguration einmal vor dem Start des HTTP-Servers. Requests auf <code>/bootstrap</code> verwenden den geladenen Wert, ohne Dateien zu lesen oder neue Salts zu erzeugen.
-                <code>Cache-Control: no-store</code> verhindert persistentes HTTP-Caching; im laufenden Client kann der Wert im Speicher bleiben. Die Route ist in Swagger als öffentlich dokumentiert.
+                <code>Cache-Control: no-store</code> verhindert persistentes HTTP-Caching; das Frontend speichert die Bootstrap-Antwort ausdrücklich in localStorage und lädt sie nur bei fehlendem Cache oder über „Anzeige-Konfiguration neu laden“
+                erneut. Die Route ist in Swagger als öffentlich dokumentiert.
               </p>
               <div class="note">
                 Die Instanz-Salt wird bei Neustarts nicht rotiert und muss zusammen mit der Datenbank gesichert werden. Bestehende Installationen müssen die bisherige Salt-Datei unter dem neuen Namen <code>./.salt</code> mit unverändertem Inhalt
@@ -557,13 +558,13 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               <h3>Öffentliche Frontend-Metadatenkonfiguration</h3>
               <p>
                 <code>npm run meta:init</code> speichert <code>./conf/meta.json</code>. Bootstrap veröffentlicht diese Konfiguration unter <code>meta</code>: Darstellungs-/Filteroptionen für recorded, Feldschlüssel und Anzeigenamen, Typen und
-                Mehrfachwert-Flags, Pflichtfeld-/Detailanzeige-Flags sowie die geordnete Liste der Sortierfelder mit Richtung. Das sind öffentliche Felddefinitionen, keine Video-Metadatenwerte. Vertrauliche Informationen gehören nicht in Feldnamen
-                oder Anzeigenamen.
+                Mehrfachwert-Flags, Pflichtfeld-/Detailanzeige-/Filter-Flags sowie die geordnete Liste der Sortierfelder mit Richtung. Das sind öffentliche Felddefinitionen, keine Video-Metadatenwerte. Vertrauliche Informationen gehören nicht in
+                Feldnamen oder Anzeigenamen.
               </p>
               <p>
-                Diese Einstellungen steuern ausschließlich das spätere Frontend. Pflichtfeld- und Anzeige-Flags sind keine serverseitige Validierung oder Zugriffskontrolle; ausgeblendete Felder werden dadurch nicht aus API-Antworten entfernt.
+                Diese Einstellungen steuern ausschließlich das Frontend. Pflichtfeld- und Anzeige-Flags sind keine serverseitige Validierung oder Zugriffskontrolle; ausgeblendete Felder werden dadurch nicht aus API-Antworten entfernt.
                 <code>Video.meta</code> bleibt ein beliebiges JSON-Objekt. Authentifizierung und Rollenprüfungen bleiben maßgeblich für API-Zugriffe. Das Frontend muss Namen als Text darstellen und Titel vor einer inhaltlichen Sortierung lokal
-                entschlüsseln. Mehrfachwerte sind freie Arrays; ihre Vergleichsregel bei der Sortierung wird erst bei der Frontend-Implementierung festgelegt.
+                entschlüsseln. Mehrfachwerte sind freie Arrays und werden lexikografisch elementweise in gespeicherter Reihenfolge verglichen. Fehlende Werte und leere Arrays stehen unabhängig von der Sortierrichtung zuletzt.
               </p>
               <p>
                 Die Metadatenkonfiguration wird beim Serverstart geladen und für Requests im Speicher gehalten. Ohne Datei gelten recorded ohne Uhrzeit, als Filter aktiviert, keine Meta-Felder sowie recorded absteigend und anschließend Titel
@@ -640,7 +641,7 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               </p>
             </section>
             <section id="de-lifecycle" aria-labelledby="de-lifecycle-title">
-              <span class="badge planned">Client-Architektur</span>
+              <span class="badge">Frontend implementiert</span>
               <h2 id="de-lifecycle-title">06 · Nutzer hinzufügen und Passwort ändern</h2>
               <h3>Weiteren Nutzer anlegen</h3>
               <p>
@@ -648,8 +649,8 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
                 <code>passwordKey</code> erzeugt. Die bereits vorhandenen Master-Schlüssel werden getrennt mit diesem neuen passwordKey gewrappt und als neuer userKey gespeichert. Es entsteht kein neues Master-Schlüsselpaar.
               </p>
               <p>
-                In diesem Verfahren verarbeitet der anlegende Client vorübergehend auch das anfängliche Passwort des neuen Nutzers. Eine Übergabe über Einladungsprotokolle oder öffentliche Schlüssel ist nicht Bestandteil dieser Architektur. Das
-                Backend empfängt die fertigen Passwortattribute; es übernimmt nicht das Entschlüsseln oder Neu-Wrappen.
+                In diesem Verfahren verarbeitet der anlegende Client vorübergehend auch das anfängliche Passwort des neuen Nutzers. Das Frontend erzeugt einen Einladungslink mit temporärem Passwort im URL-Fragment; ein Protokoll mit öffentlichen
+                Schlüsseln ist nicht Bestandteil dieser Architektur. Das Backend empfängt die fertigen Passwortattribute; es übernimmt nicht das Entschlüsseln oder Neu-Wrappen.
               </p>
               <h3>Passwort ändern</h3>
               <p>
@@ -672,11 +673,12 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               </p>
               <p>
                 <code>passwordKeySalt</code>, <code>userKey</code> und die Master-Schlüssel müssen nicht geändert werden, da die passwordKey-Ableitung nicht vom Benutzernamen abhängt. Auch ein Admin benötigt den passend neu abgeleiteten loginHash;
-                das Backend erhält dafür kein Klartext-Passwort. Diese Backend-Unterstützung ist implementiert; die Ableitung erfolgt im vorgesehenen Client-Verfahren.
+                das Backend erhält dafür kein Klartext-Passwort. Das Frontend implementiert die Ableitung. Bei administrativer Umbenennung wird zugleich ein temporäres Passwort erzeugt und der userKey neu gewrappt; die zwei Backend-Aufrufe sind keine
+                gemeinsame Transaktion.
               </p>
             </section>
             <section id="de-files" aria-labelledby="de-files-title">
-              <span class="badge planned">Client-Architektur</span>
+              <span class="badge">Frontend implementiert</span>
               <h2 id="de-files-title">07 · Dateien: Verschlüsselung und Binärformat</h2>
               <p>
                 Für jede neue Verschlüsselung einer Video- oder Thumbnail-Datei erzeugt der Client einen frischen, zufälligen 32-Byte-<code>fileKey</code>. Er wrappt ihn mit dem <code>masterEncryptionKey</code> mittels AES-256-KW. Auch bei einem
@@ -785,7 +787,7 @@ offset(i) = 40 + i × B</code></pre>
               </div>
             </section>
             <section id="de-text" aria-labelledby="de-text-title">
-              <span class="badge planned">Client-Architektur</span>
+              <span class="badge">Frontend implementiert</span>
               <h2 id="de-text-title">08 · Videotitel, Beschreibungen und Kommentar-Inhalte</h2>
               <p>
                 Videotitel, Beschreibungen und Kommentar-Inhalte verwenden dasselbe Verfahren wie Dateien: UTF-8-Klartext, ein neuer zufälliger 32-Byte-fileKey, AES-KW mit masterEncryptionKey, 34-KiB-Chunks und AES-256-GCM. Der vollständige binäre
@@ -816,7 +818,7 @@ content     = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, 
               </p>
             </section>
             <section id="de-metadata" aria-labelledby="de-metadata-title">
-              <span class="badge planned">Client-Architektur</span>
+              <span class="badge">Frontend implementiert</span>
               <h2 id="de-metadata-title">09 · Metadaten-Integrität und Tombstones</h2>
               <p>Der Client erzeugt das Metadaten-HMAC mit <code>masterAuthKey</code> und HMAC-SHA-256. Die Eingabe ist eine kanonische Darstellung aller fachlichen Attribute des jeweiligen Video- oder Kommentar-Datensatzes, mit diesen Regeln:</p>
               <ol>
@@ -860,6 +862,44 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
             </section>
             <section id="de-limits" aria-labelledby="de-limits-title">
               <h2 id="de-limits-title">10 · Schutzwirkung und Grenzen</h2>
+              <h3>Implementierter Browser- und Offline-Betrieb</h3>
+              <p>
+                Das eigenständige React-Projekt unter <code>frontend/</code> arbeitet als PWA über HTTPS (für Entwicklung auch localhost). Der Service Worker hält ausschließlich die lokalen App-Assets im Cache. JWT, Bootstrap-Antwort und das
+                Benutzerprofil mit gewrapptem userKey liegen in localStorage. Das JWT ist ein Bearer-Geheimnis: Schadcode desselben Ursprungs kann es lesen; XSS oder ein manipuliertes Frontend können auch entsperrte Schlüssel und Klartexte abgreifen.
+              </p>
+              <p>
+                Nach jedem Neuladen ist das Passwort zum lokalen Entsperren erforderlich. Entschlüsselte Master-Schlüssel bleiben nur im Arbeitsspeicher der geöffneten Seite. Bei 401 oder Abmeldung werden Token und laufende Medienfreigaben entfernt.
+                Ein Offline-Entsperren verwendet das zuvor geladene Profil und ein noch nicht abgelaufenes Token; es ist keine aktuelle serverseitige Berechtigungsprüfung. Die UI-Rollen ersetzen niemals die Backend-Prüfung.
+              </p>
+              <p>
+                IndexedDB speichert den Katalog einschließlich verschlüsseltem Titel und verschlüsselter Beschreibung, die letzte synchronisierte Änderungszeit und bereits geladene verschlüsselte Thumbnails, getrennt nach Instanz-Salt und
+                Benutzer-ID. Entschlüsselte Texte oder Vorschaubilder werden dort nicht gespeichert. Die fachlichen Metadaten einschließlich recorded bleiben wie auf dem Server unverschlüsselt. „Offline-Daten löschen“ entfernt den Cache dieses
+                Kontos; normales Abmelden lässt den verschlüsselten Cache bestehen.
+              </p>
+              <p>
+                Die Synchronisation lädt zunächst <code>/api/video/0</code>, später Änderungen ab der höchsten bekannten lastModified. <code>/api/video/catalog</code> liefert angemeldeten Nutzern die aktuellen IDs für den Löschabgleich. Ciphertext
+                und Cursor werden gemeinsam erst nach erfolgreicher Integritätsprüfung gespeichert. Der Abgleich ist kein kryptografischer Nachweis gegen Unterdrückung von Daten, kein transaktionaler Snapshot und kein Schutz gegen falsche
+                Client-Uhren oder rückdatierte Änderungen.
+              </p>
+              <h3>Range-Wiedergabe und Download</h3>
+              <p>
+                Das Backend stellt authentisierte HEAD- und HTTP-Range-Abfragen der verschlüsselten Videodatei bereit. Ein temporärer, zufälliger Medienpfad im Service Worker übersetzt Player-Anfragen in Nachrichten an die entsperrte Seite. Dort
+                werden die vollständigen betroffenen Chunks geladen, ihre Tags und AAD geprüft und nur die angefragten Klartextbytes zurückgegeben. Der Service Worker streamt diese Bytes in begrenzten Blöcken an Player oder Download; Klartext-Videos
+                werden nicht persistent gecacht. Die Seite muss dabei offen und entsperrt bleiben. Videos sind zunächst nicht offline verfügbar.
+              </p>
+              <h3>Passwortregeln und Einladungen</h3>
+              <p>
+                Das Frontend verlangt mindestens 12 Zeichen und drei von vier Kategorien (Groß-/Kleinbuchstaben, Zahlen, Sonderzeichen). Diese UI-Regel ersetzt keine zusätzliche serverseitige Richtlinie. Beim Absenden prüft der Browser Pwned
+                Passwords über die Range-API: Nur fünf Hex-Zeichen des SHA-1-Hashes werden mit <code>Add-Padding: true</code> übertragen; der vollständige Vergleich bleibt lokal. SHA-1 dient ausschließlich der Suche, nicht der Passwortableitung. Der
+                Dienst sieht IP-Adresse und Präfix. Treffer werden abgelehnt; bei Ausfall wird mit Warnung fortgefahren.
+              </p>
+              <p>
+                Beim Anlegen oder administrativen Passwort-Reset erzeugt der Browser ein zufälliges temporäres Passwort und wrappt die gemeinsamen Master-Schlüssel neu. Ein einmalig angezeigter Link enthält
+                <code>{type: invite|reset, username, password}</code> als Base64url-JSON im Fragment. Fragmente werden nicht als Teil des HTTP-Requests gesendet, bleiben aber Geheimnisse: Verlauf, Zwischenablage, Erweiterungen und Empfänger können
+                sie lesen. Die App entfernt das Fragment sofort beim Einlesen und verlangt danach einen Passwortwechsel. Diese Verpflichtung wird ausdrücklich nur im Frontend durchgesetzt, Links sind serverseitig weder einmalig noch mit eigener
+                Ablaufzeit versehen. Bestehende JWTs werden durch einen Passwortwechsel nicht widerrufen.
+              </p>
+
               <p>
                 Die Architektur schützt die Vertraulichkeit von Inhalten gegenüber einem Server oder Storage, der nur verschlüsselte Daten verarbeitet. Authentisierte Verschlüsselung erkennt Manipulationen im gebundenen Kontext; der gemeinsame HMAC
                 schützt die Integrität von Metadaten gegenüber Parteien ohne masterAuthKey.
@@ -949,7 +989,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                   </tr>
                   <tr>
                     <td>Client-Kryptografie</td>
-                    <td>Datei-/Textverschlüsselung, AAD, Metadaten-HMAC und Client-Neu-Wrapping sind die hier festgelegte Zielarchitektur; das Backend prüft diese Kryptografie nicht.</td>
+                    <td><a href="frontend/src/lib/crypto.ts">Frontend-Kryptografie</a>: Datei-/Textverschlüsselung, AAD, HMAC-Prüfung und Neu-Wrapping implementiert; das Backend prüft diese Kryptografie nicht.</td>
                   </tr>
                 </tbody>
               </table>
@@ -1012,7 +1052,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
               </figure>
               <div class="note">“Zero knowledge” describes the goal that normal web operation requires neither the plaintext password nor decrypted contents or unwrapped master keys on the server. This is not a zero-knowledge proof protocol.</div>
               <p>The local admin CLI is an explicit bootstrap exception: it processes the first password and generates the original keys on the machine running the command.</p>
-              <p>This document distinguishes existing backend behavior from the agreed client architecture. Describing a client procedure does not mean it has already been implemented or independently audited.</p>
+              <p>The backend and React frontend implement the client procedures described here. The implementation is tested but has not been independently security-audited.</p>
             </section>
             <section id="en-keys" aria-labelledby="en-keys-title">
               <h2 id="en-keys-title">02 · Keys and responsibilities</h2>
@@ -1133,8 +1173,8 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
                 derivation or master keys.
               </div>
               <p>
-                The title is public display information. Bootstrap exposes only approved application fields, never database or storage credentials. The future client should set the title as text, for example via <code>document.title</code>, rather
-                than interpreting it as HTML. The <code>app</code> object can later accommodate a logo and favicon; those features are not implemented yet.
+                The title is public display information. Bootstrap exposes only approved application fields, never database or storage credentials. The frontend sets the title as text, for example via <code>document.title</code>, rather than
+                interpreting it as HTML. The <code>app</code> object can later accommodate a logo and favicon; configurable logo/favicon fields are not implemented yet; the frontend uses bundled assets.
               </p>
               <h3>Public bootstrap for the client</h3>
               <p>
@@ -1148,7 +1188,8 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               </p>
               <p>
                 The server loads the instance salt and application configuration once before starting the HTTP server. Requests to <code>/bootstrap</code> use this in-memory value without reading files or generating new salts.
-                <code>Cache-Control: no-store</code> prevents persistent HTTP caching; a running client may keep the value in memory. Swagger documents this route as public.
+                <code>Cache-Control: no-store</code> prevents persistent HTTP caching; the frontend explicitly stores bootstrap in localStorage and reloads it only when absent or through “Reload display settings”. Swagger documents this route as
+                public.
               </p>
               <div class="note">
                 The instance salt is not rotated on restart and must be backed up with the database. Existing installations must retain the previous salt file's exact contents under its new name <code>./.salt</code>. Generating a replacement changes
@@ -1157,12 +1198,12 @@ passwordKey     = A(password, passwordKeySalt)</code></pre>
               <h3>Public frontend metadata configuration</h3>
               <p>
                 <code>npm run meta:init</code> saves <code>./conf/meta.json</code>. Bootstrap exposes this configuration under <code>meta</code>: recorded presentation/filter options, field keys and display names, types and multiple-value flags,
-                required/details flags, and the ordered sort fields with their directions. These are public field definitions, not video metadata values. Do not put confidential information in field keys or display names.
+                required/details/filter flags, and the ordered sort fields with their directions. These are public field definitions, not video metadata values. Do not put confidential information in field keys or display names.
               </p>
               <p>
-                These settings control the future frontend only. Required and visibility flags are neither server-side validation nor access control; hiding a field does not remove it from API responses. <code>Video.meta</code> remains an arbitrary
-                JSON object. Authentication and role checks continue to govern API access. The frontend must render names as text and locally decrypt titles before sorting by their contents. Multiple values are free arrays; their sorting comparison
-                rule is deferred until frontend implementation.
+                These settings control the frontend only. Required and visibility flags are neither server-side validation nor access control; hiding a field does not remove it from API responses. <code>Video.meta</code> remains an arbitrary JSON
+                object. Authentication and role checks continue to govern API access. The frontend must render names as text and locally decrypt titles before sorting by their contents. Multiple values are free arrays compared lexicographically,
+                element by element in stored order. Missing values and empty arrays sort last regardless of direction.
               </p>
               <p>
                 The server loads metadata configuration at startup and keeps it in memory for requests. Missing files default to recorded without time, enabled as a filter, no metadata fields, and sorting by recorded descending followed by title
@@ -1234,7 +1275,7 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               </p>
             </section>
             <section id="en-lifecycle" aria-labelledby="en-lifecycle-title">
-              <span class="badge planned">Client architecture</span>
+              <span class="badge">Frontend implemented</span>
               <h2 id="en-lifecycle-title">06 · Adding users and changing passwords</h2>
               <h3>Adding another user</h3>
               <p>
@@ -1242,8 +1283,8 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
                 new passwordKey and saved as the new userKey. No new pair of master keys is generated.
               </p>
               <p>
-                In this procedure the provisioning client temporarily processes the new user’s initial password. An invitation protocol or public-key handover is outside this architecture. The backend receives the completed password attributes; it
-                does not unwrap or rewrap the keys.
+                In this procedure the provisioning client temporarily processes the new user’s initial password. The frontend provides an invitation link containing a temporary password in its URL fragment; a public-key handover protocol is outside
+                this architecture. The backend receives the completed password attributes; it does not unwrap or rewrap the keys.
               </p>
               <h3>Changing a password</h3>
               <p>
@@ -1266,11 +1307,11 @@ masterAuthKey       = AES-256-KW-Unwrap(passwordKey, wrappedAuth)</code></pre>
               </p>
               <p>
                 <code>passwordKeySalt</code>, <code>userKey</code> and the master keys need not change, because passwordKey derivation does not depend on the username. An admin also needs the correctly rederived loginHash; the backend receives no
-                plaintext password for this operation. This backend support is implemented; derivation follows the intended client procedure.
+                plaintext password for this operation. The frontend implements derivation. Administrative renaming also generates a temporary password and rewraps userKey; the two backend calls are not one transaction.
               </p>
             </section>
             <section id="en-files" aria-labelledby="en-files-title">
-              <span class="badge planned">Client architecture</span>
+              <span class="badge">Frontend implemented</span>
               <h2 id="en-files-title">07 · Files: encryption and binary format</h2>
               <p>For each new encryption of a video or thumbnail file, the client generates a fresh, random 32-byte fileKey and wraps it with masterEncryptionKey using AES-256-KW. Replacing a file also requires a fresh fileKey.</p>
               <p>
@@ -1373,7 +1414,7 @@ offset(i) = 40 + i × B</code></pre>
               <div class="note">A GCM tag is not a separate HMAC-SHA-256 output. It belongs to authenticated AES-GCM encryption and protects ciphertext and AAD. The metadata HMAC has a separate purpose and key.</div>
             </section>
             <section id="en-text" aria-labelledby="en-text-title">
-              <span class="badge planned">Client architecture</span>
+              <span class="badge">Frontend implemented</span>
               <h2 id="en-text-title">08 · Video titles, descriptions and comment contents</h2>
               <p>
                 Video titles, descriptions and comment contents use the same procedure as files: UTF-8 plaintext, a fresh random 32-byte fileKey, AES-KW with masterEncryptionKey, 34-KiB chunks and AES-256-GCM. The complete binary container is then
@@ -1404,7 +1445,7 @@ content     = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, 
               </p>
             </section>
             <section id="en-metadata" aria-labelledby="en-metadata-title">
-              <span class="badge planned">Client architecture</span>
+              <span class="badge">Frontend implemented</span>
               <h2 id="en-metadata-title">09 · Metadata integrity and tombstones</h2>
               <p>The client generates the metadata HMAC with masterAuthKey and HMAC-SHA-256. Its input is a canonical representation of all business attributes of the video or comment record, following these rules:</p>
               <ol>
@@ -1445,6 +1486,41 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
             </section>
             <section id="en-limits" aria-labelledby="en-limits-title">
               <h2 id="en-limits-title">10 · Protection and limitations</h2>
+              <h3>Implemented browser and offline behavior</h3>
+              <p>
+                The standalone React project in <code>frontend/</code> is a PWA over HTTPS (localhost also works for development). The service worker caches local application assets only. JWT, bootstrap and the user profile containing the wrapped
+                userKey are stored in localStorage. The JWT is a bearer secret: same-origin malicious code can read it; XSS or a compromised frontend can also capture unlocked keys and plaintext.
+              </p>
+              <p>
+                Each reload requires the password for local unlocking. Decrypted master keys remain in the open page’s memory only. A 401 or logout removes the token and active media capabilities. Offline unlocking uses the previously loaded profile
+                and a token that has not expired locally; it is not a current server-side permission check. UI roles never replace backend authorization.
+              </p>
+              <p>
+                IndexedDB stores the catalog with encrypted titles and descriptions, the latest synchronized modification time and previously loaded encrypted thumbnails, separated by instance salt and user ID. Decrypted texts and thumbnails are not
+                stored there. Business metadata, including recorded, remains unencrypted as on the server. “Clear offline data” removes this account’s cache; ordinary logout retains the encrypted cache.
+              </p>
+              <p>
+                Synchronization first requests <code>/api/video/0</code>, then changes since the highest known lastModified. <code>/api/video/catalog</code> provides authenticated users with current IDs to remove deleted entries. Ciphertext and
+                cursor are persisted together only after successful integrity checks. Reconciliation is not cryptographic proof against suppression, a transactional snapshot, or protection against incorrect client clocks or backdated changes.
+              </p>
+              <h3>Range playback and download</h3>
+              <p>
+                The backend supports authenticated HEAD and HTTP Range requests for encrypted video bytes. A temporary random service-worker media path turns player requests into messages to the unlocked page. The page fetches complete affected
+                chunks, checks tags and AAD, and returns only the requested plaintext bytes. The service worker streams those bytes in bounded blocks to the player or download; plaintext videos are never persistently cached. The page must remain open
+                and unlocked. Videos are initially online-only.
+              </p>
+              <h3>Password rules and invitations</h3>
+              <p>
+                The frontend requires at least 12 characters and three of four categories (uppercase, lowercase, numbers, special characters). This UI rule does not replace an additional server-side policy. On submission, the browser queries the
+                Pwned Passwords range API: only five hexadecimal SHA-1 characters are sent, with <code>Add-Padding: true</code>; the full comparison stays local. SHA-1 is used for lookup only, never password derivation. The service sees the IP
+                address and prefix. Breached passwords are rejected; outages allow continuation with a warning.
+              </p>
+              <p>
+                For creation or an administrative password reset, the browser generates a random temporary password and rewraps the shared master keys. A link displayed once contains <code>{type: invite|reset, username, password}</code> as Base64url
+                JSON in its fragment. Fragments are not sent in HTTP requests but remain secrets: history, clipboard, extensions and recipients can read them. The app immediately scrubs the fragment upon reading and then requires a password change.
+                This requirement is explicitly enforced in the frontend only; links have neither server-enforced single use nor a separate expiry time. Password changes do not revoke existing JWTs.
+              </p>
+
               <p>
                 The architecture protects content confidentiality from a server or storage system that handles encrypted data only. Authenticated encryption detects tampering within its bound context, and the shared HMAC protects metadata integrity
                 against parties without masterAuthKey.
@@ -1524,7 +1600,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                   </tr>
                   <tr>
                     <td>Client cryptography</td>
-                    <td>File/text encryption, AAD, metadata HMACs and client-side rewrapping are the agreed target architecture; the backend does not verify this cryptography.</td>
+                    <td><a href="frontend/src/lib/crypto.ts">Frontend cryptography</a>: file/text encryption, AAD, HMAC verification and rewrapping are implemented; the backend does not verify this cryptography.</td>
                   </tr>
                 </tbody>
               </table>

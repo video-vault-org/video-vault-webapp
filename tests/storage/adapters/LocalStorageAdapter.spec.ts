@@ -24,6 +24,18 @@ describe('LocalStorageAdapter', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
+  test('size distinguishes absent, empty, saved and deleted objects without reading contents', async () => {
+    expect(await adapter.size(descriptor)).toBeNull();
+    await save(descriptor, Buffer.alloc(0));
+    expect(await adapter.size(descriptor)).toBe(0);
+    await save(descriptor, bytes);
+    const read = jest.spyOn(adapter, 'read');
+    expect(await adapter.size(descriptor)).toBe(bytes.length);
+    expect(read).not.toHaveBeenCalled();
+    await adapter.delete(descriptor);
+    expect(await adapter.size(descriptor)).toBeNull();
+  });
+
   test('getBasePath returns the configured path', () => {
     expect(adapter.getBasePath()).toBe(directory);
   });

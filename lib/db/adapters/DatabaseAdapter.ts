@@ -170,6 +170,12 @@ interface DatabaseAdapter {
   findAllVideos(): Promise<Video[]>;
 
   /**
+   * Finds every current video ID without loading the other video attributes.
+   * No sorting or pagination; returns an empty array if no videos exist.
+   */
+  findAllVideoIds(): Promise<string[]>;
+
+  /**
    * Deletes a video by its videoId
    * @param videoId The id of the video to be deleted
    */

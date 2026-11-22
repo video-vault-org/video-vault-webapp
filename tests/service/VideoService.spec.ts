@@ -36,6 +36,16 @@ describe('VideoService', () => {
     jest.restoreAllMocks();
   });
 
+  test('videoFileSize delegates the ID and preserves absence and failures', async () => {
+    const size = jest.spyOn(storage, 'videoFileSize').mockResolvedValueOnce(123).mockResolvedValueOnce(null);
+    expect(await service.videoFileSize({ videoId })).toBe(123);
+    expect(size).toHaveBeenCalledWith({ videoId });
+    expect(await service.videoFileSize({ videoId })).toBeNull();
+    const error = new Error('denied');
+    size.mockRejectedValueOnce(error);
+    await expect(service.videoFileSize({ videoId })).rejects.toBe(error);
+  });
+
   describe('submitVideo', () => {
     test('saves both files, posts metadata, then deletes the temporary files', async () => {
       const saveVideo = jest.spyOn(storage, 'saveVideoFile').mockResolvedValue(undefined);
@@ -303,6 +313,23 @@ describe('VideoService', () => {
       jest.spyOn(db, 'findAllVideos').mockRejectedValueOnce(error);
 
       await expect(service.findAllVideos()).rejects.toBe(error);
+    });
+  });
+
+  describe('findAllVideoIds', () => {
+    test.each([[[]], [['v1', 'v2']]])('returns the IDs from the dedicated database method %j', async (ids) => {
+      const find = jest.spyOn(db, 'findAllVideoIds').mockResolvedValueOnce(ids);
+      const full = jest.spyOn(db, 'findAllVideos');
+      await expect(service.findAllVideoIds()).resolves.toBe(ids);
+      expect(find).toHaveBeenCalledTimes(1);
+      expect(find).toHaveBeenCalledWith();
+      expect(full).not.toHaveBeenCalled();
+    });
+
+    test('propagates database errors', async () => {
+      const error = new Error('Database unavailable');
+      jest.spyOn(db, 'findAllVideoIds').mockRejectedValueOnce(error);
+      await expect(service.findAllVideoIds()).rejects.toBe(error);
     });
   });
 

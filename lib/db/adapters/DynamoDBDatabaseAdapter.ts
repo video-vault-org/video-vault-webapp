@@ -328,6 +328,10 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     return (await this.scan<StoredVideo>('videos')).map(decodeVideo);
   }
 
+  public async findAllVideoIds(): Promise<string[]> {
+    return (await this.scan<Pick<StoredVideo, 'videoId'>>('videos', 'videoId')).map(({ videoId }) => videoId);
+  }
+
   public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
     await this.documentClient().send(new DeleteCommand({ TableName: this.table('videos'), Key: { videoPartition, videoId } }));
   }
@@ -508,11 +512,11 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     return (Item as T | undefined) ?? null;
   }
 
-  private async scan<T>(table: Table): Promise<T[]> {
+  private async scan<T>(table: Table, projection?: string): Promise<T[]> {
     const items: T[] = [];
     let cursor: Key | undefined = undefined;
     do {
-      const page: ScanCommandOutput = await this.documentClient().send(new ScanCommand({ TableName: this.table(table), ExclusiveStartKey: cursor }));
+      const page: ScanCommandOutput = await this.documentClient().send(new ScanCommand({ TableName: this.table(table), ExclusiveStartKey: cursor, ...(projection ? { ProjectionExpression: projection } : {}) }));
       for (const item of page.Items ?? []) {
         items.push(item as T);
       }

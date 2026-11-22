@@ -30,6 +30,10 @@ class InMemoryStorageAdapter implements StorageAdapter {
     return data.subarray(start, end + 1);
   }
 
+  public async size(descriptor: string): Promise<number | null> {
+    return this.storage[descriptor]?.length ?? null;
+  }
+
   public async delete(descriptor: string): Promise<void> {
     delete this.storage[descriptor];
   }

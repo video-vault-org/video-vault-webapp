@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CreateBucketCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CreateBucketCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { MinioContainer, StartedMinioContainer } from '@testcontainers/minio';
 import { S3StorageAdapter } from '@/storage/adapters/S3StorageAdapter';
 
@@ -41,6 +41,17 @@ describe('S3StorageAdapter', () => {
     client?.destroy();
     await container?.stop();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  test('size reads object metadata from MinIO for missing, empty, overwritten and deleted objects', async () => {
+    const descriptor = 'size.bin';
+    expect(await adapter.size(descriptor)).toBeNull();
+    await save(descriptor, Buffer.alloc(0));
+    expect(await adapter.size(descriptor)).toBe(0);
+    await save(descriptor, bytes);
+    expect(await adapter.size(descriptor)).toBe(bytes.length);
+    await adapter.delete(descriptor);
+    expect(await adapter.size(descriptor)).toBeNull();
   });
 
   test('getConf returns the S3 client and configured bucket', async () => {
@@ -150,5 +161,24 @@ describe('S3StorageAdapter', () => {
     await expect(adapter.delete(key)).resolves.toBeUndefined();
     expect(await adapter.read(key)).toBeNull();
     await expect(adapter.delete(key)).resolves.toBeUndefined();
+  });
+});
+
+// Metadata unit tests deliberately do not start a container.
+describe('S3StorageAdapter size metadata', () => {
+  afterEach(() => jest.restoreAllMocks());
+  test('uses HeadObject, recognizes 404 and propagates other failures', async () => {
+    const adapter = new S3StorageAdapter({ region: 'us-east-1', accessKeyId: 'key', secretAccessKey: 'secret', bucket: 'bucket' }),
+      [client] = adapter.getConf();
+    const send = jest.spyOn(client, 'send').mockImplementation(async () => ({ ContentLength: 123 }) as never);
+    expect(await adapter.size('v.video')).toBe(123);
+    expect(send.mock.calls[0][0]).toBeInstanceOf(HeadObjectCommand);
+    expect((send.mock.calls[0][0] as HeadObjectCommand).input).toEqual({ Bucket: 'bucket', Key: 'v.video' });
+    send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 404 } } as never);
+    expect(await adapter.size('missing')).toBeNull();
+    const error = new Error('denied');
+    send.mockRejectedValueOnce(error as never);
+    await expect(adapter.size('v.video')).rejects.toBe(error);
+    client.destroy();
   });
 });

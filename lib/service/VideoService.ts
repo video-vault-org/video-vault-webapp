@@ -153,6 +153,20 @@ class VideoService {
   }
 
   /**
+   * Finds all current video IDs without loading complete video records.
+   * @returns Video IDs without sorting, or an empty array if no videos exist.
+   * @throws If the database query fails.
+   */
+  public async findAllVideoIds(): Promise<string[]> {
+    return await this.db.findAllVideoIds();
+  }
+
+  /** Returns encrypted video size without loading its bytes; available to authenticated playback clients. */
+  public async videoFileSize({ videoId }: { videoId: string }): Promise<number | null> {
+    return this.storage.videoFileSize({ videoId });
+  }
+
+  /**
    * Reads a byte range from a video's stored video file.
    * @param videoId The ID of the video to read.
    * @param from The first byte offset, inclusive; defaults to the start of the file.

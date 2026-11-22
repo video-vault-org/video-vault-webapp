@@ -31,6 +31,9 @@ interface StorageAdapter {
    * @param descriptor filename for file storage, object key on s3 storage
    */
   delete(descriptor: string): Promise<void>;
+
+  /** Returns stored byte length without downloading the object; null if absent. */
+  size(descriptor: string): Promise<number | null>;
 }
 
 export { StorageAdapter };

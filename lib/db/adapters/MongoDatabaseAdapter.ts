@@ -138,6 +138,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     return (await this.videos()).find<Video>({}, withoutId).toArray();
   }
 
+  public async findAllVideoIds(): Promise<string[]> {
+    return (await (await this.videos()).find<Pick<Video, 'videoId'>>({}, { projection: { videoId: 1, _id: 0 } }).toArray()).map(({ videoId }) => videoId);
+  }
+
   public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
     await this.write(async () => (await this.videos()).deleteOne({ videoId }));
   }

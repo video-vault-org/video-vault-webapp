@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { Upload } from '@aws-sdk/lib-storage';
-import { S3Client, S3ClientConfig, GetObjectCommand, DeleteObjectCommand, DeleteObjectCommandInput } from '@aws-sdk/client-s3';
+import { S3Client, S3ClientConfig, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectCommandInput } from '@aws-sdk/client-s3';
 import { StorageAdapter } from './StorageAdapter';
 import { S3StorageConf } from '@/storage/config/S3StorageConf';
 
@@ -41,6 +41,17 @@ class S3StorageAdapter implements StorageAdapter {
 
   public async readRange(descriptor: string, from?: number, to?: number): Promise<Buffer | null> {
     return await this.readObject(descriptor, from, to);
+  }
+
+  public async size(descriptor: string): Promise<number | null> {
+    try {
+      const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: descriptor }));
+      if (result.ContentLength === undefined) throw new Error('Missing object size');
+      return result.ContentLength;
+    } catch (error) {
+      if ((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode === 404) return null;
+      throw error;
+    }
   }
 
   public async delete(descriptor: string): Promise<void> {

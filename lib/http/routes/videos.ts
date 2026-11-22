@@ -5,6 +5,7 @@ import { VideoService } from '@/service/VideoService';
 import { Video } from '@/domain/Video';
 import { authorization } from '../middleware';
 import { HttpError } from '../errors';
+import { parseByteRange } from '../byteRange';
 import { UploadStore } from '../uploads';
 import { Type, object, id, text, video, videoChange, sinceDate, metadata, errorResponses, noContent, videoInput, date } from '../validation';
 
@@ -99,27 +100,51 @@ function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthServi
     return reply.code(204).send(null);
   });
 
+  /** GET /api/video/catalog — Any authenticated user. Current IDs for pruning deleted offline entries; no content is returned. */
+  router.get('/catalog', { schema: { response: { 200: Type.Array(id), ...errorResponses } } }, async () => videos.findAllVideoIds());
+
+  /** HEAD /api/video/file/:videoId — Any authenticated user. Encrypted size for authenticated chunk-range playback. */
+  router.head('/file/:videoId', { config: { swagger: { exposeHeadRoute: true } }, schema: { params, response: { 200: Type.Null(), ...errorResponses } } }, async (request, reply) => {
+    await requireVideo(request.params.videoId);
+    const size = await videos.videoFileSize(request.params);
+    if (size === null) throw new HttpError(404, 'Video file not found');
+    return reply.header('Content-Length', size).header('Accept-Ranges', 'bytes').type('application/octet-stream').send(null);
+  });
+
   /** GET /api/video/all — Editors only. Returns all video metadata. */
   router.get('/all', { onRequest: editor, schema: { response: { 200: Type.Array(video), ...errorResponses } } }, async () => (await videos.findAllVideos()).map(publicVideo));
 
   /** GET /api/video/find/:videoId — Editors only. Returns video metadata or 404. */
   router.get('/find/:videoId', { onRequest: editor, schema: { params, response: { 200: video, ...errorResponses } } }, async (request) => publicVideo(await requireVideo(request.params.videoId)));
 
-  /** GET /api/video/file/:videoId?from=&to= — Any authenticated user. Encrypted bytes with inclusive bounds. */
+  /** GET /api/video/file/:videoId?from=&to= — Any authenticated user. Encrypted bytes with inclusive query bounds or one HTTP Range header (206). */
   router.get(
     '/file/:videoId',
     {
+      exposeHeadRoute: false,
       schema: {
         params,
         querystring: object({ from: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })), to: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })) }),
-        response: { 200: Type.Unsafe<Buffer>({ type: 'string', format: 'binary' }), ...errorResponses }
+        response: { 200: Type.Unsafe<Buffer>({ type: 'string', format: 'binary' }), 206: Type.Unsafe<Buffer>({ type: 'string', format: 'binary' }), ...errorResponses }
       }
     },
     async (request, reply) => {
       const { videoId } = request.params;
-      const { from, to } = request.query;
+      let { from, to } = request.query;
       if (from !== undefined && to !== undefined && from > to) throw new HttpError(416, 'Invalid byte range');
       await requireVideo(videoId);
+      if (request.headers.range !== undefined) {
+        if (from !== undefined || to !== undefined) throw new HttpError(400, 'Use Range or query bounds, not both');
+        const size = await videos.videoFileSize({ videoId });
+        if (size === null) throw new HttpError(404, 'Video file not found');
+        try {
+          [from, to] = parseByteRange(request.headers.range, size);
+        } catch {
+          reply.header('Content-Range', `bytes */${size}`);
+          throw new HttpError(416, 'Invalid byte range');
+        }
+        reply.code(206).header('Content-Range', `bytes ${from}-${to}/${size}`).header('Accept-Ranges', 'bytes');
+      }
       let bytes: Buffer | null;
       try {
         bytes = await videos.readVideoFileRange({ videoId, from, to });

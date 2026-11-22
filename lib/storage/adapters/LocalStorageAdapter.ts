@@ -86,6 +86,15 @@ class LocalStorageAdapter implements StorageAdapter {
     }
   }
 
+  public async size(descriptor: string): Promise<number | null> {
+    try {
+      return (await stat(join(this.basePath, descriptor))).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return null;
+      throw error;
+    }
+  }
+
   public async delete(descriptor: string): Promise<void> {
     try {
       await unlink(join(this.basePath, descriptor));

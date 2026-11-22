@@ -177,6 +177,10 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     return this.videos;
   }
 
+  public async findAllVideoIds(): Promise<string[]> {
+    return this.videos.map(({ videoId }) => videoId);
+  }
+
   public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
     const videoIndex = this.videos.findIndex((video) => video.videoId === videoId);
     if (videoIndex < 0) {

@@ -350,6 +350,29 @@ describe('DynamoDBDatabaseAdapter', () => {
       expect(await db.findManyVideosLastModified({ since: new Date(400) })).toEqual([]);
     });
 
+    test('findAllVideoIds returns only IDs without using findAllVideos or exposing mutable storage', async () => {
+      const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full video loading is not allowed'));
+      try {
+        const ids = await db.findAllVideoIds();
+        expect(ids).toHaveLength(2);
+        expect(ids).toEqual(expect.arrayContaining([video.videoId, otherVideo.videoId]));
+        ids.pop();
+        expect(await db.findAllVideoIds()).toHaveLength(2);
+        expect(full).not.toHaveBeenCalled();
+      } finally {
+        full.mockRestore();
+      }
+    });
+
+    test('findAllVideoIds reflects deletions and returns an empty array for an empty collection', async () => {
+      await db.deleteVideoByVideoId({ videoId: video.videoId });
+      expect(await db.findAllVideoIds()).toEqual([otherVideo.videoId]);
+      await db.deleteVideoByVideoId({ videoId: otherVideo.videoId });
+      expect(await db.findAllVideoIds()).toEqual([]);
+      await db.postVideo({ ...video, videoId: 'v3' });
+      expect(await db.findAllVideoIds()).toEqual(['v3']);
+    });
+
     test('findAllVideos returns every video', async () => {
       expect(await db.findAllVideos()).toHaveLength(2);
       expect(await db.findAllVideos()).toEqual(expect.arrayContaining([video, otherVideo]));
@@ -669,6 +692,30 @@ describe('DynamoDBDatabaseAdapter service pagination', () => {
     expect(next).toBeInstanceOf(QueryCommand);
     expect(next.input.ExclusiveStartKey).toEqual(key);
     expect(next.input.IndexName).toBe('CommentsByVideo');
+  });
+
+  test('findAllVideoIds projects only videoId on every scan page without using an index', async () => {
+    const first = { videoPartition: 'videos', videoId: 'a' };
+    const second = { videoPartition: 'videos', videoId: 'b' };
+    send
+      .mockResolvedValueOnce({ Items: [{ videoId: 'a' }], LastEvaluatedKey: first })
+      .mockResolvedValueOnce({ Items: [], LastEvaluatedKey: second })
+      .mockResolvedValueOnce({ Items: [{ videoId: 'c' }] });
+    expect(await adapter.findAllVideoIds()).toEqual(['a', 'c']);
+    expect(send).toHaveBeenCalledTimes(3);
+    for (const [command] of send.mock.calls) {
+      expect(command).toBeInstanceOf(ScanCommand);
+      expect(command.input.ProjectionExpression).toBe('videoId');
+      expect(command.input.IndexName).toBeUndefined();
+    }
+    expect(send.mock.calls[1][0].input.ExclusiveStartKey).toEqual(first);
+    expect(send.mock.calls[2][0].input.ExclusiveStartKey).toEqual(second);
+  });
+
+  test('findAllVideoIds propagates scan failures rather than returning an incomplete catalog', async () => {
+    const error = new Error('Scan failed');
+    send.mockResolvedValueOnce({ Items: [{ videoId: 'a' }], LastEvaluatedKey: { videoPartition: 'videos', videoId: 'a' } }).mockRejectedValueOnce(error);
+    await expect(adapter.findAllVideoIds()).rejects.toBe(error);
   });
 
   test('findAllUsers follows scan continuation keys', async () => {

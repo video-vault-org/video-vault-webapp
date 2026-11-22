@@ -340,6 +340,29 @@ describe('SQLiteDatabaseAdapter', () => {
       expect(await db.findManyVideosLastModified({ since: new Date(400) })).toEqual([]);
     });
 
+    test('findAllVideoIds returns only IDs without using findAllVideos or exposing mutable storage', async () => {
+      const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full video loading is not allowed'));
+      try {
+        const ids = await db.findAllVideoIds();
+        expect(ids).toHaveLength(2);
+        expect(ids).toEqual(expect.arrayContaining([video.videoId, otherVideo.videoId]));
+        ids.pop();
+        expect(await db.findAllVideoIds()).toHaveLength(2);
+        expect(full).not.toHaveBeenCalled();
+      } finally {
+        full.mockRestore();
+      }
+    });
+
+    test('findAllVideoIds reflects deletions and returns an empty array for an empty collection', async () => {
+      await db.deleteVideoByVideoId({ videoId: video.videoId });
+      expect(await db.findAllVideoIds()).toEqual([otherVideo.videoId]);
+      await db.deleteVideoByVideoId({ videoId: otherVideo.videoId });
+      expect(await db.findAllVideoIds()).toEqual([]);
+      await db.postVideo({ ...video, videoId: 'v3' });
+      expect(await db.findAllVideoIds()).toEqual(['v3']);
+    });
+
     test('findAllVideos returns every video', async () => {
       expect(await db.findAllVideos()).toHaveLength(2);
       expect(await db.findAllVideos()).toEqual(expect.arrayContaining([video, otherVideo]));

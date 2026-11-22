@@ -83,8 +83,9 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(Object.keys(document.paths).every((path) => path === '/login' || path === '/bootstrap' || path.startsWith('/api/'))).toBe(true);
     const ids: string[] = [];
     for (const path of Object.keys(document.paths)) {
-      expect(document.paths[path].head).toBeUndefined();
-      for (const method of ['get', 'post', 'patch', 'delete']) {
+      if (path === '/api/video/file/{videoId}') expect(document.paths[path].head).toBeDefined();
+      else expect(document.paths[path].head).toBeUndefined();
+      for (const method of ['get', 'head', 'post', 'patch', 'delete']) {
         const operation = document.paths[path][method];
         if (!operation) continue;
         expect(operation.summary).toBeTruthy();
@@ -92,7 +93,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
         ids.push(operation.operationId);
       }
     }
-    expect(ids).toHaveLength(37);
+    expect(ids).toHaveLength(39);
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });
@@ -106,7 +107,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/comment/change/{commentId}'].patch.description).toContain('Requires role: moderator');
     expect(document.paths['/api/comments/{videoId}'].get.description).toBe('Requires an authenticated user.');
     for (const path of Object.keys(document.paths).filter((path) => path.startsWith('/api/'))) {
-      for (const method of ['get', 'post', 'patch', 'delete']) if (document.paths[path][method]) expect(document.paths[path][method].security).toEqual([{ bearerAuth: [] }]);
+      for (const method of ['get', 'head', 'post', 'patch', 'delete']) if (document.paths[path][method]) expect(document.paths[path][method].security).toEqual([{ bearerAuth: [] }]);
     }
     expect((await app.inject('/api/user/me')).statusCode).toBe(401);
     expect((await app.inject({ url: '/api/user/all', headers: { authorization: 'Bearer editor-token' } })).statusCode).toBe(403);

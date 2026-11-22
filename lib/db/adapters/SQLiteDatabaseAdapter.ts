@@ -232,6 +232,10 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
     return this.find(toVideo, 'SELECT * FROM videos');
   }
 
+  public async findAllVideoIds(): Promise<string[]> {
+    return this.find(({ videoId }: Pick<Video, 'videoId'>) => videoId, 'SELECT "videoId" FROM videos');
+  }
+
   public async deleteVideoByVideoId({ videoId }: { videoId: string }): Promise<void> {
     this.write('DELETE FROM videos WHERE "videoId" = $1', [videoId]);
   }
