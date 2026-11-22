@@ -11,6 +11,7 @@ import { Thumbnail } from './components/Thumbnail';
 import { VideoOverlay } from './components/VideoOverlay';
 import { VideoForm } from './components/VideoForm';
 import { Account, PasswordChange, UserManagement } from './components/Accounts';
+import { ThemeSelect } from './components/ThemeSelect';
 
 const REPO = 'https://github.com/video-vault-org/video-vault-webapp';
 const SECURITY = '/SECURITY-ARCHITECTURE.html';
@@ -578,6 +579,7 @@ const Application = function () {
           <span>{config?.app.title ?? 'VideoVault'}</span>
         </a>
         <nav>
+          <ThemeSelect />
           <a href={SECURITY} target="_blank" rel="noreferrer">
             {t('Sicherheitsarchitektur', 'Security architecture')} ↗
           </a>

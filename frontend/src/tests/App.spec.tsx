@@ -67,6 +67,7 @@ const login = async function () {
 test('logs in, loads since=0, stores ciphertext only and grays out forbidden actions', async () => {
   const actor = await login();
   expect(localStorage.getItem(TOKEN)).toBe(token);
+  expect(screen.getByRole('banner')).toContainElement(screen.getByRole('combobox', { name: 'Design' }));
   expect(screen.getByRole('banner').querySelector('img')).toHaveAttribute('src', '/logo.png');
   expect(screen.getByRole('contentinfo').querySelector('img')).toHaveAttribute('src', '/videovault-logo.png');
   expect(screen.getByRole('link', { name: /Sicherheitsarchitektur/ })).toHaveAttribute(

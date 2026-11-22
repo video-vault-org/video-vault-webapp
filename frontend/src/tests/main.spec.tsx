@@ -42,3 +42,14 @@ test('does not register a production worker in the development server', async ()
   await import('../main');
   expect(register).not.toHaveBeenCalled();
 });
+
+test('applies the saved theme before rendering the application', async () => {
+  localStorage.setItem('videovault.theme', 'dark');
+  vi.stubGlobal('navigator', { serviceWorker: { register: vi.fn().mockResolvedValue(undefined) } });
+  const { createRoot } = await import('react-dom/client');
+  vi.mocked(createRoot).mockImplementationOnce(() => {
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    return { render: vi.fn() } as unknown as ReturnType<typeof createRoot>;
+  });
+  await import('../main');
+});
