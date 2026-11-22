@@ -3,7 +3,7 @@
  * https://jestjs.io/docs/configuration
  */
 
-export default {
+const config = {
   transform: {
     '^.+\\.ts?$': 'ts-jest',
     '^.+\\.[cm]?js$': ['esbuild-jest', { target: 'es2020', loaders: { '.mjs': 'js', '.cjs': 'js' } }]
@@ -18,3 +18,5 @@ export default {
   },
   modulePathIgnorePatterns: ['<rootDir>/built', '<rootDir>/frontend']
 };
+
+export default config;

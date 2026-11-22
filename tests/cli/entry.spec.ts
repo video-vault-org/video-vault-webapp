@@ -3,15 +3,20 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn().mockResolvedValue('ab'.repeat(32)) }));
 
 jest.mock('@/db', () => ({ loadDb: jest.fn(), resetDb: jest.fn() }));
+
 jest.mock('@/cli/admin', () => ({ readAdminInput: jest.fn(), initializeAdmin: jest.fn() }));
 
 describe('admin CLI entrypoint', () => {
   const exitCode = process.exitCode;
+
   beforeEach(() => {
     jest.resetModules();
+
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
+
   afterEach(() => {
     process.exitCode = exitCode;
     jest.restoreAllMocks();

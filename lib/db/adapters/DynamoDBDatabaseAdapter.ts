@@ -36,14 +36,14 @@ const byModified = 'VideosByLastModified';
 const videoPartition = 'videos';
 const dateLimit = 8_640_000_000_000_000n;
 
-function keySchema(partition: string, sort?: string): KeySchemaElement[] {
+const keySchema = function (partition: string, sort?: string): KeySchemaElement[] {
   return sort
     ? [
         { AttributeName: partition, KeyType: 'HASH' },
         { AttributeName: sort, KeyType: 'RANGE' }
       ]
     : [{ AttributeName: partition, KeyType: 'HASH' }];
-}
+};
 
 /**
  * Each input uses the AWS CLI CreateTable JSON shape. Ready-to-use inputs
@@ -57,7 +57,7 @@ function keySchema(partition: string, sort?: string): KeySchemaElement[] {
  * For a custom tablePrefix or application title, adjust TableName values to the selected prefix. The LSI must be
  * declared at table creation.
  */
-function createTableInputs(prefix: string): CreateTableCommandInput[] {
+const createTableInputs = function (prefix: string): CreateTableCommandInput[] {
   const table = (name: Table, keys: KeySchemaElement[], attributes: CreateTableCommandInput['AttributeDefinitions'], indexes: Partial<CreateTableCommandInput> = {}): CreateTableCommandInput => ({
     TableName: prefix + name,
     BillingMode: 'PAY_PER_REQUEST',
@@ -65,6 +65,7 @@ function createTableInputs(prefix: string): CreateTableCommandInput[] {
     AttributeDefinitions: attributes,
     ...indexes
   });
+
   const string = (AttributeName: string) => ({ AttributeName, AttributeType: 'S' as const });
 
   return [
@@ -81,20 +82,22 @@ function createTableInputs(prefix: string): CreateTableCommandInput[] {
       ]
     })
   ];
-}
+};
 
-function isError(error: unknown, name: string): boolean {
+const isError = function (error: unknown, name: string): boolean {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === name;
-}
+};
 
-function denied(error: unknown): boolean {
+const denied = function (error: unknown): boolean {
   return ['AccessDeniedException', 'AccessDenied', 'UnauthorizedOperation'].some((name) => isError(error, name));
-}
+};
 
-function verifyTable(expected: CreateTableCommandInput, actual: TableDescription): void {
+const verifyTable = function (expected: CreateTableCommandInput, actual: TableDescription): void {
   const sameKeys = (a: KeySchemaElement[] | undefined, b: KeySchemaElement[] | undefined) => a?.length === b?.length && a?.every((key) => b?.some((other) => other.KeyType === key.KeyType && other.AttributeName === key.AttributeName));
+
   const sameIndexes = (wanted: CreateTableCommandInput['GlobalSecondaryIndexes'], existing: TableDescription['GlobalSecondaryIndexes']) =>
     wanted?.every((index) => existing?.some((other) => index.IndexName === other.IndexName && sameKeys(index.KeySchema, other.KeySchema) && index.Projection?.ProjectionType === other.Projection?.ProjectionType)) ?? true;
+
   if (
     !sameKeys(expected.KeySchema, actual.KeySchema) ||
     !expected.AttributeDefinitions?.every((attribute) => actual.AttributeDefinitions?.some((other) => other.AttributeName === attribute.AttributeName && other.AttributeType === attribute.AttributeType)) ||
@@ -103,25 +106,25 @@ function verifyTable(expected: CreateTableCommandInput, actual: TableDescription
   ) {
     throw new Error(`DynamoDB table ${expected.TableName} does not match the adapter schema`);
   }
-}
+};
 
-function timestamp(date: Date): number {
+const timestamp = function (date: Date): number {
   const time = date.getTime();
   if (!Number.isFinite(time)) {
     throw new RangeError('Invalid DynamoDB date');
   }
   return time;
-}
+};
 
-function decodeComment({ created, lastModified, createdKey: _createdKey, ...comment }: StoredComment): Comment {
+const decodeComment = function ({ created, lastModified, createdKey: _createdKey, ...comment }: StoredComment): Comment {
   return { ...comment, created: new Date(created), lastModified: new Date(lastModified) };
-}
+};
 
-function decodeVideo({ recorded, lastModified, videoPartition: _videoPartition, ...video }: StoredVideo): Video {
+const decodeVideo = function ({ recorded, lastModified, videoPartition: _videoPartition, ...video }: StoredVideo): Video {
   return { ...video, recorded: new Date(recorded), lastModified: new Date(lastModified) };
-}
+};
 
-function readCursor(cursor: string, videoId: string): Key {
+const readCursor = function (cursor: string, videoId: string): Key {
   try {
     const key: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
     if (
@@ -145,7 +148,7 @@ function readCursor(cursor: string, videoId: string): Key {
     // Use the same error for malformed encodings and invalid keys.
   }
   throw new RangeError('Invalid DynamoDB comment cursor');
-}
+};
 
 /**
  * IAM: initialize requires dynamodb:DescribeTable on the five configured table
@@ -468,6 +471,7 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
 
   private async ensureTable(client: DynamoDBClient, input: CreateTableCommandInput): Promise<void> {
     const TableName = input.TableName!;
+
     const describe = async () => {
       try {
         return (await client.send(new DescribeTableCommand({ TableName }))).Table;
@@ -481,6 +485,7 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
         throw error;
       }
     };
+
     let actual = await describe();
     if (!actual) {
       try {

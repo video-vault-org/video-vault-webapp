@@ -8,21 +8,28 @@ import { DynamoDBDatabaseAdapter } from '@/db/adapters/DynamoDBDatabaseAdapter';
 import { DatabaseConfig } from '@/db/config/DatabaseConfig';
 import { loadConfig as loadAppConfig } from '@/app';
 
-function mockAdapter() {
-  return jest.fn().mockImplementation(() => ({
+// Construct instances lazily: Jest hoists mock factories above this const initialization.
+const mockAdapter = function () {
+  return {
     open: jest.fn().mockResolvedValue(undefined),
     initialize: jest.fn().mockResolvedValue(undefined),
     close: jest.fn().mockResolvedValue(undefined)
-  }));
-}
+  };
+};
 
 jest.mock('@/app', () => ({ loadConfig: jest.fn() }));
+
 jest.mock('fs/promises', () => ({ readFile: jest.fn(), writeFile: jest.fn() }));
-jest.mock('@/db/adapters/InMemoryDatabaseAdapter', () => ({ InMemoryDatabaseAdapter: mockAdapter() }));
-jest.mock('@/db/adapters/MongoDatabaseAdapter', () => ({ MongoDatabaseAdapter: mockAdapter() }));
-jest.mock('@/db/adapters/PostgresqlDatabaseAdapter', () => ({ PostgresqlDatabaseAdapter: mockAdapter() }));
-jest.mock('@/db/adapters/SQLiteDatabaseAdapter', () => ({ SQLiteDatabaseAdapter: mockAdapter() }));
-jest.mock('@/db/adapters/DynamoDBDatabaseAdapter', () => ({ DynamoDBDatabaseAdapter: mockAdapter() }));
+
+jest.mock('@/db/adapters/InMemoryDatabaseAdapter', () => ({ InMemoryDatabaseAdapter: jest.fn().mockImplementation(() => mockAdapter()) }));
+
+jest.mock('@/db/adapters/MongoDatabaseAdapter', () => ({ MongoDatabaseAdapter: jest.fn().mockImplementation(() => mockAdapter()) }));
+
+jest.mock('@/db/adapters/PostgresqlDatabaseAdapter', () => ({ PostgresqlDatabaseAdapter: jest.fn().mockImplementation(() => mockAdapter()) }));
+
+jest.mock('@/db/adapters/SQLiteDatabaseAdapter', () => ({ SQLiteDatabaseAdapter: jest.fn().mockImplementation(() => mockAdapter()) }));
+
+jest.mock('@/db/adapters/DynamoDBDatabaseAdapter', () => ({ DynamoDBDatabaseAdapter: jest.fn().mockImplementation(() => mockAdapter()) }));
 
 describe('db', () => {
   const path = './conf/db.json';
@@ -124,6 +131,7 @@ describe('db', () => {
       read.mockResolvedValue(JSON.stringify(dynamodb));
       const error = new Error('CreateTable denied');
       const failed = { open: jest.fn().mockResolvedValue(undefined), initialize: jest.fn().mockRejectedValue(error), close: jest.fn().mockResolvedValue(undefined) };
+
       jest.mocked(DynamoDBDatabaseAdapter).mockImplementationOnce(() => failed as unknown as DynamoDBDatabaseAdapter);
 
       await expect(loadDb()).rejects.toBe(error);

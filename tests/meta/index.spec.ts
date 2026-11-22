@@ -18,11 +18,13 @@ const config: MetaConfig = {
 describe('metadata configuration persistence', () => {
   let directory: string;
   let originalDirectory: string;
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-meta-'));
     originalDirectory = process.cwd();
     process.chdir(directory);
   });
+
   afterEach(async () => {
     jest.restoreAllMocks();
     process.chdir(originalDirectory);

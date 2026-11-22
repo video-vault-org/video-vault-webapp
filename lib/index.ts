@@ -9,7 +9,9 @@ startServer().then(
         process.exitCode = 1;
       });
     };
+
     process.once('SIGINT', shutdown);
+
     process.once('SIGTERM', shutdown);
   },
   () => {

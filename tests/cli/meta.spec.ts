@@ -5,12 +5,15 @@ import { loadConfig, saveConfig } from '@/meta';
 import { DEFAULT_META_CONFIG, MetaConfig } from '@/meta/config/MetaConfig';
 
 jest.mock('prompts', () => jest.fn());
+
 jest.mock('node:fs/promises', () => ({ access: jest.fn() }));
+
 jest.mock('@/meta', () => ({ loadConfig: jest.fn(), saveConfig: jest.fn() }));
 
 describe('metadata configuration CLI', () => {
   let answers: unknown[];
   let questions: prompts.PromptObject[];
+
   beforeEach(() => {
     jest.resetAllMocks();
     answers = [];
@@ -18,6 +21,7 @@ describe('metadata configuration CLI', () => {
     jest.mocked(access).mockRejectedValue(Object.assign(new Error('Missing'), { code: 'ENOENT' }));
     jest.mocked(loadConfig).mockResolvedValue(null);
     jest.mocked(saveConfig).mockResolvedValue(undefined);
+
     jest.mocked(prompts).mockImplementation(async (question) => {
       const q = question as prompts.PromptObject;
       questions.push(q);
@@ -144,6 +148,7 @@ describe('metadata configuration CLI', () => {
 
   test.each(['Recorded: include time?', 'Field 1: key', 'Sort priority 1', 'Sort direction: Recorded'])('cancelling %s prevents a partial save', async (message) => {
     const implementation = jest.mocked(prompts).getMockImplementation()!;
+
     jest.mocked(prompts).mockImplementation(async (question, options) => {
       if ((question as prompts.PromptObject).message === message) {
         options?.onCancel?.(question as prompts.PromptObject, {});
@@ -151,6 +156,7 @@ describe('metadata configuration CLI', () => {
       }
       return implementation(question, options);
     });
+
     answers = [false, true, 1, 'field', 'Name', 'text', false, true, false, 'recorded', 'desc', 'no-more'];
     await expect(initializeMetaConfig()).rejects.toThrow('cancelled');
     expect(saveConfig).not.toHaveBeenCalled();

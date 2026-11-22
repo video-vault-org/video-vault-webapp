@@ -4,6 +4,7 @@ import { BackgroundLogger } from '@/http/logging';
 import { startTemporaryFileCleanup } from '@/jobs/temporaryFileCleanup';
 
 jest.mock('node:fs/promises', () => ({ access: jest.fn(), readdir: jest.fn(), lstat: jest.fn(), unlink: jest.fn() }));
+
 const hour = 60 * 60 * 1000;
 
 describe('scheduled temporary file cleanup', () => {
@@ -11,11 +12,13 @@ describe('scheduled temporary file cleanup', () => {
   const info = jest.fn();
   const error = jest.fn();
   const logger = { info, error } as BackgroundLogger;
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.resetAllMocks();
     jest.mocked(readdir).mockResolvedValue([]);
   });
+
   afterEach(async () => {
     await stop?.();
     stop = undefined;
@@ -54,12 +57,14 @@ describe('scheduled temporary file cleanup', () => {
 
   test('does not overlap runs and waits for an active cleanup during shutdown', async () => {
     let finish!: (entries: Dirent[]) => void;
+
     jest.mocked(readdir).mockImplementationOnce(
       () =>
         new Promise<Dirent[]>((resolve) => {
           finish = resolve;
         }) as ReturnType<typeof readdir>
     );
+
     stop = startTemporaryFileCleanup({ logger });
     await jest.advanceTimersByTimeAsync(3 * hour);
     expect(readdir).toHaveBeenCalledTimes(1);

@@ -3,6 +3,7 @@ import { HttpError } from './errors';
 
 /** Strict JSON objects reject unexpected input fields instead of silently removing them. */
 const object = <T extends TProperties>(properties: T) => Type.Object(properties, { additionalProperties: false });
+
 const id = Type.String({ minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' });
 const text = Type.String({ minLength: 1, maxLength: 4096 });
 const username = Type.String({ minLength: 3, maxLength: 4096 });
@@ -21,15 +22,15 @@ const errorResponses = { '4xx': error, '5xx': error };
 const noContent = { 204: Type.Null(), ...errorResponses };
 
 /** Converts validated wire timestamps to the Date values expected by database services. */
-function videoInput(input: Static<typeof video>) {
+const videoInput = function (input: Static<typeof video>) {
   return { ...input, recorded: new Date(input.recorded), lastModified: new Date(input.lastModified) };
-}
+};
 
 /** Parses an ISO date with timezone or a non-negative Unix timestamp in milliseconds. */
-function sinceDate(value: string): Date {
+const sinceDate = function (value: string): Date {
   const parsed = new Date(/^\d+$/.test(value) ? Number(value) : value);
   if (!Number.isFinite(parsed.getTime())) throw new HttpError(400, 'Invalid date');
   return parsed;
-}
+};
 
 export { Type, object, id, text, username, date, metadata, passwordProperties, password, video, videoChange, comment, commentChange, user, errorResponses, noContent, videoInput, sinceDate };

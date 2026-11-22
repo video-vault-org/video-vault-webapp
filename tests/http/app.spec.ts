@@ -78,6 +78,7 @@ describe('Fastify backend', () => {
   let staticDirectory: string;
   let storedHash: string;
   const tokens = {} as Record<Role, string>;
+
   const makeUser = (name: Role): User => ({
     userId: name,
     username: name,
@@ -89,6 +90,7 @@ describe('Fastify backend', () => {
     editor: name === 'editor' || name === 'editor2',
     moderator: name === 'moderator'
   });
+
   const headers = (role: Role = 'reader') => ({ Authorization: `Bearer ${tokens[role]}` });
 
   beforeAll(async () => {
@@ -366,9 +368,9 @@ describe('Fastify backend', () => {
     await request(app.server).get('/api/video/file/v1?from=1&from=2').set(headers()).expect(400);
   });
 
-  async function upload(videoId = 'upload', role: Role = 'editor', bytes = Buffer.from([0, 128, 255]), thumbnail = Buffer.from([42])) {
+  const upload = async function (videoId = 'upload', role: Role = 'editor', bytes = Buffer.from([0, 128, 255]), thumbnail = Buffer.from([42])) {
     return request(app.server).post(`/api/video/upload/${videoId}`).set(headers(role)).attach('video', bytes, '../../original.bin').attach('thumbnail', thumbnail, 'thumbnail.bin');
-  }
+  };
 
   test('stages both files with a safe ID and submits metadata into storage, then cleans temporary files', async () => {
     expect((await upload()).status).toBe(201);
@@ -437,11 +439,11 @@ describe('Fastify backend', () => {
     expect(await readFile(join(temporaryDirectory, 'upload.video'))).toEqual(Buffer.from([0, 128, 255]));
   });
 
-  async function replacementUpload(files: ('video' | 'thumbnail')[], videoId = 'v1') {
+  const replacementUpload = async function (files: ('video' | 'thumbnail')[], videoId = 'v1') {
     let pending = request(app.server).post(`/api/video/upload/${videoId}`).set(headers('editor'));
     for (const file of files) pending = pending.attach(file, Buffer.from(`new-${file}`), `${file}.bin`);
     return pending;
-  }
+  };
 
   test.each([
     { files: ['video'] as ('video' | 'thumbnail')[], changes: { videoMimeType: 'video/webm' } },

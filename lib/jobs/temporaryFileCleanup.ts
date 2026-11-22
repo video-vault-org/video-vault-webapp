@@ -12,7 +12,7 @@ const hour = 60 * 60 * 1000;
  * @returns The number of deleted files.
  * @throws If filesystem access fails for reasons other than a missing file.
  */
-async function cleanupTemporaryFiles({ directory = './tmp', now = Date.now() }: { directory?: string; now?: number } = {}): Promise<number> {
+const cleanupTemporaryFiles = async function ({ directory = './tmp', now = Date.now() }: { directory?: string; now?: number } = {}): Promise<number> {
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true });
@@ -47,13 +47,13 @@ async function cleanupTemporaryFiles({ directory = './tmp', now = Date.now() }: 
   }
 
   return deleted;
-}
+};
 
 /**
  * Starts immediate and hourly cleanup runs. Runs never overlap and failures are logged without stopping the schedule.
  * The timer does not keep Node alive. The returned idempotent stop function clears it and waits for any active run.
  */
-function startTemporaryFileCleanup({ directory = './tmp', intervalMs = hour, logger = console }: { directory?: string; intervalMs?: number; logger?: BackgroundLogger } = {}): () => Promise<void> {
+const startTemporaryFileCleanup = function ({ directory = './tmp', intervalMs = hour, logger = console }: { directory?: string; intervalMs?: number; logger?: BackgroundLogger } = {}): () => Promise<void> {
   if (!Number.isSafeInteger(intervalMs) || intervalMs <= 0 || intervalMs > 2 ** 31 - 1) throw new RangeError('Invalid cleanup interval');
   let running: Promise<void> | undefined;
   let stopped = false;
@@ -81,6 +81,6 @@ function startTemporaryFileCleanup({ directory = './tmp', intervalMs = hour, log
     clearInterval(timer);
     await running;
   };
-}
+};
 
 export { cleanupTemporaryFiles, startTemporaryFileCleanup };

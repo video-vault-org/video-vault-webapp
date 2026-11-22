@@ -24,19 +24,24 @@ import { MetaConfig, DEFAULT_META_CONFIG, metaConfigSchema } from '@/meta/config
 import { metaConfigResponse } from './metaSchema';
 
 /** Creates the native Fastify server and its Pino logger before adapter initialization, so startup errors can be logged. */
-function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
+const createHttpServer = function ({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
   const app = Fastify({ logger, genReqId: () => randomUUID(), logController: new HttpLogController(), bodyLimit: 1024 * 1024, routerOptions: { maxParamLength: 4096, ignoreTrailingSlash: true } });
   const strict = addFormats(new Ajv({ removeAdditional: false, coerceTypes: false, useDefaults: true }));
   const query = addFormats(new Ajv({ removeAdditional: false, coerceTypes: true, useDefaults: true }));
+
   app.setValidatorCompiler(({ schema, httpPart }) => (httpPart === 'querystring' ? query : strict).compile(schema as AnySchema));
+
   app.decorateRequest('user', null);
   app.decorateRequest('failure', null);
+
   app.setErrorHandler(handleErrors);
+
   app.addHook('onRequest', async (request, reply) => {
     reply.header('X-Request-ID', request.id).header('X-Content-Type-Options', 'nosniff');
   });
+
   return app;
-}
+};
 
 /**
  * Registers the backend without opening a listening socket. Call ready()/inject() before use, close() after use.
@@ -44,7 +49,7 @@ function createHttpServer({ logger = loggingOptions() }: { logger?: FastifyServe
  * instanceSalt is the stable public value loaded from ./.salt at startup; /bootstrap serves it without file access.
  * temporaryDirectory must match the StorageWrapper. Bodies, headers and query secrets are excluded from logs.
  */
-function createApp(
+const createApp = function (
   { auth, users, videos, comments }: { auth: AuthService; users: UserService; videos: VideoService; comments: CommentService },
   {
     instanceSalt,
@@ -81,6 +86,7 @@ function createApp(
     if (path === '/login' || path.startsWith('/login/') || path === '/api' || path.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
     if (path === '/api' || path.startsWith('/api/')) await authenticate.call(app, request, reply);
   });
+
   app.register(multipart, { limits: { files: 2, fields: 0, parts: 2, fileSize: Math.max(maxVideoBytes ?? 2 * 1024 ** 3, maxThumbnailBytes ?? 20 * 1024 ** 2) } });
 
   app.register(async (router) => {
@@ -112,7 +118,9 @@ function createApp(
   });
 
   app.register(async (router) => userRoutes(router, users, auth), { prefix: '/api/user' });
+
   app.register(async (router) => videoRoutes(router, videos, auth, uploads), { prefix: '/api/video' });
+
   app.register(async (router) => commentRoutes(router, comments, videos, auth), { prefix: '/api' });
 
   /** GET/HEAD for non-API paths — Public. Serves only public files; dotfiles and directory redirects are disabled. */
@@ -120,6 +128,7 @@ function createApp(
     root: resolve(staticDirectory),
     dotfiles: 'deny',
     redirect: false,
+
     allowedPath: (_path, _root, request) =>
       !/^\/api(?:\/|\?|$)/.test(request.url) &&
       !request.url
@@ -133,5 +142,6 @@ function createApp(
   });
 
   return app;
-}
+};
+
 export { createApp, createHttpServer };

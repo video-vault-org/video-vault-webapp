@@ -9,8 +9,11 @@ describe('Fastify hooks and errors', () => {
   test('authorization and currentUser require preceding authentication', async () => {
     const app = createHttpServer({ logger: false });
     const authorize = jest.fn();
+
     app.get('/roles', { onRequest: authorization({ authorize }, ['admin']) }, async () => null);
+
     app.get('/user', async (request) => currentUser(request));
+
     try {
       expect((await app.inject('/roles')).statusCode).toBe(401);
       expect((await app.inject('/user')).statusCode).toBe(401);
@@ -23,7 +26,9 @@ describe('Fastify hooks and errors', () => {
   test('missing credentials do not call the authentication service', async () => {
     const app = createHttpServer({ logger: false });
     const authenticate = jest.fn();
+
     app.get('/', { onRequest: authentication({ authenticate }) }, async () => null);
+
     try {
       const response = await app.inject('/');
       expect(response.statusCode).toBe(401);
@@ -42,9 +47,11 @@ describe('Fastify hooks and errors', () => {
     { name: 'internal failure', error: new Error('private'), status: 500, message: 'Internal server error' }
   ])('sanitizes $name into HTTP $status', async ({ error, status, message }) => {
     const app = createHttpServer({ logger: false });
+
     app.get('/', async () => {
       throw error;
     });
+
     try {
       const response = await app.inject('/');
       expect(response.statusCode).toBe(status);

@@ -8,15 +8,16 @@ import { authorization, currentUser } from '../middleware';
 import { HttpError } from '../errors';
 import { Type, object, commentChange, date, id, text, comment, errorResponses, noContent } from '../validation';
 
-function publicComment(item: Comment) {
+const publicComment = function (item: Comment) {
   return { ...item, created: item.created.toISOString(), lastModified: item.lastModified.toISOString() };
-}
+};
 
 /** Registers comment routes; the parent authenticates every API request. */
-function commentRoutes(app: FastifyInstance, comments: CommentService, videos: VideoService, auth: AuthService): void {
+const commentRoutes = function (app: FastifyInstance, comments: CommentService, videos: VideoService, auth: AuthService): void {
   const router = app.withTypeProvider<TypeBoxTypeProvider>();
   const moderator = authorization(auth, ['moderator']);
   const params = object({ commentId: id });
+
   const requireComment = async (commentId: string, userId?: string) => {
     const item = await comments.findComment({ commentId });
     if (!item || (userId !== undefined && item.userId !== userId)) throw new HttpError(404, 'Comment not found');
@@ -91,5 +92,6 @@ function commentRoutes(app: FastifyInstance, comments: CommentService, videos: V
     await comments.deleteComment(request.params);
     return reply.code(204).send(null);
   });
-}
+};
+
 export { commentRoutes };

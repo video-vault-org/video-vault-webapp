@@ -10,15 +10,16 @@ import { UploadStore } from '../uploads';
 import { Type, object, id, text, video, videoChange, sinceDate, metadata, errorResponses, noContent, videoInput, date } from '../validation';
 
 /** Encodes domain timestamps explicitly for the compiled JSON response serializer. */
-function publicVideo(item: Video) {
+const publicVideo = function (item: Video) {
   return { ...item, recorded: item.recorded.toISOString(), lastModified: item.lastModified.toISOString() };
-}
+};
 
 /** Registers video routes, including authenticated binary downloads and editor-only mutations. */
-function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthService, uploads: UploadStore): void {
+const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: AuthService, uploads: UploadStore): void {
   const router = app.withTypeProvider<TypeBoxTypeProvider>();
   const editor = authorization(auth, ['editor']);
   const params = object({ videoId: id });
+
   const requireVideo = async (videoId: string) => {
     const item = await videos.findVideo({ videoId });
     if (!item) throw new HttpError(404, 'Video not found');
@@ -169,5 +170,6 @@ function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthServi
   router.get('/:since', { schema: { params: object({ since: Type.Union([date, Type.String({ pattern: '^\\d+$', maxLength: 16 })]) }), response: { 200: Type.Array(video), ...errorResponses } } }, async (request) =>
     (await videos.findVideosLastModified({ since: sinceDate(request.params.since) })).map(publicVideo)
   );
-}
+};
+
 export { videoRoutes };

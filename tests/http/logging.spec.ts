@@ -11,7 +11,7 @@ import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
 
-function capture(terminal = false, level = 'info') {
+const capture = function (terminal = false, level = 'info') {
   let output = '';
   const destination = new Writable({
     write(chunk, _encoding, done) {
@@ -21,7 +21,9 @@ function capture(terminal = false, level = 'info') {
   });
   return {
     options: loggingOptions({ destination, terminal, level }),
+
     output: () => output,
+
     records: () =>
       output
         .trim()
@@ -29,7 +31,7 @@ function capture(terminal = false, level = 'info') {
         .filter(Boolean)
         .map((line: string) => JSON.parse(line))
   };
-}
+};
 
 describe('Fastify native Pino logging', () => {
   test('writes one JSON line per native log message and omits custom error properties', async () => {
@@ -48,6 +50,7 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('writes colored single-line terminal records, including multiline errors', async () => {
     const captured = capture(true);
     const app = createHttpServer({ logger: captured.options });
@@ -62,6 +65,7 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('honors the configured minimum severity', async () => {
     const captured = capture(false, 'warn');
     const app = createHttpServer({ logger: captured.options });
@@ -73,6 +77,7 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('defaults to stdout TTY status and LOG_LEVEL', async () => {
     const previous = process.env.LOG_LEVEL;
     const tty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
@@ -102,13 +107,16 @@ describe('Fastify native Pino logging', () => {
       else Reflect.deleteProperty(process.stdout, 'isTTY');
     }
   });
+
   test('logs arrival and completion with native request ID and elapsed time', async () => {
     const captured = capture();
     const app = createHttpServer({ logger: captured.options });
+
     app.get('/slow', async (_request, reply) => {
       await new Promise((done) => setTimeout(done, 20));
       return reply.code(204).send();
     });
+
     try {
       const response = await app.inject({ url: '/slow?token=secret-query', headers: { 'x-request-id': 'untrusted-id' } });
       const [received, completed] = captured.records();
@@ -123,10 +131,13 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test.each([200, 302, 400, 401, 403, 404, 409, 413, 500, 503])('selects severity for HTTP %i', async (status) => {
     const captured = capture();
     const app = createHttpServer({ logger: captured.options });
+
     app.get('/', async (_request, reply) => reply.code(status).send(''));
+
     try {
       await app.inject('/');
       expect(captured.records()[1]).toMatchObject({ level: status >= 500 ? 50 : status >= 400 ? 40 : 30, res: { statusCode: status } });
@@ -134,12 +145,15 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('records original unexpected errors once and returns generic error responses', async () => {
     const captured = capture();
     const app = createHttpServer({ logger: captured.options });
+
     app.get('/', async () => {
       throw new Error('Database unavailable');
     });
+
     try {
       const response = await app.inject('/');
       expect(response.statusCode).toBe(500);
@@ -150,15 +164,19 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('handles explicit HTTP failures and non-Error exceptions', async () => {
     const captured = capture();
     const app = createHttpServer({ logger: captured.options });
+
     app.get('/explicit', async () => {
       throw new HttpError(503, 'Unavailable');
     });
+
     app.get('/unknown', async () => {
       throw 'sensitive-unknown-value';
     });
+
     try {
       expect((await app.inject('/explicit')).statusCode).toBe(503);
       expect((await app.inject('/unknown')).statusCode).toBe(500);
@@ -168,19 +186,23 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('logs stream errors with request correlation when a response is aborted', async () => {
     const captured = capture();
     const app = createHttpServer({ logger: captured.options });
+
     app.get('/', async (_request, reply) => {
       const stream = new Readable({
         read() {
           this.push('partial');
           this._read = () => undefined;
+
           setImmediate(() => this.destroy(new Error('Streaming failed')));
         }
       });
       return reply.type('application/octet-stream').send(stream);
     });
+
     try {
       await app.ready();
       await expect(request(app.server).get('/')).rejects.toThrow(/aborted|socket hang up/);
@@ -190,13 +212,16 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('supports native request-scoped warnings', async () => {
     const captured = capture();
     const app = createHttpServer({ logger: captured.options });
+
     app.get('/', async (request) => {
       request.log.warn('Service warning');
       return null;
     });
+
     try {
       await app.inject('/');
       expect(captured.records()[1]).toMatchObject({ level: 40, msg: 'Service warning', reqId: captured.records()[0].reqId });
@@ -204,6 +229,7 @@ describe('Fastify native Pino logging', () => {
       await app.close();
     }
   });
+
   test('the real app never logs request/response bodies, tokens, cookies or query secrets', async () => {
     const captured = capture();
     const db = new InMemoryDatabaseAdapter();

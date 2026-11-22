@@ -29,11 +29,11 @@ describe('StorageWrapper', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function save(descriptor: string, data: Buffer): Promise<void> {
+  const save = async function (descriptor: string, data: Buffer): Promise<void> {
     const source = join(temporaryDirectory, descriptor);
     await writeFile(source, data);
     await adapter.save(source, descriptor);
-  }
+  };
 
   test('videoFileSize returns only the encrypted video length or null', async () => {
     expect(await storage.videoFileSize({ videoId })).toBeNull();

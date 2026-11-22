@@ -19,16 +19,16 @@ const tablePrefix = z
   .max(241)
   .regex(/^[A-Za-z0-9_.-]*$/);
 
-async function askText(message: string, initial?: string, password = false): Promise<string> {
+const askText = async function (message: string, initial?: string, password = false): Promise<string> {
   return await ask({ type: password ? 'password' : 'text', name: 'value', message, initial }, password ? secret : text);
-}
+};
 
-async function askOptional(message: string, initial?: string, password = false, url = false): Promise<string | undefined> {
+const askOptional = async function (message: string, initial?: string, password = false, url = false): Promise<string | undefined> {
   return await ask({ type: password ? 'password' : 'text', name: 'value', message: `${message} (optional)`, initial }, url ? endpoint : optionalText);
-}
+};
 
 /** Prompts for the database adapter before asking only for its supported settings. */
-async function readDatabaseConfig(existing: DatabaseConfig | null, title: string): Promise<DatabaseConfig> {
+const readDatabaseConfig = async function (existing: DatabaseConfig | null, title: string): Promise<DatabaseConfig> {
   const type = await ask(
     {
       type: 'select',
@@ -95,10 +95,10 @@ async function readDatabaseConfig(existing: DatabaseConfig | null, title: string
     throw new Error('DynamoDB credentials require both access key ID and secret access key');
   }
   return config;
-}
+};
 
 /** Prompts for the storage adapter before asking only for its supported settings. */
-async function readStorageConfig(existing?: StorageConfig | null): Promise<StorageConfig> {
+const readStorageConfig = async function (existing?: StorageConfig | null): Promise<StorageConfig> {
   const type = await ask(
     {
       type: 'select',
@@ -133,9 +133,9 @@ async function readStorageConfig(existing?: StorageConfig | null): Promise<Stora
       forcePathStyle: await ask({ type: 'toggle', name: 'value', message: 'S3 force path style', initial: conf?.forcePathStyle ?? false, active: 'Yes', inactive: 'No' }, z.boolean())
     }
   };
-}
+};
 
-async function configExists(path: string): Promise<boolean> {
+const configExists = async function (path: string): Promise<boolean> {
   try {
     await access(path);
     return true;
@@ -143,7 +143,7 @@ async function configExists(path: string): Promise<boolean> {
     if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return false;
     throw error;
   }
-}
+};
 
 /**
  * Configures application title, database and storage, using existing values or defaults for empty answers.
@@ -153,7 +153,7 @@ async function configExists(path: string): Promise<boolean> {
  * Requests confirmation before replacing existing files. Creates ./conf on first use. No database or storage connection is opened.
  * @throws If input is cancelled or invalid, an existing config cannot be loaded, or saving fails.
  */
-async function initializeConfig(): Promise<void> {
+const initializeConfig = async function (): Promise<void> {
   const existingApp = await loadAppConfig();
   const app: AppConfig = { title: await ask({ type: 'text', name: 'value', message: 'Application title (default for the DynamoDB table prefix)', initial: existingApp?.title ?? DEFAULT_APP_TITLE }, appConfigSchema.shape.title) };
   const databaseExists = await configExists('./conf/db.json');
@@ -171,6 +171,6 @@ async function initializeConfig(): Promise<void> {
   await saveAppConfig(app);
   if (database) await saveDatabaseConfig(database);
   if (storage) await saveStorageConfig(storage);
-}
+};
 
 export { initializeConfig };

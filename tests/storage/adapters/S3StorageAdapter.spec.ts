@@ -16,11 +16,11 @@ describe('S3StorageAdapter', () => {
   let adapter: S3StorageAdapter;
   let client: S3Client | undefined;
 
-  async function save(descriptor: string, data: Buffer): Promise<void> {
+  const save = async function (descriptor: string, data: Buffer): Promise<void> {
     const source = join(directory, 'upload.tmp');
     await writeFile(source, data);
     await adapter.save(source, descriptor);
-  }
+  };
 
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-s3-storage-'));
@@ -66,6 +66,7 @@ describe('S3StorageAdapter', () => {
   test('save writes binary data under a prefixed key and overwrites it', async () => {
     const key = 'videos/save.bin';
     const [s3] = adapter.getConf();
+
     const readObject = async () => {
       const result = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       return Buffer.from(await result.Body!.transformToByteArray());
@@ -167,6 +168,7 @@ describe('S3StorageAdapter', () => {
 // Metadata unit tests deliberately do not start a container.
 describe('S3StorageAdapter size metadata', () => {
   afterEach(() => jest.restoreAllMocks());
+
   test('uses HeadObject, recognizes 404 and propagates other failures', async () => {
     const adapter = new S3StorageAdapter({ region: 'us-east-1', accessKeyId: 'key', secretAccessKey: 'secret', bucket: 'bucket' }),
       [client] = adapter.getConf();

@@ -12,7 +12,7 @@ const compat = new FlatCompat({
   allConfig: js.configs.all
 });
 
-export default [
+const config = [
   {
     ignores: ['**/node_modules', 'built', 'frontend']
   },
@@ -34,3 +34,5 @@ export default [
     }
   }
 ];
+
+export default config;

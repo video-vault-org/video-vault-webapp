@@ -3,14 +3,14 @@ import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 const parameters = 'ln=15,r=8,p=3';
 const options = { N: 2 ** 15, r: 8, p: 3, maxmem: 64 * 1024 * 1024 };
 
-function deriveKey(password: string, salt: Buffer): Promise<Buffer> {
+const deriveKey = function (password: string, salt: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     scrypt(password, salt, 32, options, (error, key) => {
       if (error) reject(error);
       else resolve(key);
     });
   });
-}
+};
 
 /**
  * Hashes a password using scrypt and a fresh 16-byte salt.
@@ -19,11 +19,11 @@ function deriveKey(password: string, salt: Buffer): Promise<Buffer> {
  * @returns A scrypt string containing the parameters, salt and derived hash.
  * @throws If deriving the password hash fails.
  */
-async function hashPassword(password: string): Promise<string> {
+const hashPassword = async function (password: string): Promise<string> {
   const salt = randomBytes(16);
   const hash = await deriveKey(password, salt);
   return `$scrypt$${parameters}$${salt.toString('base64')}$${hash.toString('base64')}`;
-}
+};
 
 /**
  * Verifies a password against a scrypt string using a constant-time hash comparison.
@@ -33,7 +33,7 @@ async function hashPassword(password: string): Promise<string> {
  * @returns Whether the password matches the stored hash.
  * @throws If deriving the password hash fails.
  */
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
+const verifyPassword = async function (password: string, stored: string): Promise<boolean> {
   const parts = stored.split('$');
   if (parts.length !== 5 || parts[0] !== '' || parts[1] !== 'scrypt' || parts[2] !== parameters) {
     return false;
@@ -45,6 +45,6 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   }
   const actual = await deriveKey(password, salt);
   return timingSafeEqual(actual, expected);
-}
+};
 
 export { hashPassword, verifyPassword };

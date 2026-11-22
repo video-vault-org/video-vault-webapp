@@ -1,13 +1,18 @@
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn().mockResolvedValue('ab'.repeat(32)) }));
+
 jest.mock('@/cli/config', () => ({ initializeConfig: jest.fn() }));
 
 describe('configuration CLI entrypoint', () => {
   const exitCode = process.exitCode;
+
   beforeEach(() => {
     jest.resetModules();
+
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
+
   afterEach(() => {
     process.exitCode = exitCode;
     jest.restoreAllMocks();
@@ -35,6 +40,7 @@ describe('configuration CLI entrypoint', () => {
     expect(console.log).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith('Configuration initialization failed: check answers, instance salt file and configuration file permissions');
   });
+
   test('stops before prompting when instance salt initialization fails', async () => {
     const instanceSalt = await import('@/util/instanceSalt');
     const config = await import('@/cli/config');

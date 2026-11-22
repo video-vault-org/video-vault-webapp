@@ -14,8 +14,9 @@ const inputSchema = z.object({ username: value.min(3), displayName: value, passw
  * Password is rendered as asterisks. The instance salt is loaded from ./.salt during initialization.
  * @throws If cancelled or the answers are invalid.
  */
-async function readAdminInput(): Promise<{ username: string; displayName: string; password: string }> {
+const readAdminInput = async function (): Promise<{ username: string; displayName: string; password: string }> {
   const validate = (answer: string) => (answer.length >= 1 && answer.length <= 4096 ? true : 'Please enter 1 to 4096 characters');
+
   const answers = await prompts(
     [
       { type: 'text', name: 'username', message: 'Username', validate: (answer: string) => (answer.length >= 3 && answer.length <= 4096) || 'Please enter 3 to 4096 characters' },
@@ -29,7 +30,7 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
     }
   );
   return inputSchema.parse(answers);
-}
+};
 
 /**
  * Creates the first admin, refusing to run if any admin already exists.
@@ -45,7 +46,7 @@ async function readAdminInput(): Promise<{ username: string; displayName: string
  * @param input The entered username, displayName and password; IDs, keys and roles cannot be supplied.
  * @throws If validation, key derivation or the database operation fails, or an admin already exists.
  */
-async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<void> {
+const initializeAdmin = async function (db: DatabaseAdapter, input: unknown): Promise<void> {
   const { username, displayName, password } = inputSchema.parse(input);
   if ((await db.findAllUsers()).some((existing) => existing.admin)) throw new Error('An admin already exists');
   const userId = randomUUID();
@@ -82,6 +83,6 @@ async function initializeAdmin(db: DatabaseAdapter, input: unknown): Promise<voi
     aesKey?.fill(0);
     hmacKey?.fill(0);
   }
-}
+};
 
 export { readAdminInput, initializeAdmin };

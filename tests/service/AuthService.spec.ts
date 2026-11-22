@@ -49,16 +49,16 @@ describe('AuthService', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function seedAttempts(count: number, lastAttempt = start, name = username): Promise<void> {
+  const seedAttempts = async function (count: number, lastAttempt = start, name = username): Promise<void> {
     for (let index = 0; index < count; index++) {
       await db.increaseAttemptsCountByUsername({ username: name, lastAttempt });
     }
-  }
+  };
 
-  async function signedToken(payload: object = {}, options: SignOptions = {}): Promise<string> {
+  const signedToken = async function (payload: object = {}, options: SignOptions = {}): Promise<string> {
     const key = await readFile(join(keyDirectory, 'key-0.key'));
     return jwt.sign(payload, key, { algorithm: 'HS256', keyid: 'key-0', subject: userId, issuer: 'video-vault', audience: 'video-vault', expiresIn: 3600, ...options });
-  }
+  };
 
   describe('constructor', () => {
     test.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects invalid tokenLifetimeSeconds %s', (tokenLifetimeSeconds) => {

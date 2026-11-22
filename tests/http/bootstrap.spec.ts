@@ -13,7 +13,7 @@ describe('public bootstrap', () => {
   const instanceSalt = 'AB'.repeat(32);
   let app: FastifyInstance | undefined;
 
-  function application(salt: string, title = 'VideoVault', metaConfig: MetaConfig = DEFAULT_META_CONFIG) {
+  const application = function (salt: string, title = 'VideoVault', metaConfig: MetaConfig = DEFAULT_META_CONFIG) {
     const db = new InMemoryDatabaseAdapter();
     const auth = new AuthService(db);
     const authenticate = jest.spyOn(auth, 'authenticate');
@@ -22,7 +22,7 @@ describe('public bootstrap', () => {
       { instanceSalt: salt, appConfig: { title }, metaConfig, logger: false }
     );
     return { server, authenticate };
-  }
+  };
 
   afterEach(async () => {
     await app?.close();

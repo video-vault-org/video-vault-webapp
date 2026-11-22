@@ -40,7 +40,9 @@ class UploadStore {
         const maximum = part.fieldname === 'video' ? this.maxVideoBytes : this.maxThumbnailBytes;
         let size = 0;
         const output = createWriteStream(path, { flags: 'wx', mode: 0o600 });
+
         output.on('open', () => created.add(path));
+
         const limit = new Transform({
           transform(chunk: Buffer, _encoding, done) {
             size += chunk.length;

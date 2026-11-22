@@ -18,6 +18,7 @@ import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapte
 import { StorageWrapper } from '@/storage/StorageWrapper';
 
 jest.mock('@/meta', () => ({ loadConfig: jest.fn() }));
+
 jest.mock('@/app', () => ({ loadConfig: jest.fn() }));
 
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
@@ -25,6 +26,7 @@ jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
 jest.mock('@/jobs/temporaryFileCleanup', () => ({ startTemporaryFileCleanup: jest.fn() }));
 
 jest.mock('@/db', () => ({ loadDb: jest.fn(), resetDb: jest.fn() }));
+
 jest.mock('@/storage', () => ({ loadStorage: jest.fn(), resetStorage: jest.fn() }));
 
 describe('startServer', () => {

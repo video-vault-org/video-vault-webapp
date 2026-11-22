@@ -16,11 +16,11 @@ const typeChoices = [
   { title: 'Date and time (multiple values)', value: 'datetime[]' }
 ];
 
-async function confirm(message: string, initial: boolean): Promise<boolean> {
+const confirm = async function (message: string, initial: boolean): Promise<boolean> {
   return ask({ type: 'confirm', name: 'value', message, initial }, z.boolean());
-}
+};
 
-async function readFields(previous: MetaField[]): Promise<MetaField[]> {
+const readFields = async function (previous: MetaField[]): Promise<MetaField[]> {
   const count = await ask({ type: 'number', name: 'value', message: 'Number of metadata fields', initial: previous.length }, z.coerce.number().int().min(0).max(100));
   const fields: MetaField[] = [];
   for (let index = 0; index < count; index++) {
@@ -42,13 +42,13 @@ async function readFields(previous: MetaField[]): Promise<MetaField[]> {
     fields.push({ key, name, type, multiple: choice.endsWith('[]'), required, showInDetails, useAsFilter });
   }
   return fields;
-}
+};
 
-function sortId(sort: MetaSort): string {
+const sortId = function (sort: MetaSort): string {
   return sort.source === 'meta' ? `meta:${sort.key}` : sort.source;
-}
+};
 
-async function readSorting(fields: MetaField[], previous: MetaSort[]): Promise<MetaSort[]> {
+const readSorting = async function (fields: MetaField[], previous: MetaSort[]): Promise<MetaSort[]> {
   const remaining: { title: string; value: string; sort: MetaSort }[] = [
     { title: 'Title', value: 'title', sort: { source: 'title', direction: 'asc' } },
     { title: 'Recorded', value: 'recorded', sort: { source: 'recorded', direction: 'desc' } },
@@ -90,7 +90,7 @@ async function readSorting(fields: MetaField[], previous: MetaSort[]): Promise<M
     sorting.push({ ...item.sort, direction });
   }
   return sorting;
-}
+};
 
 /**
  * Configures the future frontend's recording-date presentation/filter, metadata fields and ordered sorting rules.
@@ -100,7 +100,7 @@ async function readSorting(fields: MetaField[], previous: MetaSort[]): Promise<M
  * Multiple values are free arrays. Their comparison semantics are intentionally deferred to the frontend.
  * @throws If cancelled, invalid, unreadable or saving fails. Nothing is written until all answers are valid.
  */
-async function initializeMetaConfig(): Promise<void> {
+const initializeMetaConfig = async function (): Promise<void> {
   let exists = true;
   try {
     await access('./conf/meta.json');
@@ -116,6 +116,6 @@ async function initializeMetaConfig(): Promise<void> {
   const sorting = await readSorting(fields, previous.sorting);
   const config: MetaConfig = { recorded: { withTime, useAsFilter }, fields, sorting };
   await saveConfig(config);
-}
+};
 
 export { initializeMetaConfig };

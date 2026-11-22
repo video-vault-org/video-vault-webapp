@@ -11,13 +11,14 @@ const day = 24 * 60 * 60 * 1000;
 const now = Date.UTC(2026, 10, 21);
 const old = new Date(now - day - 1000);
 
-async function age(path: string, date = old): Promise<void> {
+const age = async function (path: string, date = old): Promise<void> {
   await utimes(path, date, date);
   ctimes.set(path, date.getTime());
-}
+};
 
 describe('cleanupTemporaryFiles', () => {
   let directory: string;
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-cleanup-'));
     ctimes.clear();
@@ -28,18 +29,19 @@ describe('cleanupTemporaryFiles', () => {
         return ctime === undefined ? info : Object.defineProperty(info, 'ctimeMs', { value: ctime });
       })) as typeof lstat);
   });
+
   afterEach(async () => {
     jest.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function upload(videoId = 'video') {
+  const upload = async function (videoId = 'video') {
     for (const extension of ['video', 'thumbnail']) {
       const path = join(directory, `${videoId}.${extension}`);
       await writeFile(path, extension);
       await age(path);
     }
-  }
+  };
 
   test('deletes only files strictly older than 24 hours by status change time (ctime)', async () => {
     for (const name of ['old', 'boundary', 'recent', 'future']) await writeFile(join(directory, name), name);

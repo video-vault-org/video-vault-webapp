@@ -201,6 +201,7 @@ describe('InMemoryDatabaseAdapter', () => {
       {
         field: 'both file attributes',
         changes: { videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' },
+
         change: (db: InMemoryDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', ...modified })
       },
       { field: 'recorded', changes: { recorded: new Date(75) }, change: (db: InMemoryDatabaseAdapter, videoId: string) => db.changeVideosRecordedByVideoId({ videoId, recorded: new Date(75), ...modified }) }
@@ -268,6 +269,7 @@ describe('InMemoryDatabaseAdapter', () => {
     const forOtherVideo = { ...comment, commentId: 'c2', videoId: otherVideo.videoId };
     const byOtherUser = { ...comment, commentId: 'c3', userId: otherUser.userId };
     const changes = { ...modified, content: 'Edited comment' };
+
     const page = (paginationCursor = '', paginationSize = 10) => db.findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize });
 
     beforeEach(async () => {

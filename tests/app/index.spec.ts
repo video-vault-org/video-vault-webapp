@@ -13,6 +13,7 @@ describe('application configuration', () => {
     originalDirectory = process.cwd();
     process.chdir(directory);
   });
+
   afterEach(async () => {
     jest.restoreAllMocks();
     process.chdir(originalDirectory);

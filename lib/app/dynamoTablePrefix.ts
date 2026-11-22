@@ -7,7 +7,7 @@ import { appConfigSchema } from './config/AppConfig';
  * use a hash instead; unusually long normalized titles retain a hash suffix to avoid truncation collisions.
  * VideoVault yields video-vault-, preserving the original default table names.
  */
-function dynamoTablePrefix(title: string): string {
+const dynamoTablePrefix = function (title: string): string {
   const validated = appConfigSchema.parse({ title }).title;
   const slug = validated
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
@@ -20,6 +20,6 @@ function dynamoTablePrefix(title: string): string {
   if (slug && slug.length <= 100) return `${slug}-`;
   const hash = createHash('sha256').update(validated, 'utf8').digest('hex').slice(0, 16);
   return `${slug.slice(0, 100).replace(/-+$/, '') || 'app'}-${hash}-`;
-}
+};
 
 export { dynamoTablePrefix };

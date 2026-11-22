@@ -1,13 +1,18 @@
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn().mockResolvedValue('ab'.repeat(32)) }));
+
 jest.mock('@/cli/meta', () => ({ initializeMetaConfig: jest.fn() }));
 
 describe('metadata CLI entrypoint', () => {
   const exitCode = process.exitCode;
+
   beforeEach(() => {
     jest.resetModules();
+
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
+
   afterEach(() => {
     process.exitCode = exitCode;
     jest.restoreAllMocks();

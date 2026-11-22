@@ -4,13 +4,19 @@ jest.mock('@/server', () => ({ startServer: jest.fn() }));
 
 describe('backend entrypoint', () => {
   const exitCode = process.exitCode;
+
   beforeEach(() => {
     jest.resetModules();
+
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
     const originalOnce = process.once.bind(process);
+
     jest.spyOn(process, 'once').mockImplementation((event, listener) => (event === 'SIGINT' || event === 'SIGTERM' ? process : originalOnce(event, listener)));
   });
+
   afterEach(() => {
     process.exitCode = exitCode;
     jest.restoreAllMocks();

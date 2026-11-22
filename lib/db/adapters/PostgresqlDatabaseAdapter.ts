@@ -321,8 +321,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
 
   private async connect(): Promise<Pool> {
     const pool = new Pool(this.config);
+
     // pg emits errors for idle connections; the pool removes those connections.
     pool.on('error', (error: Error) => console.error('Idle PostgreSQL connection failed', error));
+
     try {
       await pool.query('SELECT 1');
       return pool;

@@ -13,7 +13,7 @@ import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapte
 import { StorageWrapper } from '@/storage/StorageWrapper';
 
 /** Resolves local schema references so assertions also work when Swagger hoists shared schemas. */
-function dereference(document: Record<string, unknown>, input: unknown): Record<string, unknown> {
+const dereference = function (document: Record<string, unknown>, input: unknown): Record<string, unknown> {
   let schema = input as Record<string, unknown>;
   while (typeof schema.$ref === 'string') {
     schema = schema.$ref
@@ -22,12 +22,13 @@ function dereference(document: Record<string, unknown>, input: unknown): Record<
       .reduce<unknown>((value, key) => (value as Record<string, unknown>)[key], document) as Record<string, unknown>;
   }
   return schema;
-}
+};
 
 describe('Swagger UI and OpenAPI documentation', () => {
   let app: FastifyInstance;
   let directory: string;
   let auth: AuthService;
+
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-docs-'));
     await writeFile(join(directory, 'index.html'), 'Public site');
@@ -47,6 +48,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     );
     await app.ready();
   });
+
   afterAll(async () => {
     await app?.close();
     jest.restoreAllMocks();

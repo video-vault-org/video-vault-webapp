@@ -30,6 +30,7 @@ describe('compiled Fastify request and response schemas', () => {
   let videos: VideoService;
   let comments: CommentService;
   let db: InMemoryDatabaseAdapter;
+
   beforeEach(() => {
     db = new InMemoryDatabaseAdapter();
     auth = new AuthService(db);
@@ -39,10 +40,12 @@ describe('compiled Fastify request and response schemas', () => {
     jest.spyOn(auth, 'authenticate').mockResolvedValue(account);
     app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), logger: false });
   });
+
   afterEach(async () => {
     await app.close();
     jest.restoreAllMocks();
   });
+
   const headers = { authorization: 'Bearer token' };
 
   test.each([{ username: 'alice', loginHash: 123 }, { username: 'alice', loginHash: 'hash', admin: true }, { username: '', loginHash: 'hash' }, { username: 'ab', loginHash: 'hash' }, { username: 'alice' }])(

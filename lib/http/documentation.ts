@@ -51,7 +51,7 @@ const summaries: Record<string, string> = {
  * Must run before API route plugins. Documentation reuses runtime schemas; documentation-only multipart schemas never validate stream bodies.
  * Required roles are read from the authorization hooks, so the documentation follows the actual access rules.
  */
-function registerDocumentation(app: FastifyInstance, { title = DEFAULT_APP_TITLE, maxVideoBytes = 2 * 1024 ** 3, maxThumbnailBytes = 20 * 1024 ** 2 }: { title?: string; maxVideoBytes?: number; maxThumbnailBytes?: number } = {}): void {
+const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_APP_TITLE, maxVideoBytes = 2 * 1024 ** 3, maxThumbnailBytes = 20 * 1024 ** 2 }: { title?: string; maxVideoBytes?: number; maxThumbnailBytes?: number } = {}): void {
   app.register(swagger, {
     openapi: {
       openapi: '3.0.3',
@@ -64,6 +64,7 @@ function registerDocumentation(app: FastifyInstance, { title = DEFAULT_APP_TITLE
       tags: [{ name: 'Authentication' }, { name: 'Users' }, { name: 'Videos' }, { name: 'Comments' }],
       components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } }
     },
+
     transform: ({ schema, url, route }) => {
       const login = url === '/login';
       const bootstrap = url === '/bootstrap';
@@ -127,13 +128,16 @@ function registerDocumentation(app: FastifyInstance, { title = DEFAULT_APP_TITLE
       return { schema: documented, url };
     }
   });
+
   app.register(swaggerUi, {
     routePrefix: '/docs',
     staticCSP: true,
+
     // This backend also serves plain HTTP; keep the remaining CSP without forcing local assets to HTTPS.
     transformStaticCSP: (header) => header.replace('upgrade-insecure-requests;', ''),
+
     uiConfig: { deepLinking: true, docExpansion: 'list', persistAuthorization: false, validatorUrl: null }
   });
-}
+};
 
 export { registerDocumentation };

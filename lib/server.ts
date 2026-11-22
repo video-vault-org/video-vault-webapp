@@ -23,7 +23,11 @@ import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
  * @returns The listening server and an idempotent close function that stops temporary-file cleanup and closes the database.
  * @throws If configuration, initialization or listening fails; initialized resources are closed on failure.
  */
-async function startServer({ port = Number(process.env.PORT ?? 3000), host = process.env.HOST ?? '0.0.0.0', staticDirectory = process.env.STATIC_DIRECTORY ?? './public' }: { port?: number; host?: string; staticDirectory?: string } = {}): Promise<{
+const startServer = async function ({
+  port = Number(process.env.PORT ?? 3000),
+  host = process.env.HOST ?? '0.0.0.0',
+  staticDirectory = process.env.STATIC_DIRECTORY ?? './public'
+}: { port?: number; host?: string; staticDirectory?: string } = {}): Promise<{
   server: Server;
   close: () => Promise<void>;
 }> {
@@ -55,6 +59,7 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
     let closing: Promise<void> | undefined;
     return {
       server,
+
       close: () => {
         if (!closing) app.log.info('Server shutdown started...');
         closing ??= app
@@ -78,6 +83,6 @@ async function startServer({ port = Number(process.env.PORT ?? 3000), host = pro
     await resetDb().catch(() => undefined);
     throw error;
   }
-}
+};
 
 export { startServer };

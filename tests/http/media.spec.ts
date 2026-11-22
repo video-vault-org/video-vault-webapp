@@ -15,6 +15,7 @@ import { AuthService } from '@/service/AuthService';
 describe('authenticated media range and offline catalog endpoints', () => {
   let app: FastifyInstance, directory: string, db: InMemoryDatabaseAdapter;
   const headers = { authorization: 'Bearer reader' };
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'vault-media-'));
     db = new InMemoryDatabaseAdapter();
@@ -29,10 +30,12 @@ describe('authenticated media range and offline catalog endpoints', () => {
     );
     await app.ready();
   });
+
   afterEach(async () => {
     await app.close();
     await rm(directory, { recursive: true, force: true });
   });
+
   test('catalog is available to any authenticated reader, contains only IDs and reflects deletions', async () => {
     const ids = jest.spyOn(db, 'findAllVideoIds');
     const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full video loading is not allowed'));
@@ -44,10 +47,12 @@ describe('authenticated media range and offline catalog endpoints', () => {
     expect(ids).toHaveBeenCalledTimes(2);
     expect(full).not.toHaveBeenCalled();
   });
+
   test('catalog reports a failed ID query as an error instead of an empty catalog', async () => {
     jest.spyOn(db, 'findAllVideoIds').mockRejectedValueOnce(new Error('Database unavailable'));
     expect((await app.inject({ url: '/api/video/catalog', headers })).statusCode).toBe(500);
   });
+
   test('HEAD reports size without a response body and remains authenticated', async () => {
     expect((await app.inject({ method: 'HEAD', url: '/api/video/file/v1' })).statusCode).toBe(401);
     const result = await app.inject({ method: 'HEAD', url: '/api/video/file/v1', headers });
@@ -56,6 +61,7 @@ describe('authenticated media range and offline catalog endpoints', () => {
     expect(result.headers['accept-ranges']).toBe('bytes');
     expect(result.body).toBe('');
   });
+
   test.each([
     ['bytes=1-3', 1, 3],
     ['bytes=3-', 3, 4],
@@ -67,16 +73,19 @@ describe('authenticated media range and offline catalog endpoints', () => {
     expect(result.headers['content-range']).toBe(`bytes ${from}-${to}/5`);
     expect(result.rawPayload).toEqual(Buffer.from([0, 1, 2, 3, 4]).subarray(from, to + 1));
   });
+
   test.each(['bytes=5-', 'bytes=3-2', 'bytes=-0', 'bytes=1-2,3-4', 'bytes=-', 'items=0-1'])('rejects %s with size in Content-Range', async (range) => {
     const result = await app.inject({ url: '/api/video/file/v1', headers: { ...headers, range } });
     expect(result.statusCode).toBe(416);
     expect(result.headers['content-range']).toBe('bytes */5');
   });
+
   test('rejects ambiguous query/header bounds, preserves query ranges and handles missing videos', async () => {
     expect((await app.inject({ url: '/api/video/file/v1?from=0', headers: { ...headers, range: 'bytes=0-1' } })).statusCode).toBe(400);
     expect((await app.inject({ url: '/api/video/file/v1?from=0&to=1', headers })).rawPayload).toEqual(Buffer.from([0, 1]));
     expect((await app.inject({ method: 'HEAD', url: '/api/video/file/unknown', headers })).statusCode).toBe(404);
   });
+
   test('range parsing rejects unsafe integers and empty files', () => {
     expect(() => parseByteRange('bytes=99999999999999999999-', 5)).toThrow(RangeError);
     expect(() => parseByteRange('bytes=0-', 0)).toThrow(RangeError);

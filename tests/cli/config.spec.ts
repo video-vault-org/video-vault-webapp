@@ -8,17 +8,21 @@ import { StorageConfig } from '@/storage/config/StorageConfig';
 import { loadConfig as loadAppConfig, saveConfig as saveAppConfig } from '@/app';
 
 jest.mock('prompts', () => jest.fn());
+
 jest.mock('node:fs/promises', () => ({ access: jest.fn(), mkdir: jest.fn() }));
+
 jest.mock('@/app', () => ({ loadConfig: jest.fn(), saveConfig: jest.fn() }));
+
 jest.mock('@/db', () => ({ loadConfig: jest.fn(), saveConfig: jest.fn() }));
+
 jest.mock('@/storage', () => ({ loadConfig: jest.fn(), saveConfig: jest.fn() }));
 
 let answers: unknown[];
 let questions: prompts.PromptObject[];
 
-function reply(...values: unknown[]) {
+const reply = function (...values: unknown[]) {
   answers = [undefined, ...values];
-}
+};
 
 describe('configuration initialization', () => {
   beforeEach(() => {
@@ -33,6 +37,7 @@ describe('configuration initialization', () => {
     jest.mocked(mkdir).mockResolvedValue(undefined);
     jest.mocked(saveDatabaseConfig).mockResolvedValue(undefined);
     jest.mocked(saveStorageConfig).mockResolvedValue(undefined);
+
     jest.mocked(prompts).mockImplementation(async (question) => {
       const q = question as prompts.PromptObject;
       questions.push(q);
@@ -150,6 +155,7 @@ describe('configuration initialization', () => {
       if ((path === './conf/db.json' && databaseExists) || (path === './conf/storage.json' && storageExists)) return;
       throw Object.assign(new Error('Missing'), { code: 'ENOENT' });
     });
+
     reply(...replies);
     await initializeConfig();
     expect(saveAppConfig).toHaveBeenCalledWith({ title: 'VideoVault' });
@@ -175,7 +181,9 @@ describe('configuration initialization', () => {
       if (path === (target === 'Database' ? './conf/db.json' : './conf/storage.json')) return;
       throw Object.assign(new Error('Missing'), { code: 'ENOENT' });
     });
+
     const implementation = jest.mocked(prompts).getMockImplementation()!;
+
     jest.mocked(prompts).mockImplementation(async (question, options) => {
       if ((question as prompts.PromptObject).message === `${target} configuration already exists. Reconfigure?`) {
         options?.onCancel?.(question as prompts.PromptObject, {});
@@ -183,6 +191,7 @@ describe('configuration initialization', () => {
       }
       return implementation(question, options);
     });
+
     reply('in-memory');
     await expect(initializeConfig()).rejects.toThrow('cancelled');
     expect(saveAppConfig).not.toHaveBeenCalled();
@@ -204,6 +213,7 @@ describe('configuration initialization', () => {
     jest.mocked(access).mockImplementation(async (path) => {
       if (path !== './conf/db.json') throw Object.assign(new Error('Missing'), { code: 'ENOENT' });
     });
+
     reply(true, 'in-memory', 'in-memory', true);
     await initializeConfig();
     expect(questions.at(-1)?.type).toBe('confirm');
@@ -242,6 +252,7 @@ describe('configuration initialization', () => {
     jest.mocked(access).mockImplementation(async (path) => {
       if (path !== './conf/app.json') throw Object.assign(new Error('Missing'), { code: 'ENOENT' });
     });
+
     reply('in-memory', 'in-memory', false);
     await expect(initializeConfig()).rejects.toThrow('replacement declined');
     expect(saveAppConfig).not.toHaveBeenCalled();
@@ -289,6 +300,7 @@ describe('configuration initialization', () => {
   test.each([1, 2, 3])('cancelling prompt %i prevents all configuration writes', async (step) => {
     reply('in-memory', 'in-memory');
     const implementation = jest.mocked(prompts).getMockImplementation()!;
+
     jest.mocked(prompts).mockImplementation(async (question, options) => {
       if (questions.length === step - 1) {
         options?.onCancel?.(question as prompts.PromptObject, {});
@@ -296,6 +308,7 @@ describe('configuration initialization', () => {
       }
       return await implementation(question, options);
     });
+
     await expect(initializeConfig()).rejects.toThrow('cancelled');
     expect(saveAppConfig).not.toHaveBeenCalled();
     expect(saveDatabaseConfig).not.toHaveBeenCalled();

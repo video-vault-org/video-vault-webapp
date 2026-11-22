@@ -10,10 +10,10 @@ const COST = 19 * 1024; //19MiB
  * @returns The derived key bytes; callers must clear secret buffers after use.
  * @throws If the salt is too short or Argon2 fails.
  */
-async function deriveKey(password: string, salt: string | Buffer): Promise<Buffer> {
+const deriveKey = async function (password: string, salt: string | Buffer): Promise<Buffer> {
   const bytes = Buffer.from(salt);
   if (bytes.length < 8) throw new RangeError('Argon2id salt must contain at least 8 bytes');
   return await hash(password, { type: argon2id, version: VERSION, memoryCost: COST, timeCost: 2, parallelism: 1, hashLength: 32, salt: bytes, raw: true });
-}
+};
 
 export { deriveKey };

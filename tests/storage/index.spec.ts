@@ -30,10 +30,10 @@ describe('storage', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function configure(config: StorageConfig): Promise<void> {
+  const configure = async function (config: StorageConfig): Promise<void> {
     await mkdir('./conf');
     await writeFile(configPath, JSON.stringify(config));
-  }
+  };
 
   test('saveConfig creates the configuration directory and writes JSON', async () => {
     await saveConfig(localConfig);

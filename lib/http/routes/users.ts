@@ -7,16 +7,17 @@ import { authorization, currentUser } from '../middleware';
 import { HttpError } from '../errors';
 import { Type, object, id, text, username, password, passwordProperties, user as userSchema, errorResponses, noContent } from '../validation';
 
-function publicUser({ loginHash: _loginHash, ...user }: User): Omit<User, 'loginHash'> {
+const publicUser = function ({ loginHash: _loginHash, ...user }: User): Omit<User, 'loginHash'> {
   return user;
-}
+};
 
 /** Registers user routes; the parent authenticates /api requests before parsing or validation. */
-function userRoutes(app: FastifyInstance, users: UserService, auth: AuthService): void {
+const userRoutes = function (app: FastifyInstance, users: UserService, auth: AuthService): void {
   const router = app.withTypeProvider<TypeBoxTypeProvider>();
   const admin = authorization(auth, ['admin']);
   const userParams = object({ userId: id });
   const creation = object({ ...passwordProperties, userId: id, username, displayName: text, admin: Type.Boolean({ default: false }), editor: Type.Boolean({ default: false }), moderator: Type.Boolean({ default: false }) });
+
   const requireUser = async (userId: string) => {
     const user = await users.findUser({ userId });
     if (!user) throw new HttpError(404, 'User not found');
@@ -112,5 +113,6 @@ function userRoutes(app: FastifyInstance, users: UserService, auth: AuthService)
     await users.deleteUser({ userId: currentUser(request).userId });
     return reply.code(204).send(null);
   });
-}
+};
+
 export { userRoutes };

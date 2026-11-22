@@ -8,10 +8,12 @@ import { ensureInstanceSalt } from '@/util/instanceSalt';
 describe('ensureInstanceSalt', () => {
   let directory: string;
   let filePath: string;
+
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-instance-salt-'));
     filePath = join(directory, '.salt');
   });
+
   afterEach(async () => {
     jest.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });

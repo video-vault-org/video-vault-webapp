@@ -62,7 +62,9 @@ type AttemptsRow = Omit<AttemptsCount, 'lastAttempt'> & { lastAttempt: number };
 type Parameter = string | number | boolean | Date | null;
 
 const toUser = ({ admin, editor, moderator, ...user }: UserRow): User => ({ ...user, admin: admin === 1, editor: editor === 1, moderator: moderator === 1 });
+
 const toVideo = ({ meta, recorded, lastModified, ...video }: VideoRow): Video => ({ ...video, meta: JSON.parse(meta), recorded: new Date(recorded), lastModified: new Date(lastModified) });
+
 const toComment = ({ created, lastModified, edited, deleted, ...comment }: CommentRow): Comment => ({
   ...comment,
   created: new Date(created),
@@ -70,9 +72,10 @@ const toComment = ({ created, lastModified, edited, deleted, ...comment }: Comme
   edited: edited === 1,
   deleted: deleted === 1
 });
+
 const toAttempts = ({ lastAttempt, ...count }: AttemptsRow): AttemptsCount => ({ ...count, lastAttempt: new Date(lastAttempt) });
 
-function bindings(values: Parameter[]): Record<string, string | number | null> {
+const bindings = function (values: Parameter[]): Record<string, string | number | null> {
   return Object.fromEntries(
     values.map((value, index) => {
       const key = '$' + (index + 1);
@@ -86,7 +89,7 @@ function bindings(values: Parameter[]): Record<string, string | number | null> {
       return [key, typeof value === 'boolean' ? Number(value) : value];
     })
   );
-}
+};
 
 class SQLiteDatabaseAdapter implements DatabaseAdapter {
   private database?: DatabaseSync;

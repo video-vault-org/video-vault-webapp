@@ -9,11 +9,11 @@ describe('LocalStorageAdapter', () => {
   let directory: string;
   let adapter: LocalStorageAdapter;
 
-  async function save(descriptor: string, data: Buffer): Promise<void> {
+  const save = async function (descriptor: string, data: Buffer): Promise<void> {
     const source = join(directory, 'upload.tmp');
     await writeFile(source, data);
     await adapter.save(source, descriptor);
-  }
+  };
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'video-vault-storage-'));

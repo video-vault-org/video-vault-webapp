@@ -4,6 +4,7 @@ import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 /** An HTTP failure whose message may be returned to the client. */
 class HttpError extends Error {
   public readonly status: number;
+
   public constructor(status: number, message: string) {
     super(message);
     this.status = status;
@@ -11,7 +12,7 @@ class HttpError extends Error {
 }
 
 /** Sanitizes validation, multipart and database failures; internal details remain in server logs. */
-function handleErrors(error: unknown, request: FastifyRequest, reply: FastifyReply): void {
+const handleErrors = function (error: unknown, request: FastifyRequest, reply: FastifyReply): void {
   const failure = error instanceof Error ? error : new Error('Unknown server error');
   if (reply.raw.headersSent) {
     request.failure = failure;
@@ -43,6 +44,6 @@ function handleErrors(error: unknown, request: FastifyRequest, reply: FastifyRep
   if (status >= 500) request.failure = failure;
 
   reply.code(status).send({ error: message });
-}
+};
 
 export { HttpError, handleErrors };

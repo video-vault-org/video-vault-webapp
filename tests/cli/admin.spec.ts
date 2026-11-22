@@ -8,7 +8,9 @@ import { ensureInstanceSalt } from '@/util/instanceSalt';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 
 jest.mock('prompts', () => jest.fn());
+
 jest.mock('@/util/instanceSalt', () => ({ ensureInstanceSalt: jest.fn() }));
+
 const instanceSalt = 'ab'.repeat(32);
 
 const input = { username: 'alice', displayName: 'Alice', password: 'p\u00e4ssword-\ud83d\udd10' };
@@ -18,11 +20,13 @@ const existing = { userId: uuid, username: 'existing', displayName: 'Existing', 
 describe('interactive admin initialization', () => {
   jest.setTimeout(30_000);
   let db: InMemoryDatabaseAdapter;
+
   beforeEach(() => {
     db = new InMemoryDatabaseAdapter();
     jest.mocked(prompts).mockReset();
     jest.mocked(ensureInstanceSalt).mockReset().mockResolvedValue(instanceSalt);
   });
+
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -44,6 +48,7 @@ describe('interactive admin initialization', () => {
       options?.onCancel?.((questions as prompts.PromptObject[])[0], {});
       return {};
     });
+
     await expect(readAdminInput()).rejects.toThrow('Admin initialization cancelled');
   });
 
