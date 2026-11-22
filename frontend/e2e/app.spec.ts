@@ -188,3 +188,65 @@ test('keeps the mobile archive within the viewport and offers the same account a
   await expect(page.getByRole('button', { name: 'Mein Konto', exact: true })).toBeVisible();
   await page.screenshot({ path: '/tmp/vault-mobile.png', fullPage: true, animations: 'disabled' });
 });
+
+test('updates cached branding without rebuilding, preserves unrelated caches and hides the worker template', async ({
+  page
+}) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => (await caches.keys()).filter((name) => name.startsWith('vault-shell-')).length)
+    )
+    .toBe(1);
+  const first = await page.evaluate(async () => (await caches.keys()).find((name) => name.startsWith('vault-shell-')));
+  const original = await page.evaluate(async () =>
+    Array.from(new Uint8Array(await (await fetch('/logo.png')).arrayBuffer()))
+  );
+  await page.evaluate(async () => {
+    const cache = await caches.open('branding-unrelated');
+    await cache.put('/keep', new Response('keep'));
+  });
+  const switched = await page.request.post('/__test/images/fm');
+  expect(switched.ok()).toBe(true);
+  const { version } = await switched.json();
+  await page.evaluate(async () => {
+    await (await navigator.serviceWorker.getRegistration())!.update();
+  });
+  await expect
+    .poll(() => page.evaluate(async () => (await caches.keys()).find((name) => name.startsWith('vault-shell-'))))
+    .toContain(version);
+  expect(await page.evaluate(() => caches.has('branding-unrelated'))).toBe(true);
+  expect(await page.evaluate(async (name) => (await caches.keys()).includes(name!), first)).toBe(false);
+  const replacement = await page.evaluate(async () =>
+    Array.from(new Uint8Array(await (await fetch('/logo.png')).arrayBuffer()))
+  );
+  expect(replacement).not.toEqual(original);
+  await expect(page.locator('header img')).toHaveAttribute('src', '/logo.png');
+  await expect(page.locator('footer img')).toHaveAttribute('src', '/videovault-logo.png');
+  expect(
+    await page.evaluate(async () =>
+      Array.from(new Uint8Array(await (await fetch('/videovault-logo.png')).arrayBuffer()))
+    )
+  ).toEqual(original);
+  expect((await page.request.get('/.sw.template.js')).status()).toBe(404);
+  const manifest = await (await page.request.get('/precache.json')).json();
+  expect(manifest).not.toContain('/.sw.template.js');
+  expect(manifest).toContain('/videovault-logo.png');
+  const unchanged = await page.request.post('/__test/images/fm');
+  expect((await unchanged.json()).version).toBe(version);
+  await page.context().setOffline(true);
+  expect(
+    await page.evaluate(async () => Array.from(new Uint8Array(await (await fetch('/logo.png')).arrayBuffer())))
+  ).toEqual(replacement);
+  expect(
+    await page.evaluate(async () =>
+      Array.from(new Uint8Array(await (await fetch('/videovault-logo.png')).arrayBuffer()))
+    )
+  ).toEqual(original);
+  await page.context().setOffline(false);
+  await page.request.post('/__test/images/default');
+});

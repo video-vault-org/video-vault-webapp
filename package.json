@@ -15,7 +15,8 @@
     "videovaultweb": "built/lib/index.js",
     "videovault-admin-init": "built/lib/initialize-admin.js",
     "videovault-config-init": "built/lib/initialize-config.js",
-    "videovault-meta-init": "built/lib/initialize-meta.js"
+    "videovault-meta-init": "built/lib/initialize-meta.js",
+    "videovault-frontend-init": "built/lib/initialize-frontend.js"
   },
   "scripts": {
     "audit": "better-npm-audit audit",
@@ -29,7 +30,8 @@
     "meta:init": "node built/lib/initialize-meta.js",
     "build:backend": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
     "build:frontend": "npm --prefix frontend run build && node scripts/build-frontend.mjs",
-    "test:frontend": "npm --prefix frontend test"
+    "test:frontend": "npm --prefix frontend test",
+    "frontend:init": "node built/lib/initialize-frontend.js"
   },
   "repository": {
     "type": "git",

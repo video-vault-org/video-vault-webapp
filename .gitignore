@@ -23,3 +23,11 @@ AGENTS.md
 /public/icon-*.png
 /frontend/playwright-report
 /frontend/test-results
+
+/public/.sw.template.js
+
+/img/*
+!/img/default.*
+!/img/README.md
+
+/public/videovault-logo.png

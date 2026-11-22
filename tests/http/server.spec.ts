@@ -1,3 +1,4 @@
+import { prepareFrontend } from '@/images';
 import { DEFAULT_META_CONFIG, MetaConfig } from '@/meta/config/MetaConfig';
 import { createServer, Server } from 'node:http';
 import { AddressInfo } from 'node:net';
@@ -16,6 +17,8 @@ import { AuthService } from '@/service/AuthService';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { InMemoryStorageAdapter } from '@/storage/adapters/InMemoryStorageAdapter';
 import { StorageWrapper } from '@/storage/StorageWrapper';
+
+jest.mock('@/images', () => ({ prepareFrontend: jest.fn() }));
 
 jest.mock('@/meta', () => ({ loadConfig: jest.fn() }));
 
@@ -36,6 +39,7 @@ describe('startServer', () => {
   const environment = { ...process.env };
 
   beforeEach(async () => {
+    jest.mocked(prepareFrontend).mockReset().mockResolvedValue('image-version');
     directory = await mkdtemp(join(tmpdir(), 'video-vault-server-'));
     await writeFile(join(directory, 'index.html'), 'VideoVault');
     jest.mocked(loadMetaConfig).mockReset().mockResolvedValue(null);
@@ -73,6 +77,8 @@ describe('startServer', () => {
     expect(ensureInstanceSalt).toHaveBeenCalledWith();
     expect(ensureInstanceSalt).toHaveBeenCalledTimes(1);
     expect(loadMetaConfig).toHaveBeenCalledTimes(1);
+    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory });
+    expect(jest.mocked(prepareFrontend).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
     expect(jest.mocked(ensureInstanceSalt).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
     expect(loadDb).toHaveBeenCalledTimes(1);
     expect(loadDb).toHaveBeenCalledWith({ title: 'VideoVault' });
@@ -136,6 +142,8 @@ describe('startServer', () => {
         .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' }, meta });
     }
     expect(loadMetaConfig).toHaveBeenCalledTimes(1);
+    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory });
+    expect(jest.mocked(prepareFrontend).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
   });
 
   test.each([-1, 65536, 1.5, NaN])('rejects invalid port %s before initializing adapters', async (port) => {
@@ -186,5 +194,14 @@ describe('startServer', () => {
     process.env.VIDEO_UPLOAD_LIMIT_BYTES = '0';
     await expect(startServer({ port: 0 })).rejects.toThrow(RangeError);
     expect(resetDb).toHaveBeenCalledTimes(1);
+  });
+
+  test('fails before opening adapters when image preparation fails', async () => {
+    const error = new Error('Image set is incomplete');
+    jest.mocked(loadDb).mockClear();
+    jest.mocked(prepareFrontend).mockRejectedValueOnce(error);
+    await expect(startServer({ port: 0, staticDirectory: directory })).rejects.toBe(error);
+    expect(loadDb).not.toHaveBeenCalled();
+    expect(startTemporaryFileCleanup).not.toHaveBeenCalled();
   });
 });

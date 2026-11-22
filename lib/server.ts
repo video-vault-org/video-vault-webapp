@@ -1,3 +1,4 @@
+import { prepareFrontend } from '@/images';
 import { Server } from 'node:http';
 import { loadDb, resetDb } from '@/db';
 import { loadStorage, resetStorage } from '@/storage';
@@ -19,6 +20,7 @@ import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
  * VIDEO_UPLOAD_LIMIT_BYTES and THUMBNAIL_UPLOAD_LIMIT_BYTES override the 2 GiB and 20 MiB defaults.
  * JWT_TTL_SECONDS overrides the default one-hour token lifetime.
  * Temporary files with ctime older than 24 hours are cleaned on startup and hourly.
+ * Prepares configured ./img branding and its service worker version in the static directory before listening.
  * Requires ./conf/db.json; JWT keys are loaded or created under ./jwtkeys.
  * @returns The listening server and an idempotent close function that stops temporary-file cleanup and closes the database.
  * @throws If configuration, initialization or listening fails; initialized resources are closed on failure.
@@ -37,6 +39,7 @@ const startServer = async function ({
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('Invalid port');
     const appConfig = (await loadAppConfig()) ?? { title: DEFAULT_APP_TITLE };
     const metaConfig = (await loadMetaConfig()) ?? DEFAULT_META_CONFIG;
+    await prepareFrontend({ staticDirectory });
     const db = await loadDb(appConfig);
     const storage = await loadStorage();
     const auth = new AuthService(db, { tokenLifetimeSeconds: process.env.JWT_TTL_SECONDS === undefined ? undefined : Number(process.env.JWT_TTL_SECONDS) });

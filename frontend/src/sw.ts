@@ -1,14 +1,15 @@
 /// <reference lib="webworker" />
 import { range } from './lib/ranges';
+
 const sw = self as unknown as ServiceWorkerGlobalScope,
-  cacheName = `vault-shell-${__BUILD_ID__}`;
+  cacheName = `vault-shell-${__BUILD_ID__}-__VIDEOVAULT_IMAGES_VERSION__`;
 
 sw.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const paths = await (await fetch('/precache.json', { cache: 'no-store' })).json();
       const cache = await caches.open(cacheName);
-      await cache.addAll(paths);
+      await cache.addAll(paths.map((path: string) => new Request(path, { cache: 'reload' })));
       await sw.skipWaiting();
     })()
   );

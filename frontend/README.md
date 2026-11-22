@@ -15,7 +15,17 @@ npm start
 
 The root build compiles the backend, builds `frontend/dist`, and copies it to `public`. Existing unrelated public files are preserved; generated assets are replaced. No CDN is used for application dependencies, fonts, crypto or MediaInfo's WASM.
 
-For UI development use `npm --prefix frontend run dev` alongside the backend on port 3000. Vite proxies `/api`, `/login` and `/bootstrap`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
+For UI development use `npm --prefix frontend run dev` alongside the backend on port 3000. Vite proxies `/api`, `/login`, `/bootstrap` and the fixed footer image `/videovault-logo.png`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
+
+## Custom logo and icons
+
+Place complete PNG sets in the repository's `img/` directory. The included set is `default.logo.png`, `default.icon-32.png`, `default.icon-192.png` and `default.icon-512.png`. For another set, copy all four names with another prefix, for example `fm.logo.png` and `fm.icon-32.png` (plus the 192/512 icons). Prefixes use letters, digits, hyphens and underscores, start with a letter or digit and have at most 64 characters. Use the indicated pixel sizes for icons.
+
+After building the backend, run `npm run frontend:init` to select a complete set. The CLI saves `{ "prefix": "fm" }` in `conf/images.json` and confirms before replacing an existing selection. Missing configuration uses `default`; an explicitly selected missing or incomplete set stops startup with an error.
+
+On each server start, the selected images are copied into the static directory under the fixed names `logo.png` and `icon-*.png`. The header uses the selected logo; the “Powered by VideoVault” footer always uses `default.logo.png`, copied separately to `videovault-logo.png`. Keep that original file even when using another image set. The server needs write access to that directory and read access to `img/`. The build supplies an immutable `.sw.template.js`; startup stamps its working `sw.js` with a SHA-256 version derived from the selected filenames and file contents, including the original footer logo. No frontend rebuild is required to change images: select the set and restart the server. Identical contents retain the same version across restarts, regardless of prefix or timestamps.
+
+The service worker combines the build and image versions in its cache name and fetches precached resources with `cache: 'reload'`. Successful activation removes old app caches, preserving unrelated caches and the encrypted IndexedDB catalog. Existing browsers adopt changes on a successful worker update; an already displayed image may require a page reload. The hidden worker template is excluded from precaching and public HTTP access. Bootstrap remains unchanged.
 
 ## Tests
 

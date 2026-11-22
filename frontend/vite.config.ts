@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
-import { readdir, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+
 const config = defineConfig({
   define: { __BUILD_ID__: JSON.stringify(Date.now().toString()) },
   build: {
@@ -10,7 +11,12 @@ const config = defineConfig({
     }
   },
   server: {
-    proxy: { '/api': 'http://localhost:3000', '/login': 'http://localhost:3000', '/bootstrap': 'http://localhost:3000' }
+    proxy: {
+      '/videovault-logo.png': 'http://localhost:3000',
+      '/api': 'http://localhost:3000',
+      '/login': 'http://localhost:3000',
+      '/bootstrap': 'http://localhost:3000'
+    }
   },
   plugins: [
     {
@@ -29,8 +35,13 @@ const config = defineConfig({
         };
 
         await writeFile(
+          resolve(root, 'videovault-logo.png'),
+          await readFile(resolve(import.meta.dirname, '../img/default.logo.png'))
+        );
+        await writeFile(resolve(root, '.sw.template.js'), await readFile(resolve(root, 'sw.js')));
+        await writeFile(
           resolve(root, 'precache.json'),
-          JSON.stringify((await files('')).filter((p) => p !== '/precache.json'))
+          JSON.stringify((await files('')).filter((p) => p !== '/precache.json' && p !== '/.sw.template.js'))
         );
       }
     }

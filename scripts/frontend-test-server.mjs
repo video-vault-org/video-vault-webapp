@@ -1,5 +1,5 @@
 // Isolated integration fixture: temporary storage, in-memory DB, no production config or secrets.
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createCipheriv, createHmac, randomBytes } from 'node:crypto';
@@ -11,6 +11,7 @@ import { UserService } from '../built/lib/service/UserService.js';
 import { VideoService } from '../built/lib/service/VideoService.js';
 import { CommentService } from '../built/lib/service/CommentService.js';
 import { createApp } from '../built/lib/http/app.js';
+import { prepareFrontend } from '../built/lib/images/index.js';
 import { deriveKey } from '../built/lib/util/deriveKey.js';
 const root = resolve(import.meta.dirname, '..'),
   directory = await mkdtemp(join(tmpdir(), 'vault-browser-'));
@@ -96,13 +97,21 @@ for (const [id, title, description, date, people] of [
     await adapter.save(path, `${id}.${kind}`);
   }
 }
+const staticDirectory = join(directory, 'public');
+const imageDirectory = join(directory, 'img');
+await cp(join(root, 'public'), staticDirectory, { recursive: true });
+await cp(join(root, 'img'), imageDirectory, { recursive: true });
+for (const name of ['logo.png', 'icon-32.png', 'icon-192.png', 'icon-512.png']) {
+  await cp(join(imageDirectory, `default.${name === 'logo.png' ? 'icon-32.png' : name}`), join(imageDirectory, `fm.${name}`));
+}
+await prepareFrontend({ staticDirectory, imageDirectory, prefix: 'default' });
 const auth = new AuthService(db, { keyDirectory: join(directory, 'jwtkeys') });
 await auth.initialize();
 const app = createApp(
   { auth, users, videos: new VideoService(new StorageWrapper(adapter, { temporaryDirectory: directory }), db), comments: new CommentService(db) },
   {
     instanceSalt: salt,
-    staticDirectory: join(root, 'public'),
+    staticDirectory,
     temporaryDirectory: directory,
     appConfig: { title: 'Our private archive' },
     metaConfig: {
@@ -116,6 +125,12 @@ const app = createApp(
     logger: false
   }
 );
+// This endpoint exists only in this isolated test fixture and never in the production application.
+app.post('/__test/images/:prefix', async (request) => {
+  const { prefix } = request.params;
+  if (!['default', 'fm'].includes(prefix)) throw new Error('Unknown test image set');
+  return { version: await prepareFrontend({ staticDirectory, imageDirectory, prefix }) };
+});
 await app.listen({ host: '127.0.0.1', port: Number(process.env.FRONTEND_TEST_PORT ?? 4217) });
 for (const signal of ['SIGINT', 'SIGTERM'])
   process.once(signal, async () => {

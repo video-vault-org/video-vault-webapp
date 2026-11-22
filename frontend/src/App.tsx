@@ -621,7 +621,7 @@ const Application = function () {
       )}
       <footer className="site-footer">
         <a href={REPO} target="_blank" rel="noreferrer">
-          <img src="/logo.png" alt="" />
+          <img src="/videovault-logo.png" alt="" />
           Powered by <strong>VideoVault</strong> ↗
         </a>
         <span>{t('Privat geteilt. Lokal entschlüsselt.', 'Privately shared. Locally decrypted.')}</span>
