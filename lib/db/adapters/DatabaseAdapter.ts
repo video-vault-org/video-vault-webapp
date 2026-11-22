@@ -118,6 +118,16 @@ interface DatabaseAdapter {
   changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
+   * Atomically changes a video's description, lastModified and hmac, matched by videoId.
+   * Missing videos are left unchanged; other attributes are preserved.
+   * @param videoId The ID of the video to update.
+   * @param description The new client-encrypted description.
+   * @param lastModified The new modification date.
+   * @param hmac The HMAC for the complete updated video metadata.
+   */
+  changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void>;
+
+  /**
    * Changes a videos metadata, matched by its videoId
    * @param videoId The id of the video to be changed
    * @param metadata The new metadata
@@ -131,6 +141,16 @@ interface DatabaseAdapter {
    * Omitted MIME types and unrelated metadata are preserved. Missing videos are left unchanged.
    */
   changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void>;
+
+  /**
+   * Atomically changes a video's recording date, lastModified and hmac, matched by videoId.
+   * Missing videos are left unchanged; other attributes are preserved.
+   * @param videoId The ID of the video to update.
+   * @param recorded The new recording date.
+   * @param lastModified The new modification date.
+   * @param hmac The HMAC for the complete updated video metadata.
+   */
+  changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void>;
 
   /**
    * Finds one video by its videoId

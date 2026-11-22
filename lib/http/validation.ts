@@ -10,7 +10,7 @@ const date = Type.String({ format: 'date-time' });
 const metadata = Type.Record(Type.String(), Type.Unknown());
 const passwordProperties = { loginHash: text, passwordKeySalt: text, userKey: text };
 const password = object(passwordProperties);
-const videoProperties = { videoId: id, title: text, meta: metadata, videoMimeType: text, thumbnailMimeType: text, lastModified: date, hmac: text };
+const videoProperties = { videoId: id, title: text, description: Type.String({ minLength: 1, maxLength: 1_000_000 }), meta: metadata, videoMimeType: text, thumbnailMimeType: text, recorded: date, lastModified: date, hmac: text };
 const video = object(videoProperties);
 const comment = object({ commentId: id, userId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, edited: Type.Boolean(), deleted: Type.Boolean(), hmac: text });
 const user = object({ userId: id, username, displayName: text, passwordKeySalt: text, userKey: text, admin: Type.Boolean(), editor: Type.Boolean(), moderator: Type.Boolean() });
@@ -22,7 +22,7 @@ const noContent = { 204: Type.Null(), ...errorResponses };
 
 /** Converts validated wire timestamps to the Date values expected by database services. */
 function videoInput(input: Static<typeof video>) {
-  return { ...input, lastModified: new Date(input.lastModified) };
+  return { ...input, recorded: new Date(input.recorded), lastModified: new Date(input.lastModified) };
 }
 
 /** Parses an ISO date with timezone or a non-negative Unix timestamp in milliseconds. */

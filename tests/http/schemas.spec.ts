@@ -10,7 +10,17 @@ import { StorageWrapper } from '@/storage/StorageWrapper';
 import { User } from '@/domain/User';
 
 const account: User = { userId: 'admin', username: 'alice', displayName: 'Alice', loginHash: 'private-hash', passwordKeySalt: 'salt', userKey: 'wrapped-key', admin: true, editor: true, moderator: true };
-const video = { videoId: 'video', title: 'Video', meta: { duration: 10, nested: { custom: true } }, videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', lastModified: new Date('2026-01-01T00:00:00Z'), hmac: 'hmac' };
+const video = {
+  videoId: 'video',
+  title: 'Video',
+  description: 'Encrypted description',
+  meta: { duration: 10, nested: { custom: true } },
+  videoMimeType: 'video/mp4',
+  thumbnailMimeType: 'image/png',
+  recorded: new Date(50),
+  lastModified: new Date('2026-01-01T00:00:00Z'),
+  hmac: 'hmac'
+};
 
 describe('compiled Fastify request and response schemas', () => {
   let app: FastifyInstance;
@@ -97,6 +107,34 @@ describe('compiled Fastify request and response schemas', () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  test.each([{ description: undefined }, { description: '' }, { description: 123 }, { recorded: undefined }, { recorded: 'invalid' }, { recorded: '2026-02-30T00:00:00Z' }])(
+    'requires a description and valid recording timestamp when submitting a video (%j)',
+    async (changes) => {
+      const submit = jest.spyOn(videos, 'submitVideo');
+      const response = await app.inject({ method: 'POST', url: '/api/video/submit', headers, payload: { ...video, ...changes } });
+      expect(response.statusCode).toBe(400);
+      expect(submit).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([
+    ['description', {}],
+    ['description', { description: '' }],
+    ['description', { description: 123 }],
+    ['description', { description: 'a'.repeat(1_000_001) }],
+    ['recorded', {}],
+    ['recorded', { recorded: 123 }],
+    ['recorded', { recorded: 'invalid' }],
+    ['recorded', { recorded: '2026-02-30T00:00:00Z' }]
+  ] as const)('rejects invalid %s changes before calling the service', async (field, values) => {
+    const description = jest.spyOn(videos, 'changeVideosDescription');
+    const recorded = jest.spyOn(videos, 'changeVideosRecorded');
+    const response = await app.inject({ method: 'PATCH', url: `/api/video/change/${field}/video`, headers, payload: { lastModified: '2026-01-01T00:00:00Z', hmac: 'hmac', ...values } });
+    expect(response.statusCode).toBe(400);
+    expect(description).not.toHaveBeenCalled();
+    expect(recorded).not.toHaveBeenCalled();
+  });
+
   test('coerces query numbers only and supplies pagination defaults', async () => {
     const find = jest.spyOn(comments, 'findCommentsByVideoIdSortedByCreatedDescPaginated').mockResolvedValue([[], '']);
     expect((await app.inject({ url: '/api/comments/video', headers })).statusCode).toBe(200);
@@ -145,7 +183,7 @@ describe('compiled Fastify request and response schemas', () => {
     jest.spyOn(videos, 'findAllVideos').mockResolvedValue([extra]);
     const response = await app.inject({ url: '/api/video/all', headers });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([{ ...video, lastModified: video.lastModified.toISOString() }]);
+    expect(response.json()).toEqual([{ ...video, recorded: video.recorded.toISOString(), lastModified: video.lastModified.toISOString() }]);
     expect(response.body).not.toContain('internal-secret');
   });
 });

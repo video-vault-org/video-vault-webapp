@@ -126,6 +126,16 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     video.hmac = hmac;
   }
 
+  public async changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
+    const video = this.videos.find((video) => video.videoId === videoId);
+    if (!video) {
+      return;
+    }
+    video.description = description;
+    video.lastModified = lastModified;
+    video.hmac = hmac;
+  }
+
   public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
     const video = this.videos.find((video) => video.videoId === videoId);
     if (!video) {
@@ -141,6 +151,16 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
     if (!video) return;
     if (videoMimeType !== undefined) video.videoMimeType = videoMimeType;
     if (thumbnailMimeType !== undefined) video.thumbnailMimeType = thumbnailMimeType;
+    video.lastModified = lastModified;
+    video.hmac = hmac;
+  }
+
+  public async changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
+    const video = this.videos.find((video) => video.videoId === videoId);
+    if (!video) {
+      return;
+    }
+    video.recorded = recorded;
     video.lastModified = lastModified;
     video.hmac = hmac;
   }

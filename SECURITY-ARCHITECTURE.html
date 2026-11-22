@@ -368,15 +368,15 @@
           <nav aria-label="Inhalt">
             <a href="#de-overview">01 · Ziel und Vertrauensgrenzen</a><a href="#de-keys">02 · Schlüssel und Aufgaben</a><a href="#de-bootstrap">03 · Erstinitialisierung und Passwortableitung</a
             ><a href="#de-envelope">04 · userKey: Verpackung und Entpacken</a><a href="#de-login">05 · Anmeldung und Serverzugriff</a><a href="#de-lifecycle">06 · Nutzer hinzufügen und Passwort ändern</a
-            ><a href="#de-files">07 · Dateien: Verschlüsselung und Binärformat</a><a href="#de-text">08 · Videotitel und Kommentar-Inhalte</a><a href="#de-metadata">09 · Metadaten-Integrität und Tombstones</a
+            ><a href="#de-files">07 · Dateien: Verschlüsselung und Binärformat</a><a href="#de-text">08 · Videotitel, Beschreibungen und Kommentar-Inhalte</a><a href="#de-metadata">09 · Metadaten-Integrität und Tombstones</a
             ><a href="#de-limits">10 · Schutzwirkung und Grenzen</a><a href="#de-implementation">11 · Umsetzungsstand und Referenzen</a>
           </nav>
           <article>
             <section id="de-overview" aria-labelledby="de-overview-title">
               <h2 id="de-overview-title">01 · Ziel und Vertrauensgrenzen</h2>
               <p>
-                VideoVault schützt private Videos durch Ende-zu-Ende-Verschlüsselung. Video- und Thumbnail-Dateien, Videotitel und Kommentar-Inhalte werden vor der Übertragung im Client verschlüsselt. Die Master-Schlüssel liegen serverseitig
-                ausschließlich gewrappt vor. Der Server übernimmt Anmeldung, Rollenprüfung und Speicherung.
+                VideoVault schützt private Videos durch Ende-zu-Ende-Verschlüsselung. Video- und Thumbnail-Dateien, Videotitel, Beschreibungen und Kommentar-Inhalte werden vor der Übertragung im Client verschlüsselt. Die Master-Schlüssel liegen
+                serverseitig ausschließlich gewrappt vor. Der Server übernimmt Anmeldung, Rollenprüfung und Speicherung.
               </p>
               <figure>
                 <svg viewBox="0 0 760 180" role="img" aria-label="Vertrauensgrenzen">
@@ -724,7 +724,7 @@ encryptedFile  = wrappedFileKey || chunk[0] || … || chunk[N−1]</code></pre>
                   </tr>
                   <tr>
                     <td><code>context</code></td>
-                    <td><code>video</code>, <code>thumbnail</code>, <code>title</code> oder <code>comment</code>.</td>
+                    <td><code>video</code>, <code>thumbnail</code>, <code>title</code>, <code>description</code> oder <code>comment</code>.</td>
                   </tr>
                   <tr>
                     <td><code>identity</code></td>
@@ -771,20 +771,33 @@ offset(i) = 40 + i × B</code></pre>
             </section>
             <section id="de-text" aria-labelledby="de-text-title">
               <span class="badge planned">Client-Architektur</span>
-              <h2 id="de-text-title">08 · Videotitel und Kommentar-Inhalte</h2>
+              <h2 id="de-text-title">08 · Videotitel, Beschreibungen und Kommentar-Inhalte</h2>
               <p>
-                Videotitel und Kommentar-Inhalte verwenden dasselbe Verfahren wie Dateien: UTF-8-Klartext, ein neuer zufälliger 32-Byte-fileKey, AES-KW mit masterEncryptionKey, 34-KiB-Chunks und AES-256-GCM. Der vollständige binäre Container wird
-                anschließend Base64-kodiert und im Textfeld der Datenbank gespeichert.
+                Videotitel, Beschreibungen und Kommentar-Inhalte verwenden dasselbe Verfahren wie Dateien: UTF-8-Klartext, ein neuer zufälliger 32-Byte-fileKey, AES-KW mit masterEncryptionKey, 34-KiB-Chunks und AES-256-GCM. Der vollständige binäre
+                Container wird anschließend Base64-kodiert und im Textfeld der Datenbank gespeichert.
               </p>
-              <pre><code>title   = Base64(wrappedFileKey || chunks)  // context=&quot;title&quot;, identity=videoId
-content = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, identity=commentId</code></pre>
+              <pre><code>title       = Base64(wrappedFileKey || chunks)  // context=&quot;title&quot;, identity=videoId
+description = Base64(wrappedFileKey || chunks)  // context=&quot;description&quot;, identity=videoId
+content     = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, identity=commentId</code></pre>
               <p>
-                Die AAD enthält zusätzlich wie bei Dateien Version, Chunk-Index und Chunk-Anzahl. Der getrennte Kontext verhindert einen Austausch zwischen einem Titel und einem Kommentar mit derselben ID. Jede neue Verschlüsselung, auch beim
-                Bearbeiten eines Textes, erhält einen neuen fileKey. Vor der Anzeige werden Base64 dekodiert, der fileKey entwrappt und alle GCM-Tags geprüft.
+                Die AAD enthält zusätzlich wie bei Dateien Version, Chunk-Index und Chunk-Anzahl. Für die Beschreibung ist die Identität ebenfalls die Video-ID; der eigene Kontext <code>description</code> verhindert ein Vertauschen mit dem Titel
+                desselben Videos. Jeder Textwert erhält einen eigenen frischen fileKey. Der getrennte Kontext verhindert einen Austausch zwischen einem Titel und einem Kommentar mit derselben ID. Jede neue Verschlüsselung, auch beim Bearbeiten eines
+                Textes, erhält einen neuen fileKey. Vor der Anzeige werden Base64 dekodiert, der fileKey entwrappt und alle GCM-Tags geprüft.
               </p>
               <p>
                 Ein regulär verschlüsselter leerer Text ist ein Base64-Container mit einem authentisierten leeren Chunk. Er ist von <code>content=''</code> eines serverseitigen Tombstones zu unterscheiden. Base64 ist nur die Transport- und
                 Speicherkodierung; die Vertraulichkeit stammt aus AES-GCM.
+              </p>
+              <h3>Backend-Vertrag für Beschreibung und Aufzeichnungsdatum</h3>
+              <p>
+                Neue Videos enthalten verpflichtend <code>description</code> als verschlüsselten Base64-String und <code>recorded</code> als Aufzeichnungsdatum. Der Server behandelt die Beschreibung als undurchsichtigen Text mit 1 bis 1.000.000
+                Zeichen; die clientseitige Verschlüsselung entspricht dem Titel-Verfahren. Ein leerer Klartext wird als gültiger verschlüsselter Container übertragen, nicht als leerer String. Das Aufzeichnungsdatum ist sichtbar, wird im Domänenmodell
+                als Date verarbeitet und in HTTP-JSON als UTC-ISO-Zeitstempel ausgegeben. Sein vollständiger Wert geht nach der Datumsnormalisierung in das Metadaten-HMAC ein, während die Beschreibung dort nur mit ihrer gespeicherten Länge eingeht.
+              </p>
+              <p>
+                Die Editor-Routen <code>PATCH /api/video/change/description/:videoId</code> und <code>PATCH /api/video/change/recorded/:videoId</code> verlangen das jeweilige neue Feld sowie <code>lastModified</code> und <code>hmac</code>. Der
+                VideoService und alle fünf Datenbankadapter unterstützen diese Aktualisierungen; das jeweilige Feld, lastModified und HMAC werden gemeinsam atomar gespeichert. Andere Felder bleiben erhalten. Das Backend erzeugt oder prüft die
+                Beschreibungskryptografie und das Metadaten-HMAC nicht selbst.
               </p>
             </section>
             <section id="de-metadata" aria-labelledby="de-metadata-title">
@@ -794,15 +807,19 @@ content = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, iden
               <ol>
                 <li>Das Feld <code>hmac</code> und interne Datenbank-Hilfsfelder werden ausgeschlossen.</li>
                 <li>
-                  Verschlüsselte Textwerte werden durch ihre <strong>Länge in der gespeicherten Form</strong> ersetzt: <code>title</code> bzw. <code>content</code> enthält in der HMAC-Projektion eine Zahl statt des Base64-Strings. Bei kanonischem
-                  Base64 entspricht die Zeichenzahl der UTF-8-Bytezahl; mitgezählt wird das Padding. Es ist weder die Klartextlänge noch die Länge des dekodierten Containers.
+                  Verschlüsselte Textwerte werden durch ihre <strong>Länge in der gespeicherten Form</strong> ersetzt: <code>title</code>, <code>description</code> bzw. <code>content</code> enthält in der HMAC-Projektion eine Zahl statt des
+                  Base64-Strings. Bei kanonischem Base64 entspricht die Zeichenzahl der UTF-8-Bytezahl; mitgezählt wird das Padding. Es ist weder die Klartextlänge noch die Länge des dekodierten Containers.
                 </li>
-                <li>Alle übrigen Attribute bleiben inhaltlich erhalten. Das umfasst IDs, MIME-Typen, JSON-<code>meta</code>, Zeitstempel sowie bei Kommentaren Autor, Video-Zuordnung und Flags.</li>
+                <li>
+                  Alle übrigen Attribute bleiben inhaltlich erhalten. Das umfasst IDs, MIME-Typen, JSON-<code>meta</code>, das unverschlüsselte Aufzeichnungsdatum <code>recorded</code>, Zeitstempel sowie bei Kommentaren Autor, Video-Zuordnung und
+                  Flags.
+                </li>
                 <li>Datumswerte werden vor der Kanonisierung als UTC-ISO-Strings entsprechend <code>toISOString()</code> dargestellt. Die Projektion enthält nur gültige JSON-Werte, keine <code>undefined</code>-Werte oder nicht-endlichen Zahlen.</li>
                 <li>Serialisierung erfolgt per RFC 8785 (JCS), danach UTF-8-Kodierung und HMAC-SHA-256. Die 32-Byte-Ausgabe wird als Standard-Base64 gespeichert.</li>
               </ol>
               <pre><code>projection(video)   = allBusinessAttributesExceptHmac(video)
-projection.title    = storedVideo.title.length
+projection.title       = storedVideo.title.length
+projection.description = storedVideo.description.length
 
 projection(comment) = allBusinessAttributesExceptHmac(comment)
 projection.content  = storedComment.content.length
@@ -843,8 +860,8 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                   <tr>
                     <td>Sichtbare Metadaten</td>
                     <td>
-                      Benutzernamen, Anzeigenamen, Rollen, IDs, Beziehungen, Zeitstempel, MIME-Typen, Dateigrößen und Zugriffsmuster bleiben für das Backend sichtbar. <code>meta</code> ist nicht automatisch verschlüsselt; dort abgelegte Klartextwerte
-                      bleiben lesbar.
+                      Benutzernamen, Anzeigenamen, Rollen, IDs, Beziehungen, Zeitstempel einschließlich <code>recorded</code>, MIME-Typen, Dateigrößen und Zugriffsmuster bleiben für das Backend sichtbar. <code>meta</code> ist nicht automatisch
+                      verschlüsselt; dort abgelegte Klartextwerte bleiben lesbar.
                     </td>
                   </tr>
                   <tr>
@@ -934,7 +951,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                 <li><a href="https://www.rfc-editor.org/rfc/rfc4648.html">RFC 4648 · Base64</a></li>
               </ul>
             </section>
-            <p class="foot">Stand: 21. November 2026 · Eigenständige Offline-Dokumentation · Keine externen Skripte oder Schriftarten.</p>
+            <p class="foot">Stand: 22. November 2026 · Eigenständige Offline-Dokumentation · Keine externen Skripte oder Schriftarten.</p>
           </article>
         </div>
       </div>
@@ -943,15 +960,15 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
           <nav aria-label="Contents">
             <a href="#en-overview">01 · Goals and trust boundaries</a><a href="#en-keys">02 · Keys and responsibilities</a><a href="#en-bootstrap">03 · Bootstrap and password derivation</a><a href="#en-envelope">04 · Packing and unpacking userKey</a
             ><a href="#en-login">05 · Authentication and server access</a><a href="#en-lifecycle">06 · Adding users and changing passwords</a><a href="#en-files">07 · Files: encryption and binary format</a
-            ><a href="#en-text">08 · Video titles and comment contents</a><a href="#en-metadata">09 · Metadata integrity and tombstones</a><a href="#en-limits">10 · Protection and limitations</a
+            ><a href="#en-text">08 · Video titles, descriptions and comment contents</a><a href="#en-metadata">09 · Metadata integrity and tombstones</a><a href="#en-limits">10 · Protection and limitations</a
             ><a href="#en-implementation">11 · Implementation status and references</a>
           </nav>
           <article>
             <section id="en-overview" aria-labelledby="en-overview-title">
               <h2 id="en-overview-title">01 · Goals and trust boundaries</h2>
               <p>
-                VideoVault protects private videos with end-to-end encryption. Video and thumbnail files, video titles and comment contents are encrypted in the client before transmission. The server holds master keys only in wrapped form and handles
-                authentication, authorization and persistence.
+                VideoVault protects private videos with end-to-end encryption. Video and thumbnail files, video titles, descriptions and comment contents are encrypted in the client before transmission. The server holds master keys only in wrapped
+                form and handles authentication, authorization and persistence.
               </p>
               <figure>
                 <svg viewBox="0 0 760 180" role="img" aria-label="Trust boundaries">
@@ -1284,7 +1301,7 @@ encryptedFile  = wrappedFileKey || chunk[0] || … || chunk[N−1]</code></pre>
                   </tr>
                   <tr>
                     <td><code>context</code></td>
-                    <td><code>video</code>, <code>thumbnail</code>, <code>title</code> or <code>comment</code>.</td>
+                    <td><code>video</code>, <code>thumbnail</code>, <code>title</code>, <code>description</code> or <code>comment</code>.</td>
                   </tr>
                   <tr>
                     <td><code>identity</code></td>
@@ -1328,20 +1345,33 @@ offset(i) = 40 + i × B</code></pre>
             </section>
             <section id="en-text" aria-labelledby="en-text-title">
               <span class="badge planned">Client architecture</span>
-              <h2 id="en-text-title">08 · Video titles and comment contents</h2>
+              <h2 id="en-text-title">08 · Video titles, descriptions and comment contents</h2>
               <p>
-                Video titles and comment contents use the same procedure as files: UTF-8 plaintext, a fresh random 32-byte fileKey, AES-KW with masterEncryptionKey, 34-KiB chunks and AES-256-GCM. The complete binary container is then Base64-encoded
-                and stored in the database text field.
+                Video titles, descriptions and comment contents use the same procedure as files: UTF-8 plaintext, a fresh random 32-byte fileKey, AES-KW with masterEncryptionKey, 34-KiB chunks and AES-256-GCM. The complete binary container is then
+                Base64-encoded and stored in the database text field.
               </p>
-              <pre><code>title   = Base64(wrappedFileKey || chunks)  // context=&quot;title&quot;, identity=videoId
-content = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, identity=commentId</code></pre>
+              <pre><code>title       = Base64(wrappedFileKey || chunks)  // context=&quot;title&quot;, identity=videoId
+description = Base64(wrappedFileKey || chunks)  // context=&quot;description&quot;, identity=videoId
+content     = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, identity=commentId</code></pre>
               <p>
-                AAD also includes the version, chunk index and chunk count, as for files. The separate context prevents substitution between a title and a comment with the same ID. Every new encryption, including editing a text value, receives a
-                fresh fileKey. Before display, decode Base64, unwrap the fileKey and verify all GCM tags.
+                AAD also includes the version, chunk index and chunk count, as for files. A description also uses the video ID as its identity; the separate <code>description</code> context prevents substitution with the title of the same video. Each
+                text value receives its own fresh fileKey. The separate context prevents substitution between a title and a comment with the same ID. Every new encryption, including editing a text value, receives a fresh fileKey. Before display,
+                decode Base64, unwrap the fileKey and verify all GCM tags.
               </p>
               <p>
                 A regularly encrypted empty string is a Base64 container containing an authenticated empty chunk. It differs from <code>content=''</code> on a server-side tombstone. Base64 is only a transport and storage encoding; AES-GCM provides
                 confidentiality.
+              </p>
+              <h3>Backend contract for descriptions and recording dates</h3>
+              <p>
+                New videos require <code>description</code> as an encrypted Base64 string and <code>recorded</code> as the recording timestamp. The server treats descriptions as opaque text of 1 to 1,000,000 characters; client-side encryption follows
+                the title procedure. Empty plaintext is transmitted as a valid encrypted container, not an empty string. The recording timestamp is visible, represented as a Date in the domain model and serialized to HTTP JSON as a UTC ISO timestamp.
+                Its complete normalized value enters the metadata HMAC, while descriptions contribute only their stored length.
+              </p>
+              <p>
+                The editor routes <code>PATCH /api/video/change/description/:videoId</code> and <code>PATCH /api/video/change/recorded/:videoId</code> require the corresponding new field plus <code>lastModified</code> and <code>hmac</code>.
+                VideoService and all five database adapters support these updates; the corresponding field, lastModified and HMAC are stored together atomically. Other fields are preserved. The backend does not generate or verify description
+                encryption or metadata HMACs itself.
               </p>
             </section>
             <section id="en-metadata" aria-labelledby="en-metadata-title">
@@ -1351,15 +1381,16 @@ content = Base64(wrappedFileKey || chunks)  // context=&quot;comment&quot;, iden
               <ol>
                 <li>Exclude the <code>hmac</code> field and internal database helper fields.</li>
                 <li>
-                  Replace encrypted text values with their <strong>length as stored</strong>: <code>title</code> or <code>content</code> becomes a number instead of the Base64 string in the HMAC projection. For canonical Base64, the character count
-                  equals the UTF-8 byte count and includes padding. It is neither plaintext length nor decoded container length.
+                  Replace encrypted text values with their <strong>length as stored</strong>: <code>title</code>, <code>description</code> or <code>content</code> becomes a number instead of the Base64 string in the HMAC projection. For canonical
+                  Base64, the character count equals the UTF-8 byte count and includes padding. It is neither plaintext length nor decoded container length.
                 </li>
-                <li>Preserve all other attributes, including IDs, MIME types, JSON <code>meta</code>, timestamps, and, for comments, author, video association and flags.</li>
+                <li>Preserve all other attributes, including IDs, MIME types, JSON <code>meta</code>, the unencrypted recording timestamp <code>recorded</code>, timestamps, and, for comments, author, video association and flags.</li>
                 <li>Represent dates as UTC ISO strings equivalent to <code>toISOString()</code> before canonicalization. The projection must contain valid JSON values only, with no <code>undefined</code> or non-finite numbers.</li>
                 <li>Serialize using RFC 8785 (JCS), encode as UTF-8 and apply HMAC-SHA-256. Store the 32-byte output as standard Base64.</li>
               </ol>
               <pre><code>projection(video)   = allBusinessAttributesExceptHmac(video)
-projection.title    = storedVideo.title.length
+projection.title       = storedVideo.title.length
+projection.description = storedVideo.description.length
 
 projection(comment) = allBusinessAttributesExceptHmac(comment)
 projection.content  = storedComment.content.length
@@ -1400,8 +1431,8 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                   <tr>
                     <td>Visible metadata</td>
                     <td>
-                      Usernames, display names, roles, IDs, relationships, timestamps, MIME types, file sizes and access patterns remain visible to the backend. <code>meta</code> is not automatically encrypted; plaintext values placed there remain
-                      readable.
+                      Usernames, display names, roles, IDs, relationships, timestamps including <code>recorded</code>, MIME types, file sizes and access patterns remain visible to the backend. <code>meta</code> is not automatically encrypted;
+                      plaintext values placed there remain readable.
                     </td>
                   </tr>
                   <tr>
@@ -1478,7 +1509,7 @@ hmac = Base64(HMAC-SHA-256(masterAuthKey, UTF8(JCS(projection))))</code></pre>
                 <li><a href="https://www.rfc-editor.org/rfc/rfc4648.html">RFC 4648 · Base64</a></li>
               </ul>
             </section>
-            <p class="foot">As of 21 November 2026 · Standalone offline documentation · No external scripts or fonts.</p>
+            <p class="foot">As of 22 November 2026 · Standalone offline documentation · No external scripts or fonts.</p>
           </article>
         </div>
       </div>

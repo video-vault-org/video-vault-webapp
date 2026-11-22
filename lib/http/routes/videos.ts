@@ -10,7 +10,7 @@ import { Type, object, id, text, video, videoChange, sinceDate, metadata, errorR
 
 /** Encodes domain timestamps explicitly for the compiled JSON response serializer. */
 function publicVideo(item: Video) {
-  return { ...item, lastModified: item.lastModified.toISOString() };
+  return { ...item, recorded: item.recorded.toISOString(), lastModified: item.lastModified.toISOString() };
 }
 
 /** Registers video routes, including authenticated binary downloads and editor-only mutations. */
@@ -47,6 +47,13 @@ function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthServi
     return reply.code(204).send(null);
   });
 
+  /** PATCH /api/video/change/description/:videoId — Editors only. Updates the encrypted description, modification time and HMAC. */
+  router.patch('/change/description/:videoId', { onRequest: editor, schema: { params, body: object({ ...videoChange, description: Type.String({ minLength: 1, maxLength: 1_000_000 }) }), response: noContent } }, async (request, reply) => {
+    await requireVideo(request.params.videoId);
+    await videos.changeVideosDescription({ ...request.params, ...request.body, lastModified: new Date(request.body.lastModified) });
+    return reply.code(204).send(null);
+  });
+
   /** PATCH /api/video/change/metadata/:videoId — Editors only. Updates metadata, modification time and HMAC. */
   router.patch('/change/metadata/:videoId', { onRequest: editor, schema: { params, body: object({ ...videoChange, metadata }), response: noContent } }, async (request, reply) => {
     await requireVideo(request.params.videoId);
@@ -77,6 +84,13 @@ function videoRoutes(app: FastifyInstance, videos: VideoService, auth: AuthServi
       return reply.code(204).send(null);
     }
   );
+
+  /** PATCH /api/video/change/recorded/:videoId — Editors only. Updates the recording date, modification time and HMAC. */
+  router.patch('/change/recorded/:videoId', { onRequest: editor, schema: { params, body: object({ ...videoChange, recorded: date }), response: noContent } }, async (request, reply) => {
+    await requireVideo(request.params.videoId);
+    await videos.changeVideosRecorded({ ...request.params, ...request.body, recorded: new Date(request.body.recorded), lastModified: new Date(request.body.lastModified) });
+    return reply.code(204).send(null);
+  });
 
   /** DELETE /api/video/delete/:videoId — Editors only. Deletes metadata, comments and stored files. */
   router.delete('/delete/:videoId', { onRequest: editor, schema: { params, response: noContent } }, async (request, reply) => {

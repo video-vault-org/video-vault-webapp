@@ -109,6 +109,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
     await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: { title, lastModified, hmac } }));
   }
 
+  public async changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: { description, lastModified, hmac } }));
+  }
+
   public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
     await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: { meta: metadata, lastModified, hmac } }));
   }
@@ -116,6 +120,10 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
     const changes = { lastModified, hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) };
     await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: changes }));
+  }
+
+  public async changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
+    await this.write(async () => (await this.videos()).updateOne({ videoId }, { $set: { recorded, lastModified, hmac } }));
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {

@@ -9,9 +9,11 @@ describe('VideoService', () => {
   const video: Video = {
     videoId: 'v1',
     title: 'Original title',
+    description: 'Encrypted description',
     meta: { duration: 10 },
     videoMimeType: 'video/mp4',
     thumbnailMimeType: 'image/png',
+    recorded: new Date(50),
     lastModified: new Date(100),
     hmac: 'original-hmac'
   };
@@ -151,6 +153,14 @@ describe('VideoService', () => {
     expect(update).toHaveBeenCalledWith(parameters);
   });
 
+  test('changeVideosDescription forwards the encrypted description, modification date and HMAC', async () => {
+    const update = jest.spyOn(db, 'changeVideosDescriptionByVideoId').mockResolvedValue(undefined);
+    const parameters = { videoId, description: 'New encrypted description', lastModified, hmac };
+    await expect(service.changeVideosDescription(parameters)).resolves.toBeUndefined();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(parameters);
+  });
+
   test('changeVideosMetadata forwards additional metadata, modification date and HMAC', async () => {
     const update = jest.spyOn(db, 'changeVideosMetadataByVideoId').mockResolvedValue(undefined);
     const parameters = { videoId, metadata: { duration: 20, custom: { encrypted: true } }, lastModified, hmac };
@@ -220,13 +230,23 @@ describe('VideoService', () => {
     });
   });
 
+  test('changeVideosRecorded forwards the recording date, modification date and HMAC', async () => {
+    const update = jest.spyOn(db, 'changeVideosRecordedByVideoId').mockResolvedValue(undefined);
+    const parameters = { videoId, recorded: new Date(75), lastModified, hmac };
+    await expect(service.changeVideosRecorded(parameters)).resolves.toBeUndefined();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(parameters);
+  });
+
   test.each([
     ['changeVideosTitle', 'changeVideosTitleByVideoId'],
-    ['changeVideosMetadata', 'changeVideosMetadataByVideoId']
+    ['changeVideosDescription', 'changeVideosDescriptionByVideoId'],
+    ['changeVideosMetadata', 'changeVideosMetadataByVideoId'],
+    ['changeVideosRecorded', 'changeVideosRecordedByVideoId']
   ] as const)('%s propagates database errors', async (method, dbMethod) => {
     const error = new Error('Database unavailable');
     jest.spyOn(db, dbMethod).mockRejectedValueOnce(error);
-    const parameters = { videoId, title: 'New title', metadata: {}, mimetype: 'application/octet-stream', lastModified, hmac };
+    const parameters = { videoId, title: 'New title', description: 'New encrypted description', metadata: {}, recorded: new Date(75), mimetype: 'application/octet-stream', lastModified, hmac };
 
     await expect(service[method](parameters)).rejects.toBe(error);
   });

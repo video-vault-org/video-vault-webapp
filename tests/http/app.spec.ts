@@ -16,7 +16,7 @@ import { hashPassword, verifyPassword } from '@/util/password';
 import { deriveKey } from '@/util/deriveKey';
 
 const instant = '2026-01-01T00:00:00.000Z';
-const video = { videoId: 'v1', title: 'Video', meta: { duration: 10 }, videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', lastModified: new Date(instant), hmac: 'video-hmac' };
+const video = { videoId: 'v1', title: 'Video', description: 'Encrypted description', meta: { duration: 10 }, videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', recorded: new Date(50), lastModified: new Date(instant), hmac: 'video-hmac' };
 const change = { lastModified: instant, hmac: 'changed-hmac' };
 const loginHash = Buffer.from('client-password-hash').toString('base64');
 const password = { loginHash, passwordKeySalt: 'salt', userKey: 'encrypted-key' };
@@ -46,9 +46,11 @@ const protectedRoutes = [
   ['get', '/api/video/all', 'editor', undefined, 200],
   ['get', '/api/video/find/v1', 'editor', undefined, 200],
   ['patch', '/api/video/change/title/v1', 'editor', { ...change, title: 'Changed' }, 204],
+  ['patch', '/api/video/change/description/v1', 'editor', { ...change, description: 'Changed encrypted description' }, 204],
   ['patch', '/api/video/change/metadata/v1', 'editor', { ...change, metadata: { duration: 20 } }, 204],
   ['post', '/api/video/upload/v1', 'editor', undefined, 400],
   ['patch', '/api/video/change/files/v1', 'editor', { ...change, videoMimeType: 'video/webm' }, 404],
+  ['patch', '/api/video/change/recorded/v1', 'editor', { ...change, recorded: '2025-03-12T10:20:30+02:00' }, 204],
   ['delete', '/api/video/delete/v1', 'editor', undefined, 204],
   ['get', '/api/video/0', 'any', undefined, 200],
   ['get', '/api/video/file/v1', 'any', undefined, 200],
@@ -146,6 +148,45 @@ describe('Fastify backend', () => {
       const expected = !allowed ? 403 : access === 'own' && role !== 'reader' ? 404 : success;
       await request(app.server)[method](url).set(headers(role)).send(data).expect(expected);
     }
+  });
+
+  test('updates the encrypted video description together with lastModified and hmac', async () => {
+    const description = 'test-description';
+    await request(app.server)
+      .patch('/api/video/change/description/v1')
+      .set(headers('editor'))
+      .send({ ...change, description })
+      .expect(204);
+    expect(await db.findOneVideoByVideoId({ videoId: 'v1' })).toEqual({ ...video, description, lastModified: new Date(change.lastModified), hmac: change.hmac });
+    const response = await request(app.server).get('/api/video/find/v1').set(headers('editor')).expect(200);
+    expect(response.body).toMatchObject({ description, recorded: video.recorded.toISOString() });
+  });
+
+  test('updates recorded as a Date and serializes it as UTC on all video read routes', async () => {
+    const recorded = '2025-03-12T10:20:30+02:00';
+    await request(app.server)
+      .patch('/api/video/change/recorded/v1')
+      .set(headers('editor'))
+      .send({ ...change, recorded })
+      .expect(204);
+    expect(await db.findOneVideoByVideoId({ videoId: 'v1' })).toEqual({ ...video, recorded: new Date(recorded), lastModified: new Date(change.lastModified), hmac: change.hmac });
+    for (const path of ['/api/video/find/v1', '/api/video/all', '/api/video/0']) {
+      const response = await request(app.server).get(path).set(headers('editor')).expect(200);
+      const item = Array.isArray(response.body) ? response.body[0] : response.body;
+      expect(item).toMatchObject({ description: video.description, recorded: '2025-03-12T08:20:30.000Z', lastModified: change.lastModified });
+    }
+  });
+
+  test.each([
+    ['description', { description: 'Encrypted description' }],
+    ['recorded', { recorded: '2025-03-12T10:20:30Z' }]
+  ] as const)('returns 404 when changing %s of an unknown video', async (field, values) => {
+    await request(app.server)
+      .patch(`/api/video/change/${field}/missing`)
+      .set(headers('editor'))
+      .send({ ...change, ...values })
+      .expect(404);
+    expect(await db.findOneVideoByVideoId({ videoId: 'missing' })).toBeNull();
   });
 
   test('login is public, returns a usable JWT and never returns credentials', async () => {
@@ -337,7 +378,7 @@ describe('Fastify backend', () => {
       .set(headers('editor'))
       .send({ ...video, videoId: 'upload' })
       .expect(201);
-    expect(result.body.videoId).toBe('upload');
+    expect(result.body).toMatchObject({ videoId: 'upload', description: video.description, recorded: video.recorded.toISOString() });
     expect(await db.findOneVideoByVideoId({ videoId: 'upload' })).toMatchObject({ videoId: 'upload' });
     expect(await readdir(temporaryDirectory)).toEqual([]);
     const downloaded = await request(app.server).get('/api/video/file/upload').set(headers()).expect(200);

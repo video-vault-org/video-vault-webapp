@@ -28,9 +28,11 @@ describe('DynamoDBDatabaseAdapter', () => {
   const video: Video = {
     videoId: 'v1',
     title: 'Original',
+    description: 'Encrypted description',
     meta: { duration: 10 },
     videoMimeType: 'video/mp4',
     thumbnailMimeType: 'image/png',
+    recorded: new Date(50),
     lastModified: new Date(100),
     hmac: 'old-hmac'
   };
@@ -314,6 +316,7 @@ describe('DynamoDBDatabaseAdapter', () => {
 
     test.each([
       { field: 'title', changes: { title: 'New title' }, change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosTitleByVideoId({ videoId, title: 'New title', ...modified }) },
+      { field: 'description', changes: { description: 'New encrypted description' }, change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosDescriptionByVideoId({ videoId, description: 'New encrypted description', ...modified }) },
       { field: 'metadata', changes: { meta: { duration: 30 } }, change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosMetadataByVideoId({ videoId, metadata: { duration: 30 }, ...modified }) },
       { field: 'video file attributes', changes: { videoMimeType: 'video/webm' }, change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, videoMimeType: 'video/webm', ...modified }) },
       { field: 'thumbnail file attributes', changes: { thumbnailMimeType: 'image/webp' }, change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, thumbnailMimeType: 'image/webp', ...modified }) },
@@ -321,7 +324,8 @@ describe('DynamoDBDatabaseAdapter', () => {
         field: 'both file attributes',
         changes: { videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp' },
         change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosMimetypesByVideoId({ videoId, videoMimeType: 'video/webm', thumbnailMimeType: 'image/webp', ...modified })
-      }
+      },
+      { field: 'recorded', changes: { recorded: new Date(75) }, change: (db: DynamoDBDatabaseAdapter, videoId: string) => db.changeVideosRecordedByVideoId({ videoId, recorded: new Date(75), ...modified }) }
     ])('changes the $field, lastModified and hmac for the matching video', async ({ changes, change }) => {
       await change(db, 'missing');
       await change(db, videoId);
@@ -677,7 +681,7 @@ describe('DynamoDBDatabaseAdapter service pagination', () => {
 
 describe('DynamoDBDatabaseAdapter error translation', () => {
   const user: User = { userId: 'u1', username: 'alice', displayName: 'Alice', loginHash: 'hash', passwordKeySalt: 'salt', userKey: 'key', admin: false, editor: false, moderator: false };
-  const video: Video = { videoId: 'v1', title: 'Video', meta: {}, lastModified: new Date(100), videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', hmac: 'hmac' };
+  const video: Video = { videoId: 'v1', title: 'Video', description: 'Encrypted description', meta: {}, recorded: new Date(50), lastModified: new Date(100), videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png', hmac: 'hmac' };
   let db: DynamoDBDatabaseAdapter;
   let send: jest.SpyInstance;
 

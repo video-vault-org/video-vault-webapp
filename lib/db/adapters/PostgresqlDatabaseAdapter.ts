@@ -23,9 +23,11 @@ const schema = `
   CREATE TABLE IF NOT EXISTS videos (
     "videoId" text PRIMARY KEY,
     title text NOT NULL,
+    description text NOT NULL,
     meta jsonb NOT NULL,
     "videoMimeType" text NOT NULL,
     "thumbnailMimeType" text NOT NULL,
+    recorded timestamptz NOT NULL,
     "lastModified" timestamptz NOT NULL,
     hmac text NOT NULL
   );
@@ -166,13 +168,15 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
     await this.query('DELETE FROM users WHERE "userId" = $1', [userId]);
   }
 
-  public async postVideo({ videoId, title, meta, videoMimeType, thumbnailMimeType, lastModified, hmac }: Video): Promise<void> {
-    await this.query('INSERT INTO videos ("videoId", title, meta, "videoMimeType", "thumbnailMimeType", "lastModified", hmac) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
+  public async postVideo({ videoId, title, description, meta, videoMimeType, thumbnailMimeType, recorded, lastModified, hmac }: Video): Promise<void> {
+    await this.query('INSERT INTO videos ("videoId", title, description, meta, "videoMimeType", "thumbnailMimeType", recorded, "lastModified", hmac) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
       videoId,
       title,
+      description,
       JSON.stringify(meta),
       videoMimeType,
       thumbnailMimeType,
+      recorded,
       lastModified,
       hmac
     ]);
@@ -180,6 +184,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
 
   public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void> {
     await this.query('UPDATE videos SET title = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, title, lastModified, hmac]);
+  }
+
+  public async changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET description = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, description, lastModified, hmac]);
   }
 
   public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
@@ -194,6 +202,10 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
       lastModified,
       hmac
     ]);
+  }
+
+  public async changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
+    await this.query('UPDATE videos SET recorded = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, recorded, lastModified, hmac]);
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {

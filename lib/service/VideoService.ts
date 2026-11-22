@@ -68,6 +68,18 @@ class VideoService {
   }
 
   /**
+   * Updates a video's description, modification date and HMAC together.
+   * @param videoId The ID of the video to update.
+   * @param description The new client-encrypted description.
+   * @param lastModified The new modification date.
+   * @param hmac The HMAC for the complete updated video metadata.
+   * @throws If the database update fails.
+   */
+  public async changeVideosDescription({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.db.changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac });
+  }
+
+  /**
    * Updates a video's additional metadata, modification date and HMAC.
    * @param videoId The ID of the video to update.
    * @param metadata The new additional metadata.
@@ -97,6 +109,18 @@ class VideoService {
     await this.storage.deleteTemporaryFiles({ videoId, files }).catch((error: unknown) => {
       this.logger.warn({ err: error instanceof Error ? error : new Error('Unknown temporary file cleanup error'), videoId }, 'Temporary video files could not be deleted');
     });
+  }
+
+  /**
+   * Updates a video's recording date, modification date and HMAC together.
+   * @param videoId The ID of the video to update.
+   * @param recorded The new recording date.
+   * @param lastModified The new modification date.
+   * @param hmac The HMAC for the complete updated video metadata.
+   * @throws If the database update fails.
+   */
+  public async changeVideosRecorded({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
+    await this.db.changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac });
   }
 
   /**

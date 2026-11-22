@@ -23,9 +23,11 @@ const schema = `
   CREATE TABLE IF NOT EXISTS videos (
     "videoId" text NOT NULL PRIMARY KEY,
     title text NOT NULL,
+    description text NOT NULL,
     meta text NOT NULL,
     "videoMimeType" text NOT NULL,
     "thumbnailMimeType" text NOT NULL,
+    recorded integer NOT NULL,
     "lastModified" integer NOT NULL,
     hmac text NOT NULL
   ) STRICT;
@@ -54,13 +56,13 @@ const schema = `
 `;
 
 type UserRow = Omit<User, 'admin' | 'editor' | 'moderator'> & { admin: number; editor: number; moderator: number };
-type VideoRow = Omit<Video, 'meta' | 'lastModified'> & { meta: string; lastModified: number };
+type VideoRow = Omit<Video, 'meta' | 'recorded' | 'lastModified'> & { meta: string; recorded: number; lastModified: number };
 type CommentRow = Omit<Comment, 'created' | 'lastModified' | 'edited' | 'deleted'> & { created: number; lastModified: number; edited: number; deleted: number };
 type AttemptsRow = Omit<AttemptsCount, 'lastAttempt'> & { lastAttempt: number };
 type Parameter = string | number | boolean | Date | null;
 
 const toUser = ({ admin, editor, moderator, ...user }: UserRow): User => ({ ...user, admin: admin === 1, editor: editor === 1, moderator: moderator === 1 });
-const toVideo = ({ meta, lastModified, ...video }: VideoRow): Video => ({ ...video, meta: JSON.parse(meta), lastModified: new Date(lastModified) });
+const toVideo = ({ meta, recorded, lastModified, ...video }: VideoRow): Video => ({ ...video, meta: JSON.parse(meta), recorded: new Date(recorded), lastModified: new Date(lastModified) });
 const toComment = ({ created, lastModified, edited, deleted, ...comment }: CommentRow): Comment => ({
   ...comment,
   created: new Date(created),
@@ -178,13 +180,15 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
     this.write('DELETE FROM users WHERE "userId" = $1', [userId]);
   }
 
-  public async postVideo({ videoId, title, meta, videoMimeType, thumbnailMimeType, lastModified, hmac }: Video): Promise<void> {
-    this.write('INSERT INTO videos ("videoId", title, meta, "videoMimeType", "thumbnailMimeType", "lastModified", hmac) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
+  public async postVideo({ videoId, title, description, meta, videoMimeType, thumbnailMimeType, recorded, lastModified, hmac }: Video): Promise<void> {
+    this.write('INSERT INTO videos ("videoId", title, description, meta, "videoMimeType", "thumbnailMimeType", recorded, "lastModified", hmac) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
       videoId,
       title,
+      description,
       JSON.stringify(meta),
       videoMimeType,
       thumbnailMimeType,
+      recorded,
       lastModified,
       hmac
     ]);
@@ -192,6 +196,10 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
 
   public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void> {
     this.write('UPDATE videos SET title = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, title, lastModified, hmac]);
+  }
+
+  public async changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
+    this.write('UPDATE videos SET description = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, description, lastModified, hmac]);
   }
 
   public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
@@ -206,6 +214,10 @@ class SQLiteDatabaseAdapter implements DatabaseAdapter {
       lastModified,
       hmac
     ]);
+  }
+
+  public async changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
+    this.write('UPDATE videos SET recorded = $2, "lastModified" = $3, hmac = $4 WHERE "videoId" = $1', [videoId, recorded, lastModified, hmac]);
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {

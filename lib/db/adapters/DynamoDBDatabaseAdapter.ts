@@ -27,7 +27,7 @@ type Key = NonNullable<QueryCommandInput['ExclusiveStartKey']>;
 type Item = Key;
 type Transaction = NonNullable<TransactWriteCommandInput['TransactItems']>;
 type Table = 'users' | 'usernames' | 'videos' | 'comments' | 'login-attempts';
-type StoredVideo = Omit<Video, 'lastModified'> & { lastModified: number; videoPartition: string };
+type StoredVideo = Omit<Video, 'recorded' | 'lastModified'> & { recorded: number; lastModified: number; videoPartition: string };
 type StoredComment = Omit<Comment, 'created' | 'lastModified'> & { created: number; lastModified: number; createdKey: string };
 
 const byVideo = 'CommentsByVideo';
@@ -117,8 +117,8 @@ function decodeComment({ created, lastModified, createdKey: _createdKey, ...comm
   return { ...comment, created: new Date(created), lastModified: new Date(lastModified) };
 }
 
-function decodeVideo({ lastModified, videoPartition: _videoPartition, ...video }: StoredVideo): Video {
-  return { ...video, lastModified: new Date(lastModified) };
+function decodeVideo({ recorded, lastModified, videoPartition: _videoPartition, ...video }: StoredVideo): Video {
+  return { ...video, recorded: new Date(recorded), lastModified: new Date(lastModified) };
 }
 
 function readCursor(cursor: string, videoId: string): Key {
@@ -279,11 +279,15 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async postVideo(video: Video): Promise<void> {
-    await this.insert('videos', 'videoId', { ...video, videoPartition, lastModified: timestamp(video.lastModified) });
+    await this.insert('videos', 'videoId', { ...video, videoPartition, recorded: timestamp(video.recorded), lastModified: timestamp(video.lastModified) });
   }
 
   public async changeVideosTitleByVideoId({ videoId, title, lastModified, hmac }: { videoId: string; title: string; lastModified: Date; hmac: string }): Promise<void> {
     await this.update('videos', { videoPartition, videoId }, { title, lastModified: timestamp(lastModified), hmac });
+  }
+
+  public async changeVideosDescriptionByVideoId({ videoId, description, lastModified, hmac }: { videoId: string; description: string; lastModified: Date; hmac: string }): Promise<void> {
+    await this.update('videos', { videoPartition, videoId }, { description, lastModified: timestamp(lastModified), hmac });
   }
 
   public async changeVideosMetadataByVideoId({ videoId, metadata, lastModified, hmac }: { videoId: string; metadata: Record<string, unknown>; lastModified: Date; hmac: string }): Promise<void> {
@@ -292,6 +296,10 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
 
   public async changeVideosMimetypesByVideoId({ videoId, videoMimeType, thumbnailMimeType, lastModified, hmac }: { videoId: string; videoMimeType?: string; thumbnailMimeType?: string; lastModified: Date; hmac: string }): Promise<void> {
     await this.update('videos', { videoPartition, videoId }, { lastModified: timestamp(lastModified), hmac, ...(videoMimeType !== undefined ? { videoMimeType } : {}), ...(thumbnailMimeType !== undefined ? { thumbnailMimeType } : {}) });
+  }
+
+  public async changeVideosRecordedByVideoId({ videoId, recorded, lastModified, hmac }: { videoId: string; recorded: Date; lastModified: Date; hmac: string }): Promise<void> {
+    await this.update('videos', { videoPartition, videoId }, { recorded: timestamp(recorded), lastModified: timestamp(lastModified), hmac });
   }
 
   public async findOneVideoByVideoId({ videoId }: { videoId: string }): Promise<Video | null> {

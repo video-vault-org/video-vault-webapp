@@ -91,7 +91,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
         ids.push(operation.operationId);
       }
     }
-    expect(ids).toHaveLength(35);
+    expect(ids).toHaveLength(37);
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });
@@ -141,6 +141,25 @@ describe('Swagger UI and OpenAPI documentation', () => {
     const response = await app.inject('/bootstrap');
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' } });
+  });
+
+  test('documents required video description and recording date and their editor-only update routes', async () => {
+    const document = (await app.inject('/docs/json')).json();
+    const submit = document.paths['/api/video/submit'].post;
+    const body = dereference(document, submit.requestBody.content['application/json'].schema);
+    expect(body.required).toEqual(expect.arrayContaining(['description', 'recorded']));
+    const properties = body.properties as Record<string, unknown>;
+    expect(dereference(document, properties.description)).toMatchObject({ type: 'string', minLength: 1, maxLength: 1_000_000 });
+    expect(dereference(document, properties.recorded)).toMatchObject({ type: 'string', format: 'date-time' });
+    for (const field of ['description', 'recorded']) {
+      const route = document.paths[`/api/video/change/${field}/{videoId}`].patch;
+      expect(route.description).toContain('Requires role: editor');
+      expect(route.security).toEqual([{ bearerAuth: [] }]);
+      const change = dereference(document, route.requestBody.content['application/json'].schema);
+      expect(change.required).toEqual(expect.arrayContaining([field, 'lastModified', 'hmac']));
+      expect(change.additionalProperties).toBe(false);
+      expect(route.responses['204'].content).toBeUndefined();
+    }
   });
 
   test('documents multipart file selectors and binary downloads with correct content types', async () => {
