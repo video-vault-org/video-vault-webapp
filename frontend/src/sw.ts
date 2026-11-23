@@ -37,7 +37,7 @@ sw.addEventListener('message', (event) => {
 const ask = function (
   client: Client,
   payload: Record<string, unknown>
-): Promise<{ size: number; mime: string; data: Uint8Array }> {
+): Promise<{ size: number; mime: string; title: string; data: Uint8Array }> {
   return new Promise((resolve, reject) => {
     const channel = new MessageChannel(),
       timeout = setTimeout(() => {
@@ -107,7 +107,9 @@ const media = async function (event: FetchEvent): Promise<Response> {
         ...(ranged ? { 'Content-Range': `bytes ${start}-${end}/${info.size}` } : {}),
         ...(download
           ? {
-              'Content-Disposition': `attachment; filename="${info.mime === 'video/mp4' ? 'video.mp4' : info.mime === 'video/webm' ? 'video.webm' : 'video.bin'}"`
+              'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(
+                `${info.title}.${info.mime === 'video/mp4' ? 'mp4' : info.mime === 'video/webm' ? 'webm' : 'bin'}`
+              ).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)}`
             }
           : {})
       }

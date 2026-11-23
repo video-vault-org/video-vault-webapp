@@ -1,7 +1,7 @@
 import { openMedia } from './ranges';
-import type { Keys, Video } from './types';
+import type { Keys, PlainVideo } from './types';
 
-const media = new Map<string, Awaited<ReturnType<typeof openMedia>>>();
+const media = new Map<string, Awaited<ReturnType<typeof openMedia>> & { title: string }>();
 
 const installMediaBridge = function () {
   const handler = async (event: MessageEvent) => {
@@ -12,7 +12,7 @@ const installMediaBridge = function () {
         item = media.get(path[2]);
       if (!item) throw new Error('locked');
       if (event.data.info) {
-        port.postMessage({ size: item.size, mime: item.mime });
+        port.postMessage({ size: item.size, mime: item.mime, title: item.title });
         return;
       }
       const data = await item.read(event.data.from, event.data.to);
@@ -30,7 +30,7 @@ const installMediaBridge = function () {
   };
 };
 
-const mediaUrl = async function (video: Video, keys: Keys) {
+const mediaUrl = async function (video: PlainVideo, keys: Keys) {
   let stage = 'worker-ready';
   try {
     if (!('serviceWorker' in navigator) || !isSecureContext) throw new Error('secure');
@@ -100,7 +100,7 @@ const mediaUrl = async function (video: Video, keys: Keys) {
     // noinspection JSUnusedAssignment used in catch
     stage = 'file-open';
     const id = crypto.randomUUID();
-    media.set(id, await openMedia(video, keys));
+    media.set(id, { ...(await openMedia(video, keys)), title: video.plainTitle });
     return { url: `/__media/${id}/${video.videoId}/${owner}`, dispose: () => media.delete(id) };
   } catch (error) {
     // Do not log video metadata, credentials, keys or message payloads.

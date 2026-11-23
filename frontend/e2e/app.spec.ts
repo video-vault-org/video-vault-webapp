@@ -66,6 +66,7 @@ test('decrypts only requested full chunks for native video playback and a stream
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Herunterladen', exact: true }).click();
   const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('Ein Sommer am See.mp4');
   const path = await download.path();
   expect(await readFile(path!)).toEqual(await readFile(resolve('e2e/fixtures/sample.mp4')));
   expect(ranges).toContain('HEAD');

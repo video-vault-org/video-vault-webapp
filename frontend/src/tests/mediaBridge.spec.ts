@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mediaUrl, clearMedia } from '../lib/mediaBridge';
 import { openMedia } from '../lib/ranges';
 import { errorText } from '../lib/ui';
-import type { Keys, Video } from '../lib/types';
+import type { Keys, PlainVideo } from '../lib/types';
 
 type Port = {
   onmessage: ((event: { data: unknown }) => void) | null;
@@ -14,7 +14,7 @@ type Channel = { port1: Port; port2: object };
 
 vi.mock('../lib/ranges', () => ({ openMedia: vi.fn() }));
 
-const video = { videoId: 'v1', title: 'private-title', videoMimeType: 'video/mp4' } as Video;
+const video = { videoId: 'v1', title: 'private-title', plainTitle: 'My video', videoMimeType: 'video/mp4' } as PlainVideo;
 const keys = { encryption: { secret: 'private-key' } } as unknown as Keys;
 let channels: Channel[];
 let controller: { state: string; postMessage: ReturnType<typeof vi.fn> } | null;
