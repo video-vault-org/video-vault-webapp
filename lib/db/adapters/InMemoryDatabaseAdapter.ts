@@ -1,6 +1,7 @@
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
+import { UserDisplayName } from '@/domain/UserDisplayName';
 import { Video } from '@/domain/Video';
 import { Comment } from '@/domain/Comment';
 import { AttemptsCount } from '@/domain/AttemptsCount';
@@ -106,6 +107,11 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
 
   public async findOneUserByUsername({ username }: { username: string }): Promise<User | null> {
     return this.users.find((user) => user.username === username) ?? null;
+  }
+
+  public async findDisplayNamesByUserIds({ userIds }: { userIds: string[] }): Promise<UserDisplayName[]> {
+    const ids = new Set(userIds);
+    return this.users.filter((user) => ids.has(user.userId)).map(({ userId, displayName }) => ({ userId, displayName }));
   }
 
   public async findAllUsers(): Promise<User[]> {

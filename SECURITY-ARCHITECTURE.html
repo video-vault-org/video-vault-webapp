@@ -677,6 +677,10 @@
                 Bei verschlüsseltem Titel, Beschreibung und Kommentar geht nur die Länge der gespeicherten Base64-Zeichenfolge einschließlich Padding ein, nicht ihr Inhalt. Die AES-GCM-Tags prüfen den Inhalt. Das Metadaten-HMAC allein erkennt deshalb
                 keinen Austausch gegen einen älteren gültigen Text derselben Identität und gespeicherten Länge.
               </p>
+              <p>
+                Der Server ergänzt Kommentare beim Laden um den aktuellen Anzeigenamen des zugehörigen Kontos. Dieser Anzeigename ist nicht im Kommentar gespeichert und ausdrücklich vom Kommentar-HMAC ausgenommen. Umbenennungen verändern deshalb
+                nicht die Gültigkeit alter Kommentare. Der angezeigte Name ist eine Serverangabe und kein kryptografischer Nachweis der Identität; fehlt das Konto, erscheint „[Gelöschter Nutzer]“.
+              </p>
               <p>Aktive Datensätze werden vor der Verwendung im Browser geprüft. Der Server speichert die HMACs, kann sie ohne den gemeinsamen Prüfschlüssel aber nicht selbst prüfen oder neu erzeugen.</p>
               <table>
                 <thead>
@@ -1118,6 +1122,10 @@
               <p>
                 For encrypted titles, descriptions and comments, only the length of the stored Base64 string including padding is included, not its contents. AES-GCM tags check the contents. The metadata HMAC alone therefore cannot detect
                 substitution of an older valid text with the same identity and stored length.
+              </p>
+              <p>
+                When loading comments, the server adds the account’s current display name. This name is not stored in the comment and is explicitly excluded from the comment HMAC. Renaming an account therefore does not invalidate older comments. The
+                displayed name is supplied by the server and is not cryptographic proof of identity; a missing account is shown as “[Deleted user]”.
               </p>
               <p>The browser verifies active records before use. The server stores HMACs but cannot check or recreate them without the shared authentication key.</p>
               <table>

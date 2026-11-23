@@ -5,7 +5,7 @@ import { Comments } from '../components/Comments';
 import { LanguageProvider } from '../lib/ui';
 import { json } from '../lib/api';
 import { encryptText, sign, verify } from '../lib/crypto';
-import type { Comment, Keys, User } from '../lib/types';
+import type { CommentDto, Keys, User } from '../lib/types';
 
 vi.mock('../lib/api', async () => ({ ...(await vi.importActual('../lib/api')), json: vi.fn() }));
 
@@ -17,7 +17,8 @@ vi.mock('../lib/crypto', async () => ({
   verify: vi.fn().mockResolvedValue(undefined)
 }));
 
-const comment: Comment = {
+const comment: CommentDto = {
+  displayName: 'Me',
   commentId: 'c1',
   videoId: 'v1',
   userId: 'u1',
@@ -67,6 +68,26 @@ test('does not display an edited timestamp for an unedited comment', async () =>
   await screen.findByText('Decrypted comment');
   expect(screen.queryByText(/bearbeitet|edited/)).not.toBeInTheDocument();
   expect(screen.queryByText(new Date(lastModified).toLocaleString('de'))).not.toBeInTheDocument();
+});
+
+test('shows the server-provided display name for other authors instead of a shortened user ID', async () => {
+  vi.mocked(json).mockResolvedValueOnce({ comments: [{ ...comment, userId: 'another-user-id', displayName: 'Bob Example' }], cursor: '' });
+  show();
+  expect(await screen.findByText(/Bob Example ·/)).toBeVisible();
+  expect(screen.queryByText(/another-/)).not.toBeInTheDocument();
+});
+
+test('uses the current response name for own comments as well', async () => {
+  vi.mocked(json).mockResolvedValueOnce({ comments: [{ ...comment, displayName: 'Renamed author' }], cursor: '' });
+  show();
+  expect(await screen.findByText(/Renamed author ·/)).toBeVisible();
+});
+
+test.each([['de', '[Gelöschter Nutzer]'], ['en', '[Deleted user]']])('shows the translated missing-author placeholder in %s', async (language, label) => {
+  localStorage.setItem('videovault.language', language);
+  vi.mocked(json).mockResolvedValueOnce({ comments: [{ ...comment, displayName: null, deleted: true, content: '' }], cursor: '' });
+  show();
+  expect(await screen.findByText((text) => text.startsWith(`${label} ·`))).toBeVisible();
 });
 
 test('loads subsequent pages, deduplicates IDs, ends at empty cursor and treats deleted shells as unverified', async () => {

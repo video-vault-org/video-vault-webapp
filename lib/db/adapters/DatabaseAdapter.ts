@@ -1,4 +1,5 @@
 import { User } from '@/domain/User';
+import { UserDisplayName } from '@/domain/UserDisplayName';
 import { Video } from '@/domain/Video';
 import { Comment } from '@/domain/Comment';
 import { AttemptsCount } from '@/domain/AttemptsCount';
@@ -95,6 +96,13 @@ interface DatabaseAdapter {
    * @param username The username of the user to be found
    */
   findOneUserByUsername({ username }: { username: string }): Promise<User | null>;
+
+  /**
+   * Loads only userId and displayName for the distinct requested IDs; missing users are omitted.
+   * Empty input returns an empty array. Result order is unspecified; no names are cached.
+   * @throws If a database query fails, including an incomplete batch that cannot be retried successfully.
+   */
+  findDisplayNamesByUserIds({ userIds }: { userIds: string[] }): Promise<UserDisplayName[]>;
 
   /**
    * Finds all users

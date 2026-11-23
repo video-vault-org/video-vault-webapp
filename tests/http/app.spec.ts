@@ -69,7 +69,6 @@ const protectedRoutes = [
   ['get', '/api/video/file/v1', 'any', undefined, 200],
   ['get', '/api/video/thumbnail/v1', 'any', undefined, 200],
   ['get', '/api/comments/v1', 'any', undefined, 200],
-  ['get', '/api/comment/find/c1', 'any', undefined, 200],
   ['post', '/api/comment/submit', 'any', commentBody, 201],
   ['patch', '/api/comment/change/own/c1', 'own', { ...change, content: 'Changed' }, 204],
   ['delete', '/api/comment/delete/own/c1', 'own', undefined, 204],
@@ -342,6 +341,57 @@ describe('Fastify backend', () => {
       .set(headers())
       .send({ ...commentBody, commentId: 'missing-video', videoId: 'missing' })
       .expect(404);
+  });
+
+  test('returns current display names on comment pages and creation without exposing account data', async () => {
+    await db.changeUsersDisplayNameByUserId({ userId: 'reader', displayName: 'Reader Name' });
+    const lookup = jest.spyOn(db, 'findDisplayNamesByUserIds');
+    const page = await request(app.server).get('/api/comments/v1').set(headers('editor')).expect(200);
+    expect(page.body.comments[0]).toMatchObject({ commentId: 'c1', displayName: 'Reader Name', hmac: comment.hmac });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith({ userIds: ['reader'] });
+    const created = await request(app.server).post('/api/comment/submit').set(headers()).send(commentBody).expect(201);
+    expect(created.body.displayName).toBe('Reader Name');
+    for (const body of [page.body, created.body]) {
+      const serialized = JSON.stringify(body);
+      for (const field of ['loginHash', 'passwordKeySalt', 'userKey', 'username']) expect(serialized).not.toContain(`"${field}"`);
+    }
+    expect(await db.findOneCommentByCommentId({ commentId: 'c1' })).not.toHaveProperty('displayName');
+    await request(app.server)
+      .post('/api/comment/submit')
+      .set(headers())
+      .send({ ...commentBody, commentId: 'forged', displayName: 'Forged name' })
+      .expect(400);
+    await db.changeUsersDisplayNameByUserId({ userId: 'reader', displayName: 'Renamed' });
+    expect((await request(app.server).get('/api/comments/v1').set(headers('editor')).expect(200)).body.comments.every((item: { displayName: string }) => item.displayName === 'Renamed')).toBe(true);
+  });
+
+  test('returns null display names for deleted users including deleted comment shells', async () => {
+    await users.deleteUser({ userId: 'reader' });
+    const page = await request(app.server).get('/api/comments/v1').set(headers('editor')).expect(200);
+    expect(page.body.comments[0]).toMatchObject({ commentId: 'c1', displayName: null, deleted: true, content: '' });
+  });
+
+  test('does not expose the individual comment GET route', async () => {
+    const find = jest.spyOn(comments, 'findComment');
+    await request(app.server).get('/api/comment/find/c1').set(headers()).expect(404);
+    expect(find).not.toHaveBeenCalled();
+  });
+
+  test('comment existence and ownership checks do not load author names', async () => {
+    const names = jest.spyOn(db, 'findDisplayNamesByUserIds').mockRejectedValue(new Error('Name lookup unavailable'));
+    await request(app.server)
+      .post('/api/comment/submit')
+      .set(headers())
+      .send({ ...commentBody, commentId: 'c1' })
+      .expect(409);
+    await request(app.server)
+      .patch('/api/comment/change/own/c1')
+      .set(headers())
+      .send({ content: 'Changed', ...change })
+      .expect(204);
+    await request(app.server).delete('/api/comment/delete/own/c1').set(headers()).expect(204);
+    expect(names).not.toHaveBeenCalled();
   });
 
   test('comment pagination sorts, forwards opaque cursors and returns an empty last cursor', async () => {
@@ -701,8 +751,7 @@ describe('Fastify backend', () => {
     ['delete', '/api/user/delete/missing'],
     ['get', '/api/video/find/missing'],
     ['delete', '/api/video/delete/missing'],
-    ['get', '/api/video/file/missing'],
-    ['get', '/api/comment/find/missing']
+    ['get', '/api/video/file/missing']
   ] as const)('%s %s returns 404 for missing resources', async (method, path) => {
     const all = makeUser('admin');
     await db.changeUsersEditorRoleByUserId({ userId: all.userId, editor: true });

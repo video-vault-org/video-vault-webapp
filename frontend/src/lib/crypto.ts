@@ -1,5 +1,5 @@
 import argon2 from 'argon2-browser/dist/argon2-bundled.min.js';
-import type { Keys, User, Video, Comment } from './types';
+import type { Keys, User, Video, Comment, CommentDto } from './types';
 
 const MEM_COST = 19 * 1024;
 
@@ -163,11 +163,13 @@ const projection = function (item: Video | Comment) {
       recorded: new Date(rest.recorded).toISOString(),
       lastModified: new Date(rest.lastModified).toISOString()
     };
+  // Names are current account metadata supplied by the server, not authenticated comment attributes.
+  const { displayName: _displayName, ...comment } = rest as Omit<CommentDto, 'hmac'>;
   return {
-    ...rest,
-    content: rest.content.length,
-    created: new Date(rest.created).toISOString(),
-    lastModified: new Date(rest.lastModified).toISOString()
+    ...comment,
+    content: comment.content.length,
+    created: new Date(comment.created).toISOString(),
+    lastModified: new Date(comment.lastModified).toISOString()
   };
 };
 

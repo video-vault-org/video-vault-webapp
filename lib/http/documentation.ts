@@ -39,7 +39,6 @@ const summaries: Record<string, string> = {
   'GET /api/video/:since': 'Find video changes, including permanent deletion tombstones',
   'POST /api/comment/submit': 'Post a comment',
   'GET /api/comments/:videoId': 'List comments, newest first, with cursor pagination',
-  'GET /api/comment/find/:commentId': 'Find a comment, including deleted comments',
   'PATCH /api/comment/change/own/:commentId': 'Change your own comment',
   'PATCH /api/comment/change/:commentId': 'Change a comment',
   'DELETE /api/comment/delete/own/:commentId': 'Soft-delete your own comment and clear its content',

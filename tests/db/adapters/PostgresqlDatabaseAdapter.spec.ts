@@ -163,6 +163,27 @@ describe('PostgresqlDatabaseAdapter', () => {
     expect(await db.findOneUserByUserId({ userId: 'missing' })).toBeNull();
   });
 
+  test('findDisplayNamesByUserIds projects only requested names, deduplicates IDs and omits unknown users', async () => {
+    await db.createUser(user);
+    await db.createUser({ ...otherUser, displayName: 'Bob' });
+    const names = await db.findDisplayNamesByUserIds({ userIds: [user.userId, otherUser.userId, user.userId, "missing' OR 1=1 --"] });
+    expect(names.sort((a, b) => a.userId.localeCompare(b.userId))).toEqual(
+      [
+        { userId: user.userId, displayName: user.displayName },
+        { userId: otherUser.userId, displayName: 'Bob' }
+      ].sort((a, b) => a.userId.localeCompare(b.userId))
+    );
+    expect(await db.findDisplayNamesByUserIds({ userIds: [] })).toEqual([]);
+  });
+
+  test('findDisplayNamesByUserIds reflects renamed and deleted users without caching', async () => {
+    await db.createUser(user);
+    await db.changeUsersDisplayNameByUserId({ userId: user.userId, displayName: 'Renamed' });
+    expect(await db.findDisplayNamesByUserIds({ userIds: [user.userId] })).toEqual([{ userId: user.userId, displayName: 'Renamed' }]);
+    await db.deleteUserByUserId({ userId: user.userId });
+    expect(await db.findDisplayNamesByUserIds({ userIds: [user.userId] })).toEqual([]);
+  });
+
   describe('users', () => {
     const { userId, username } = user;
 

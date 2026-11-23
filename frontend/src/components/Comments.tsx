@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { json } from '../lib/api';
 import { encryptText, decryptText, sign, verify } from '../lib/crypto';
-import type { Comment, Keys, User } from '../lib/types';
+import type { Comment, CommentDto, Keys, User } from '../lib/types';
 import { Dialog, ErrorMessage, useLanguage, useTask } from '../lib/ui';
 
 const Comments = function ({
@@ -17,7 +17,7 @@ const Comments = function ({
 }) {
   const { t, language } = useLanguage(),
     task = useTask();
-  const [items, setItems] = useState<(Comment & { plain: string })[]>([]),
+  const [items, setItems] = useState<(CommentDto & { plain: string })[]>([]),
     [cursor, setCursor] = useState(''),
     [loaded, setLoaded] = useState(false),
     [content, setContent] = useState(''),
@@ -25,10 +25,10 @@ const Comments = function ({
 
   const load = async function (reset = false) {
     await task.run(async () => {
-      const response = await json<{ comments: Comment[]; cursor: string }>(
+      const response = await json<{ comments: CommentDto[]; cursor: string }>(
         `/api/comments/${videoId}?pagesize=50&cursor=${encodeURIComponent(reset ? '' : cursor)}`
       );
-      const values: (Comment & { plain: string })[] = [];
+      const values: (CommentDto & { plain: string })[] = [];
       for (const comment of response.comments) {
         if (comment.deleted) {
           values.push({ ...comment, plain: '' });
@@ -95,7 +95,7 @@ const Comments = function ({
         {items.map((c) => (
           <article className={`comment ${c.deleted ? 'tombstone' : ''}`} key={c.commentId}>
             <small>
-              {c.userId === user.userId ? user.displayName : c.userId.slice(0, 8)} ·{' '}
+              {c.displayName ?? t('[Gelöschter Nutzer]', '[Deleted user]')} ·{' '}
               {new Date(c.created).toLocaleString(language)}
               {c.edited && (
                 <>

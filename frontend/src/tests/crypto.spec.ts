@@ -19,7 +19,7 @@ import {
   STRIDE
 } from '../lib/crypto';
 import { cipherRange, range, openMedia } from '../lib/ranges';
-import type { Keys, User, Video } from '../lib/types';
+import type { Keys, User, Video, Comment, CommentDto } from '../lib/types';
 import { request } from '../lib/api';
 
 vi.mock('../lib/api', () => ({ request: vi.fn() }));
@@ -102,6 +102,18 @@ test('encrypts title/description independently and verifies metadata projection 
   video.hmac = await sign(video, keys);
   await expect(verify(video, keys)).resolves.toBeUndefined();
   await expect(verify({ ...video, meta: { a: 2 } }, keys)).rejects.toThrow('integrity');
+});
+
+test('excludes displayName from comment HMACs while authenticating the author ID and other comment fields', async () => {
+  const comment: Comment = { commentId: 'c1', videoId: 'v1', userId: 'u1', content: 'ciphertext', created: '2026-01-01T00:00:00.000Z', lastModified: '2026-01-02T00:00:00.000Z', edited: true, deleted: false, hmac: '' };
+  comment.hmac = await sign(comment, keys);
+  const dto: CommentDto = { ...comment, displayName: 'Alice' };
+  await expect(verify(dto, keys)).resolves.toBeUndefined();
+  await expect(verify({ ...dto, displayName: 'Renamed' } as CommentDto, keys)).resolves.toBeUndefined();
+  await expect(verify({ ...dto, displayName: null } as CommentDto, keys)).resolves.toBeUndefined();
+  expect(await sign(dto, keys)).toBe(comment.hmac);
+  await expect(verify({ ...dto, userId: 'forged-author' }, keys)).rejects.toThrow('integrity');
+  await expect(verify({ ...dto, edited: false }, keys)).rejects.toThrow('integrity');
 });
 
 test('matches Node RFC3394 wrapping and independent master key layout', async () => {

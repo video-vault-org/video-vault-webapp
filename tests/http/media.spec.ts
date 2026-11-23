@@ -58,7 +58,7 @@ describe('authenticated media range and offline catalog endpoints', () => {
     await db.postComment({ commentId: 'c1', videoId: 'v1', userId: 'reader', content: 'encrypted', created: new Date(1), lastModified: new Date(1), edited: false, deleted: false, hmac: 'hmac' });
     await db.deleteVideoByVideoId({ videoId: 'v1', lastModified: new Date(2) });
     const editor = { authorization: 'Bearer editor' };
-    for (const url of ['/api/video/file/v1', '/api/video/thumbnail/v1', '/api/video/find/v1', '/api/comments/v1', '/api/comment/find/c1']) {
+    for (const url of ['/api/video/file/v1', '/api/video/thumbnail/v1', '/api/video/find/v1', '/api/comments/v1']) {
       expect((await app.inject({ url, headers: editor })).statusCode).toBe(404);
     }
     expect(

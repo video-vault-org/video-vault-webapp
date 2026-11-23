@@ -6,6 +6,7 @@ import { MongoDatabaseConf } from '@/db/config/MongoDatabaseConf';
 import { AttemptsCount } from '@/domain/AttemptsCount';
 import { Comment } from '@/domain/Comment';
 import { User } from '@/domain/User';
+import { UserDisplayName } from '@/domain/UserDisplayName';
 import { Video } from '@/domain/Video';
 
 interface MongoConnection {
@@ -96,6 +97,12 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
 
   public async findOneUserByUsername({ username }: { username: string }): Promise<User | null> {
     return (await this.users()).findOne<User>({ username }, withoutId);
+  }
+
+  public async findDisplayNamesByUserIds({ userIds }: { userIds: string[] }): Promise<UserDisplayName[]> {
+    const ids = [...new Set(userIds)];
+    if (!ids.length) return [];
+    return (await this.users()).find<UserDisplayName>({ userId: { $in: ids } }, { projection: { _id: 0, userId: 1, displayName: 1 } }).toArray();
   }
 
   public async findAllUsers(): Promise<User[]> {

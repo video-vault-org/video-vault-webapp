@@ -4,6 +4,7 @@ import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { AttemptsCount } from '@/domain/AttemptsCount';
 import { Comment } from '@/domain/Comment';
 import { User } from '@/domain/User';
+import { UserDisplayName } from '@/domain/UserDisplayName';
 import { Video } from '@/domain/Video';
 import { PostgresqlDatabaseConf } from '@/db/config/PostgresqlDatabaseConf';
 
@@ -163,6 +164,12 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
 
   public async findOneUserByUsername({ username }: { username: string }): Promise<User | null> {
     return (await this.query<User>('SELECT * FROM users WHERE username = $1', [username]))[0] ?? null;
+  }
+
+  public async findDisplayNamesByUserIds({ userIds }: { userIds: string[] }): Promise<UserDisplayName[]> {
+    const ids = [...new Set(userIds)];
+    if (!ids.length) return [];
+    return this.query<UserDisplayName>(`SELECT "userId", "displayName" FROM users WHERE "userId" IN (${ids.map((_, index) => `$${index + 1}`).join(', ')})`, ids);
   }
 
   public async findAllUsers(): Promise<User[]> {

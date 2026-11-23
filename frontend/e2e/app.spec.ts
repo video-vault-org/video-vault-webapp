@@ -46,9 +46,7 @@ test('real Argon2 unlocks backend keys, ciphertext survives offline reload and l
   await page.screenshot({ path: '/tmp/vault-gallery.png', fullPage: true, animations: 'disabled' });
 });
 
-test('decrypts only requested full chunks for native video playback and a streamed download', async ({
-  page
-}) => {
+test('decrypts only requested full chunks for native video playback and a streamed download', async ({ page }) => {
   await login(page);
   const ranges: string[] = [];
 
@@ -75,7 +73,7 @@ test('decrypts only requested full chunks for native video playback and a stream
   expect(ranges.some((r) => r.startsWith('bytes=40-'))).toBe(true);
 });
 
-test('posts, edits and soft-deletes authenticated encrypted comments', async ({ page }) => {
+test('posts, edits and soft-deletes authenticated encrypted comments', async ({ page, browser }) => {
   await login(page);
   await page.getByRole('button', { name: 'Mehr Details', exact: true }).first().click();
   await page.getByRole('button', { name: 'Kommentare', exact: true }).click();
@@ -83,6 +81,21 @@ test('posts, edits and soft-deletes authenticated encrypted comments', async ({ 
   await dialog.getByLabel('Dein Kommentar').fill('Browser encrypted comment');
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(dialog.getByText('Browser encrypted comment', { exact: true })).toBeVisible();
+  await expect(dialog.locator('.comment small')).toContainText('Alex Morgan');
+  const observer = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+    const reader = await observer.newPage();
+    await login(reader, 'reader');
+    await reader.getByRole('button', { name: 'Mehr Details', exact: true }).first().click();
+    await reader.getByRole('button', { name: 'Kommentare', exact: true }).click();
+    const observed = reader.getByRole('dialog', { name: 'Kommentare', exact: true });
+    await expect(observed.getByText('Browser encrypted comment', { exact: true })).toBeVisible();
+    await expect(observed.locator('.comment small')).toContainText('Alex Morgan');
+    await expect(observed.getByRole('button', { name: 'Bearbeiten', exact: true })).toBeDisabled();
+  } finally {
+    await observer.close();
+  }
+
   await dialog.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   await dialog.getByRole('textbox', { name: 'Kommentar bearbeiten', exact: true }).fill('Edited comment');
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
@@ -94,9 +107,7 @@ test('posts, edits and soft-deletes authenticated encrypted comments', async ({ 
   await expect(dialog.getByText('Gelöscht')).toBeVisible();
 });
 
-test('analyzes local MP4, encrypts upload, changes metadata/files and deletes the video', async ({
-  page
-}) => {
+test('analyzes local MP4, encrypts upload, changes metadata/files and deletes the video', async ({ page }) => {
   await login(page);
   await page.getByRole('button', { name: /Video hinzufügen/ }).click();
   let dialog = page.getByRole('dialog', { name: 'Video hinzufügen', exact: true });
@@ -145,9 +156,7 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
   const changes = await page.request.get('/api/video/0', { headers: { authorization: `Bearer ${token}` } });
   expect(changes.status()).toBe(200);
   expect(await changes.json()).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ videoId: deletedId, deleted: true, title: '', hmac: '' })
-    ])
+    expect.arrayContaining([expect.objectContaining({ videoId: deletedId, deleted: true, title: '', hmac: '' })])
   );
   await expect(page.getByRole('dialog', { name: 'Browser upload edited', exact: true })).not.toBeVisible();
   await expect(
@@ -206,14 +215,10 @@ test('updates cached branding without rebuilding, preserves unrelated caches and
   await page.reload();
   await expect
     .poll(() =>
-      page.evaluate(
-        async () => (await caches.keys()).filter((name) => name.startsWith('vault-shell-')).length
-      )
+      page.evaluate(async () => (await caches.keys()).filter((name) => name.startsWith('vault-shell-')).length)
     )
     .toBe(1);
-  const first = await page.evaluate(async () =>
-    (await caches.keys()).find((name) => name.startsWith('vault-shell-'))
-  );
+  const first = await page.evaluate(async () => (await caches.keys()).find((name) => name.startsWith('vault-shell-')));
   const original = await page.evaluate(async () =>
     Array.from(new Uint8Array(await (await fetch('/logo.png')).arrayBuffer()))
   );
@@ -228,9 +233,7 @@ test('updates cached branding without rebuilding, preserves unrelated caches and
     await (await navigator.serviceWorker.getRegistration())!.update();
   });
   await expect
-    .poll(() =>
-      page.evaluate(async () => (await caches.keys()).find((name) => name.startsWith('vault-shell-')))
-    )
+    .poll(() => page.evaluate(async () => (await caches.keys()).find((name) => name.startsWith('vault-shell-'))))
     .toContain(version);
   expect(await page.evaluate(() => caches.has('branding-unrelated'))).toBe(true);
   expect(await page.evaluate(async (name) => (await caches.keys()).includes(name!), first)).toBe(false);
@@ -253,9 +256,7 @@ test('updates cached branding without rebuilding, preserves unrelated caches and
   expect((await unchanged.json()).version).toBe(version);
   await page.context().setOffline(true);
   expect(
-    await page.evaluate(async () =>
-      Array.from(new Uint8Array(await (await fetch('/logo.png')).arrayBuffer()))
-    )
+    await page.evaluate(async () => Array.from(new Uint8Array(await (await fetch('/logo.png')).arrayBuffer())))
   ).toEqual(replacement);
   expect(
     await page.evaluate(async () =>
@@ -273,9 +274,7 @@ test('registers a self-contained classic service worker over plain HTTP on local
   await page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated');
   expect(await page.evaluate(() => window.isSecureContext)).toBe(true);
   expect(new URL(page.url()).protocol).toBe('http:');
-  expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe(
-    'http://localhost:4217/sw.js'
-  );
+  expect(await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toBe('http://localhost:4217/sw.js');
   const source = await (await page.request.get('http://localhost:4217/sw.js')).text();
   expect(() => new Script(source)).not.toThrow();
   expect(source).not.toMatch(/\bimportScripts\s*\(/);
@@ -286,9 +285,7 @@ test('registers a self-contained classic service worker over plain HTTP on local
   expect(errors).toEqual([]);
 });
 
-test('first sign-in creates wrapped archive keys in the browser and unlocks them after reload', async ({
-  page
-}) => {
+test('first sign-in creates wrapped archive keys in the browser and unlocks them after reload', async ({ page }) => {
   let profile = {
     userId: 'first-admin',
     username: 'initial-admin',

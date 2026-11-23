@@ -98,7 +98,8 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/video/catalog']).toBeUndefined();
     expect(document.paths['/api/video/delete/{videoId}'].delete.description).toContain('lastModified');
     expect(document.paths['/api/video/{since}'].get.description).toContain('tombstones');
-    expect(ids).toHaveLength(39);
+    expect(ids).toHaveLength(38);
+    expect(document.paths).not.toHaveProperty('/api/comment/find/{commentId}');
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });
@@ -186,6 +187,14 @@ describe('Swagger UI and OpenAPI documentation', () => {
       expect(responses['200'].content['application/octet-stream'].schema).toMatchObject({ type: 'string', format: 'binary' });
       expect(responses['4XX'].content['application/json']).toBeDefined();
     }
+  });
+
+  test('documents nullable author names as response-only comment metadata', async () => {
+    const document = (await app.inject({ url: '/docs/json' })).json();
+    const properties = document.paths['/api/comments/{videoId}'].get.responses['200'].content['application/json'].schema.properties.comments.items.properties;
+    expect(properties.displayName).toMatchObject({ type: 'string', nullable: true });
+    const submit = document.paths['/api/comment/submit'].post.requestBody.content['application/json'].schema.properties;
+    expect(submit).not.toHaveProperty('displayName');
   });
 
   test('generates YAML as well as JSON', async () => {

@@ -27,6 +27,7 @@ const videoTombstone = object({
 });
 const videoRecord = Type.Union([video, videoTombstone]);
 const comment = object({ commentId: id, userId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, edited: Type.Boolean(), deleted: Type.Boolean(), hmac: text });
+const commentDto = object({ ...comment.properties, displayName: Type.Union([text, Type.Null()]) });
 const user = object({ userId: id, username, displayName: text, passwordKeySalt: Type.String({ maxLength: 4096 }), userKey: Type.String({ maxLength: 4096 }), admin: Type.Boolean(), editor: Type.Boolean(), moderator: Type.Boolean() });
 const commentChange = object({ content: Type.String({ maxLength: 1_000_000 }), lastModified: date, hmac: text });
 const videoChange = { lastModified: date, hmac: text };
@@ -46,4 +47,4 @@ const sinceDate = function (value: string): Date {
   return parsed;
 };
 
-export { Type, object, id, text, username, date, metadata, passwordProperties, password, video, videoRecord, videoChange, comment, commentChange, user, errorResponses, noContent, videoInput, sinceDate };
+export { Type, object, id, text, username, date, metadata, passwordProperties, password, video, videoRecord, videoChange, comment, commentDto, commentChange, user, errorResponses, noContent, videoInput, sinceDate };

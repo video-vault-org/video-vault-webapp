@@ -1,5 +1,6 @@
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { Comment } from '@/domain/Comment';
+import { CommentDto } from '@/domain/CommentDto';
 
 /**
  * Coordinates comment content, deletion markers and paginated comment queries.
@@ -70,7 +71,7 @@ class CommentService {
   }
 
   /**
-   * Finds a comment by its ID, including comments marked as deleted.
+   * Finds a comment by its ID, including comments marked as deleted, without loading author names.
    * @param commentId The ID of the comment to find.
    * @returns The comment, or null if no matching comment exists.
    * @throws If the database query fails.
@@ -81,14 +82,24 @@ class CommentService {
 
   /**
    * Finds a video's comments in descending creation order using cursor pagination.
+   * Loads current author names in one batch per page (split as needed by the adapter); missing users have displayName null.
+   * Author names are response metadata, excluded from the comment HMAC.
    * @param videoId The ID of the video whose comments to find.
    * @param paginationCursor The opaque cursor from the previous page, or an empty string for the first page.
    * @param paginationSize The desired page size.
    * @returns The comments and the next cursor, or an empty cursor if there is no next page.
    * @throws If the database query fails.
    */
-  public async findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string; paginationCursor: string; paginationSize: number }): Promise<[Comment[], string]> {
-    return await this.db.findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize });
+  public async findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize }: { videoId: string; paginationCursor: string; paginationSize: number }): Promise<[CommentDto[], string]> {
+    const [items, cursor] = await this.db.findManyCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor, paginationSize });
+    return [await this.withDisplayNames(items), cursor];
+  }
+
+  private async withDisplayNames(items: Comment[]): Promise<CommentDto[]> {
+    if (!items.length) return [];
+    const userIds = [...new Set(items.map((item) => item.userId))];
+    const names = new Map((await this.db.findDisplayNamesByUserIds({ userIds })).map(({ userId, displayName }) => [userId, displayName]));
+    return items.map((item) => ({ ...item, displayName: names.get(item.userId) ?? null }));
   }
 }
 

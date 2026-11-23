@@ -66,9 +66,13 @@ interface Comment {
   hmac: string;
 }
 
+interface CommentDto extends Comment {
+  displayName: string | null;
+}
+
 interface Keys {
   encryption: CryptoKey;
   auth: CryptoKey;
 }
 
-export { Language, MetaField, Bootstrap, User, Video, PlainVideo, Comment, Keys };
+export { Language, MetaField, Bootstrap, User, Video, PlainVideo, Comment, CommentDto, Keys };

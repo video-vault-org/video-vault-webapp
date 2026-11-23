@@ -67,7 +67,7 @@ describe('CommentService', () => {
       await service.changeCommentsContent({ commentId, content, lastModified, hmac });
 
       expect(await service.findComment({ commentId })).toEqual({ ...comment, content, lastModified, hmac, edited: true });
-      expect(await service.findComment({ commentId: otherComment.commentId })).toEqual(otherComment);
+      expect(await service.findComment({ commentId: otherComment.commentId })).toEqual({ ...otherComment });
     });
 
     test('propagates database errors', async () => {
@@ -102,7 +102,7 @@ describe('CommentService', () => {
 
       await service.changeOwnCommentsContent({ commentId, userId: 'other-user', content, lastModified, hmac });
 
-      expect(await service.findComment({ commentId })).toEqual(comment);
+      expect(await service.findComment({ commentId })).toEqual({ ...comment });
     });
 
     test('propagates database errors', async () => {
@@ -131,7 +131,7 @@ describe('CommentService', () => {
       await service.deleteComment({ commentId });
 
       expect(await service.findComment({ commentId })).toEqual({ ...comment, content: '', deleted: true });
-      expect(await service.findComment({ commentId: otherComment.commentId })).toEqual(otherComment);
+      expect(await service.findComment({ commentId: otherComment.commentId })).toEqual({ ...otherComment });
       await expect(service.deleteComment({ commentId })).resolves.toBeUndefined();
       expect(await service.findComment({ commentId })).toEqual({ ...comment, content: '', deleted: true });
     });
@@ -168,7 +168,7 @@ describe('CommentService', () => {
 
       await service.deleteOwnComment({ commentId, userId: 'other-user' });
 
-      expect(await service.findComment({ commentId })).toEqual(comment);
+      expect(await service.findComment({ commentId })).toEqual({ ...comment });
     });
 
     test('propagates database errors', async () => {
@@ -179,6 +179,36 @@ describe('CommentService', () => {
     });
   });
 
+  test('enriches a page in one deduplicated lookup and preserves order, cursor and signed fields', async () => {
+    const items = [comment, { ...comment, commentId: 'c2' }, { ...comment, commentId: 'c3', userId: 'missing' }];
+    jest.spyOn(db, 'findManyCommentsByVideoIdSortedByCreatedDescPaginated').mockResolvedValueOnce([items, 'next']);
+    const lookup = jest.spyOn(db, 'findDisplayNamesByUserIds').mockResolvedValueOnce([{ userId, displayName: 'Alice' }]);
+    const [result, cursor] = await service.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor: '', paginationSize: 50 });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith({ userIds: [userId, 'missing'] });
+    expect(result).toEqual(items.map((item) => ({ ...item, displayName: item.userId === userId ? 'Alice' : null })));
+    expect(cursor).toBe('next');
+    expect(items.every((item) => !('displayName' in item))).toBe(true);
+  });
+
+  test('reads current names for paginated comments and returns null names after account deletion', async () => {
+    await db.createUser({ userId, username: 'alice', displayName: 'Alice', loginHash: 'private', userKey: 'private', passwordKeySalt: 'private', admin: false, editor: false, moderator: false });
+    await db.postComment(comment);
+    const parameters = { videoId, paginationCursor: '', paginationSize: 50 };
+    expect(await service.findCommentsByVideoIdSortedByCreatedDescPaginated(parameters)).toEqual([[{ ...comment, displayName: 'Alice' }], '']);
+    await db.changeUsersDisplayNameByUserId({ userId, displayName: 'Renamed' });
+    expect(await service.findCommentsByVideoIdSortedByCreatedDescPaginated(parameters)).toEqual([[{ ...comment, displayName: 'Renamed' }], '']);
+    await db.deleteUserByUserId({ userId });
+    expect(await service.findCommentsByVideoIdSortedByCreatedDescPaginated(parameters)).toEqual([[{ ...comment, displayName: null }], '']);
+  });
+
+  test('propagates name lookup failures instead of treating unavailable names as deleted users', async () => {
+    await db.postComment(comment);
+    const error = new Error('Name lookup unavailable');
+    jest.spyOn(db, 'findDisplayNamesByUserIds').mockRejectedValue(error);
+    await expect(service.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor: '', paginationSize: 50 })).rejects.toBe(error);
+  });
+
   describe('findComment', () => {
     test.each([
       ['found', comment],
@@ -186,7 +216,9 @@ describe('CommentService', () => {
     ] as const)('returns a %s comment result', async (_label, result) => {
       const find = jest.spyOn(db, 'findOneCommentByCommentId').mockResolvedValueOnce(result);
 
+      const names = jest.spyOn(db, 'findDisplayNamesByUserIds').mockRejectedValueOnce(new Error('Name lookup must not run'));
       await expect(service.findComment({ commentId })).resolves.toBe(result);
+      expect(names).not.toHaveBeenCalled();
 
       expect(find).toHaveBeenCalledTimes(1);
       expect(find).toHaveBeenCalledWith({ commentId });
@@ -206,7 +238,7 @@ describe('CommentService', () => {
       const result: [Comment[], string] = [[comment], 'opaque-next-cursor'];
       const find = jest.spyOn(db, 'findManyCommentsByVideoIdSortedByCreatedDescPaginated').mockResolvedValueOnce(result);
 
-      await expect(service.findCommentsByVideoIdSortedByCreatedDescPaginated(parameters)).resolves.toBe(result);
+      await expect(service.findCommentsByVideoIdSortedByCreatedDescPaginated(parameters)).resolves.toEqual([[{ ...comment, displayName: null }], result[1]]);
 
       expect(find).toHaveBeenCalledTimes(1);
       expect(find).toHaveBeenCalledWith(parameters);
@@ -220,13 +252,15 @@ describe('CommentService', () => {
 
       const [firstPage, cursor] = await service.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor: '', paginationSize: 1 });
 
-      expect(firstPage).toEqual([newerComment]);
+      expect(firstPage).toEqual([{ ...newerComment, displayName: null }]);
       expect(cursor).not.toBe('');
-      expect(await service.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor: cursor, paginationSize: 1 })).toEqual([[comment], '']);
+      expect(await service.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor: cursor, paginationSize: 1 })).toEqual([[{ ...comment, displayName: null }], '']);
     });
 
     test('returns no comments and an empty cursor for a video without comments', async () => {
+      const lookup = jest.spyOn(db, 'findDisplayNamesByUserIds');
       await expect(service.findCommentsByVideoIdSortedByCreatedDescPaginated({ videoId, paginationCursor: '', paginationSize: 10 })).resolves.toEqual([[], '']);
+      expect(lookup).not.toHaveBeenCalled();
     });
 
     test('propagates database errors', async () => {

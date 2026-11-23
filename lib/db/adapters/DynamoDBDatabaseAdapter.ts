@@ -1,8 +1,11 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 import { dynamoTablePrefix } from '@/app/dynamoTablePrefix';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient, KeySchemaElement, TableDescription, waitUntilTableExists } from '@aws-sdk/client-dynamodb';
 import {
+  BatchGetCommand,
+  BatchGetCommandInput,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
@@ -21,6 +24,7 @@ import { DynamoDBConf } from '@/db/config/DynamoDBConf';
 import { AttemptsCount } from '@/domain/AttemptsCount';
 import { Comment } from '@/domain/Comment';
 import { User } from '@/domain/User';
+import { UserDisplayName } from '@/domain/UserDisplayName';
 import { Video } from '@/domain/Video';
 
 type Key = NonNullable<QueryCommandInput['ExclusiveStartKey']>;
@@ -160,7 +164,7 @@ const readCursor = function (cursor: string, videoId: string): Key {
  * ARNs. It attempts dynamodb:CreateTable only for missing tables (including
  * their indexes in the request). No CreateTable permission is needed when the
  * tables already match createTableInputs. A denied create reports the manual
- * provisioning fallback. The regular role needs dynamodb:GetItem, PutItem,
+ * provisioning fallback. The regular role needs dynamodb:BatchGetItem, dynamodb:GetItem, PutItem,
  * UpdateItem, DeleteItem and Scan on the tables, and dynamodb:Query on the
  * relevant index ARNs (arn:aws:dynamodb:REGION:ACCOUNT:table/TABLE/index/INDEX).
  * Transaction actions use the underlying PutItem/UpdateItem/DeleteItem grants.
@@ -281,6 +285,34 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     }
     const user = await this.findOneUserByUserId(reservation);
     return user?.username === username ? user : null;
+  }
+
+  public async findDisplayNamesByUserIds({ userIds }: { userIds: string[] }): Promise<UserDisplayName[]> {
+    const ids = [...new Set(userIds)];
+    const names: UserDisplayName[] = [];
+    const table = this.table('users');
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      let pending: NonNullable<BatchGetCommandInput['RequestItems']> = {
+        [table]: {
+          Keys: ids.slice(offset, offset + 100).map((userId) => ({ userId })),
+          ProjectionExpression: '#id, #name',
+          ExpressionAttributeNames: { '#id': 'userId', '#name': 'displayName' },
+          ConsistentRead: true
+        }
+      };
+      for (let attempt = 0; ; attempt++) {
+        const response = await this.documentClient().send(new BatchGetCommand({ RequestItems: pending }));
+        for (const item of response.Responses?.[table] ?? []) {
+          names.push({ userId: item.userId as string, displayName: item.displayName as string });
+        }
+        const remaining = response.UnprocessedKeys?.[table]?.Keys ?? [];
+        if (!remaining.length) break;
+        pending = { [table]: { ...pending[table], Keys: remaining } };
+        if (attempt >= 7) throw new Error('Could not load all user display names');
+        await delay(Math.min(25 * 2 ** attempt, 1000));
+      }
+    }
+    return names;
   }
 
   public async findAllUsers(): Promise<User[]> {

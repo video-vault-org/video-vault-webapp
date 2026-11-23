@@ -1,6 +1,6 @@
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { BatchWriteCommand, DynamoDBDocumentClient, QueryCommand, ScanCommand, ScanCommandOutput } from '@aws-sdk/lib-dynamodb';
+import { BatchGetCommand, BatchWriteCommand, DynamoDBDocumentClient, QueryCommand, ScanCommand, ScanCommandOutput } from '@aws-sdk/lib-dynamodb';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import createTableInputs from '../../../dynamodb/create-tables.json';
 import { DynamoDBDatabaseAdapter } from '@/db/adapters/DynamoDBDatabaseAdapter';
@@ -202,6 +202,27 @@ describe('DynamoDBDatabaseAdapter', () => {
     }
     expect(await db.findOneUserByUserId({ userId: pending.userId })).toEqual(pending);
     expect(await db.findOneUserByUserId({ userId: 'missing' })).toBeNull();
+  });
+
+  test('findDisplayNamesByUserIds projects only requested names, deduplicates IDs and omits unknown users', async () => {
+    await db.createUser(user);
+    await db.createUser({ ...otherUser, displayName: 'Bob' });
+    const names = await db.findDisplayNamesByUserIds({ userIds: [user.userId, otherUser.userId, user.userId, "missing' OR 1=1 --"] });
+    expect(names.sort((a, b) => a.userId.localeCompare(b.userId))).toEqual(
+      [
+        { userId: user.userId, displayName: user.displayName },
+        { userId: otherUser.userId, displayName: 'Bob' }
+      ].sort((a, b) => a.userId.localeCompare(b.userId))
+    );
+    expect(await db.findDisplayNamesByUserIds({ userIds: [] })).toEqual([]);
+  });
+
+  test('findDisplayNamesByUserIds reflects renamed and deleted users without caching', async () => {
+    await db.createUser(user);
+    await db.changeUsersDisplayNameByUserId({ userId: user.userId, displayName: 'Renamed' });
+    expect(await db.findDisplayNamesByUserIds({ userIds: [user.userId] })).toEqual([{ userId: user.userId, displayName: 'Renamed' }]);
+    await db.deleteUserByUserId({ userId: user.userId });
+    expect(await db.findDisplayNamesByUserIds({ userIds: [user.userId] })).toEqual([]);
   });
 
   describe('users', () => {
@@ -702,6 +723,46 @@ describe('DynamoDBDatabaseAdapter service pagination', () => {
     send.mockRestore();
     await adapter.close();
   });
+
+  test('batches distinct name requests into at most 100 keys, projects only public fields and skips empty requests', async () => {
+    expect(await adapter.findDisplayNamesByUserIds({ userIds: [] })).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+    const ids = Array.from({ length: 201 }, (_, index) => `u${index}`);
+    send.mockImplementation(async (command: BatchGetCommand) => {
+      const [table, request] = Object.entries(command.input.RequestItems!)[0];
+      expect(command).toBeInstanceOf(BatchGetCommand);
+      expect(request.ConsistentRead).toBe(true);
+      expect(request.ProjectionExpression).toBe('#id, #name');
+      expect(request.ExpressionAttributeNames).toEqual({ '#id': 'userId', '#name': 'displayName' });
+      return { Responses: { [table]: request.Keys!.map(({ userId }) => ({ userId, displayName: userId, loginHash: 'never-return-this' })) } };
+    });
+    const names = await adapter.findDisplayNamesByUserIds({ userIds: [...ids, ...ids] });
+    expect(send.mock.calls.map(([command]) => Object.values((command as BatchGetCommand).input.RequestItems!)[0].Keys!.length)).toEqual([100, 100, 1]);
+    expect(names).toEqual(ids.map((userId) => ({ userId, displayName: userId })));
+  });
+
+  test('retries unprocessed name keys without dropping users or querying completed keys again', async () => {
+    const table = createTableInputs[0].TableName;
+    const pending = { [table]: { Keys: [{ userId: 'u2' }], ProjectionExpression: '#id, #name', ExpressionAttributeNames: { '#id': 'userId', '#name': 'displayName' }, ConsistentRead: true } };
+    send
+      .mockResolvedValueOnce({ Responses: { [table]: [{ userId: 'u1', displayName: 'Alice' }] }, UnprocessedKeys: { [table]: { Keys: pending[table].Keys } } })
+      .mockResolvedValueOnce({ Responses: { [table]: [{ userId: 'u2', displayName: 'Bob' }] } });
+    expect(await adapter.findDisplayNamesByUserIds({ userIds: ['u1', 'u2'] })).toEqual([
+      { userId: 'u1', displayName: 'Alice' },
+      { userId: 'u2', displayName: 'Bob' }
+    ]);
+    expect(send.mock.calls[1][0].input.RequestItems).toEqual(pending);
+  });
+
+  test('fails instead of returning incomplete names after bounded retries and preserves transport failures', async () => {
+    const table = createTableInputs[0].TableName;
+    send.mockResolvedValue({ UnprocessedKeys: { [table]: { Keys: [{ userId: 'u1' }] } } });
+    await expect(adapter.findDisplayNamesByUserIds({ userIds: ['u1'] })).rejects.toThrow('Could not load all user display names');
+    expect(send).toHaveBeenCalledTimes(8);
+    const error = new Error('Unavailable');
+    send.mockRejectedValueOnce(error);
+    await expect(adapter.findDisplayNamesByUserIds({ userIds: ['u1'] })).rejects.toBe(error);
+  }, 10_000);
 
   test('passes the encoded LastEvaluatedKey unchanged to ExclusiveStartKey', async () => {
     const key = { videoId: 'v1', commentId: 'c1', createdKey: '08639999999999900:c1' };
