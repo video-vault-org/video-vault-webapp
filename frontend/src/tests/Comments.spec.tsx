@@ -45,6 +45,30 @@ const show = function (current = user) {
   return userEvent.setup();
 };
 
+test.each([
+  ['de', 'bearbeitet'],
+  ['en', 'edited']
+])('shows the last modification date and time after the edited label in %s', async (language, label) => {
+  const lastModified = '2026-02-03T14:25:00.000Z';
+  localStorage.setItem('videovault.language', language);
+  vi.mocked(json).mockResolvedValueOnce({ comments: [{ ...comment, edited: true, lastModified }], cursor: '' });
+  show();
+  await screen.findByText('Decrypted comment');
+  const header = screen.getByText(new RegExp(`· ${label}`));
+  expect(header).toHaveTextContent(`· ${label} ${new Date(lastModified).toLocaleString(language)}`);
+  expect(header.querySelector('time')).toHaveAttribute('datetime', lastModified);
+  expect(header).toHaveTextContent(new Date(comment.created).toLocaleString(language));
+});
+
+test('does not display an edited timestamp for an unedited comment', async () => {
+  const lastModified = '2026-02-03T14:25:00.000Z';
+  vi.mocked(json).mockResolvedValueOnce({ comments: [{ ...comment, lastModified }], cursor: '' });
+  show();
+  await screen.findByText('Decrypted comment');
+  expect(screen.queryByText(/bearbeitet|edited/)).not.toBeInTheDocument();
+  expect(screen.queryByText(new Date(lastModified).toLocaleString('de'))).not.toBeInTheDocument();
+});
+
 test('loads subsequent pages, deduplicates IDs, ends at empty cursor and treats deleted shells as unverified', async () => {
   vi.mocked(json)
     .mockResolvedValueOnce({ comments: [comment], cursor: 'next/key' })

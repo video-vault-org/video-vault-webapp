@@ -96,7 +96,14 @@ const Comments = function ({
           <article className={`comment ${c.deleted ? 'tombstone' : ''}`} key={c.commentId}>
             <small>
               {c.userId === user.userId ? user.displayName : c.userId.slice(0, 8)} ·{' '}
-              {new Date(c.created).toLocaleString(language)} {c.edited ? t('· bearbeitet', '· edited') : ''}
+              {new Date(c.created).toLocaleString(language)}
+              {c.edited && (
+                <>
+                  {' '}
+                  {t('· bearbeitet', '· edited')}{' '}
+                  <time dateTime={c.lastModified}>{new Date(c.lastModified).toLocaleString(language)}</time>
+                </>
+              )}
             </small>
             {c.deleted ? (
               <p>{t('Gelöscht', 'Deleted')}</p>
