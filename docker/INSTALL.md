@@ -13,6 +13,6 @@ The first browser sign-in creates the archive keys. Give the initial admin the e
 
 Keep the `conf`, `jwtkeys`, `storage` (if local storage), `.salt` and SQLite database with the installation. Back them up together. Relative paths in the configuration refer to the working directory from which the app and its CLI commands run. `public` must be writable so startup can prepare branding.
 
-For upgrades, stop the server, back up instance data, replace built code/static files/default images and the two package files, run `npm ci --omit=dev` again and restart. Do not replace configuration or instance data with files from another installation. The application is currently in development and does not provide schema migrations; an update may require recreating the database.
+For upgrades, stop the server, back up instance data, replace built code/static files/default images and the two package files, run `npm ci --omit=dev` again and restart. Do not replace configuration or instance data with files from another installation.
 
-Read the [project README](https://github.com/video-vault-org/video-vault-webapp) for configuration details and `SECURITY-ARCHITECTURE.html` in a browser for the security model. Source build commands in the project documentation apply to a source checkout, not this prebuilt ZIP.
+Read the [project README](https://github.com/video-vault-org/video-vault-webapp) for configuration details. Source build commands in the project documentation apply to a source checkout, not this prebuilt ZIP.
