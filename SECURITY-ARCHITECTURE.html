@@ -773,7 +773,8 @@
               </table>
               <p>
                 Für den Betrieb über das Netzwerk benötigt die Anwendung HTTPS. Lokale HTTP-Aufrufe über localhost oder Loopback-Adressen werden vom Browser als sicherer Kontext zugelassen. Eine verschlüsselte Verbindung schützt den Transport,
-                ersetzt aber kein vertrauenswürdiges Gerät und keinen vertrauenswürdigen Anwendungscode.
+                ersetzt aber kein vertrauenswürdiges Gerät und keinen vertrauenswürdigen Anwendungscode. Beim Containerbetrieb endet HTTPS an einem vorgeschalteten Proxy. Zwischen Proxy und Backend wird HTTP verwendet; dieser Abschnitt muss in einer
+                vertrauenswürdigen Umgebung liegen.
               </p>
             </section>
             <section id="de-references" aria-labelledby="de-references-title">
@@ -1210,7 +1211,7 @@
               </table>
               <p>
                 Network deployments require HTTPS. Browsers allow local HTTP access through localhost or loopback addresses as secure contexts. An encrypted connection protects transport but does not replace a trusted device and trusted application
-                code.
+                code. In a container deployment, HTTPS terminates at an upstream proxy. The connection from the proxy to the backend uses HTTP and must stay within a trusted environment.
               </p>
             </section>
             <section id="en-references" aria-labelledby="en-references-title">

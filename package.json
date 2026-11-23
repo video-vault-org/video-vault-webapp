@@ -32,7 +32,10 @@
     "build:backend": "rimraf ./built && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths --resolve-full-extension .js",
     "build:frontend": "npm --prefix frontend run build && node scripts/build-frontend.mjs",
     "test:frontend": "npm --prefix frontend test",
-    "frontend:init": "node built/lib/initialize-frontend.js"
+    "frontend:init": "node built/lib/initialize-frontend.js",
+    "release:zip": "node scripts/package-release.mjs",
+    "test:release": "node --test scripts/release.spec.mjs",
+    "docker:build": "docker build -t video-vault:local ."
   },
   "repository": {
     "type": "git",
