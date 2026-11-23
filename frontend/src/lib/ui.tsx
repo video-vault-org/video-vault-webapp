@@ -55,42 +55,57 @@ const errorText = (error: unknown, t: T) =>
                   'Die Anfrage ist fehlgeschlagen. Bitte Daten prüfen und erneut versuchen.',
                   'The request failed. Check the input and try again.'
                 )
-    : error instanceof Error && error.message === 'password-policy'
+    : error instanceof Error && error.message === 'worker-ready'
       ? t(
-          'Mindestens 12 Zeichen und drei der vier Zeichenarten sind erforderlich.',
-          'At least 12 characters and three of the four character categories are required.'
+          'Der Service Worker ist nicht bereit. Bitte Seite neu laden und den Service-Worker-Status im Browser prüfen.',
+          'The service worker is not ready. Reload the page and check the service worker status in the browser.'
         )
-      : error instanceof Error && error.message === 'metadata'
+      : error instanceof Error && error.message === 'worker-control'
         ? t(
-            'Bitte Metadaten prüfen: Pflichtfelder ausfüllen und gültige Zahlen bzw. Datumswerte verwenden.',
-            'Check metadata: fill required fields and use valid numbers or dates.'
+            'Der Service Worker kontrolliert diese Seite noch nicht. Bitte Seite neu laden.',
+            'The service worker does not control this page yet. Please reload the page.'
           )
-        : error instanceof Error && error.message === 'password-breached'
+        : error instanceof Error && error.message === 'worker-client'
           ? t(
-              'Dieses Passwort wurde in einem Datenleck gefunden. Bitte wähle ein anderes.',
-              'This password was found in a breach. Please choose another.'
+              'Der Service Worker antwortet nicht auf die Player-Vorbereitung. Bitte Seite neu laden.',
+              'The service worker is not responding to player preparation. Please reload the page.'
             )
-          : error instanceof Error && error.message === 'password-match'
-            ? t('Die Passwörter stimmen nicht überein.', 'The passwords do not match.')
-            : error instanceof Error && error.message === 'own-username'
+          : error instanceof Error && error.message === 'password-policy'
+            ? t(
+                'Mindestens 12 Zeichen und drei der vier Zeichenarten sind erforderlich.',
+                'At least 12 characters and three of the four character categories are required.'
+              )
+            : error instanceof Error && error.message === 'metadata'
               ? t(
-                  'Bitte ändere deinen eigenen Benutzernamen unter „Mein Konto“.',
-                  'Please change your own username under “My account”.'
+                  'Bitte Metadaten prüfen: Pflichtfelder ausfüllen und gültige Zahlen bzw. Datumswerte verwenden.',
+                  'Check metadata: fill required fields and use valid numbers or dates.'
                 )
-              : error instanceof Error && error.message === 'integrity'
+              : error instanceof Error && error.message === 'password-breached'
                 ? t(
-                    'Integritätsprüfung fehlgeschlagen. Die Daten werden nicht angezeigt.',
-                    'Integrity check failed. The data will not be displayed.'
+                    'Dieses Passwort wurde in einem Datenleck gefunden. Bitte wähle ein anderes.',
+                    'This password was found in a breach. Please choose another.'
                   )
-                : error instanceof Error && error.message === 'secure'
-                  ? t(
-                      'Für die Wiedergabe sind ein Service Worker sowie HTTPS oder HTTP auf localhost erforderlich.',
-                      'Playback requires a service worker and HTTPS or HTTP on localhost.'
-                    )
-                  : t(
-                      'Vorgang fehlgeschlagen. Bitte Verbindung, Passwort und Daten prüfen.',
-                      'Operation failed. Check the connection, password and data.'
-                    );
+                : error instanceof Error && error.message === 'password-match'
+                  ? t('Die Passwörter stimmen nicht überein.', 'The passwords do not match.')
+                  : error instanceof Error && error.message === 'own-username'
+                    ? t(
+                        'Bitte ändere deinen eigenen Benutzernamen unter „Mein Konto“.',
+                        'Please change your own username under “My account”.'
+                      )
+                    : error instanceof Error && error.message === 'integrity'
+                      ? t(
+                          'Integritätsprüfung fehlgeschlagen. Die Daten werden nicht angezeigt.',
+                          'Integrity check failed. The data will not be displayed.'
+                        )
+                      : error instanceof Error && error.message === 'secure'
+                        ? t(
+                            'Für die Wiedergabe sind ein Service Worker sowie HTTPS oder HTTP auf localhost erforderlich.',
+                            'Playback requires a service worker and HTTPS or HTTP on localhost.'
+                          )
+                        : t(
+                            'Vorgang fehlgeschlagen. Bitte Verbindung, Passwort und Daten prüfen.',
+                            'Operation failed. Check the connection, password and data.'
+                          );
 
 const useTask = function () {
   const { t } = useLanguage();

@@ -31,42 +31,84 @@ const installMediaBridge = function () {
 };
 
 const mediaUrl = async function (video: Video, keys: Keys) {
-  if (!('serviceWorker' in navigator) || !isSecureContext) throw new Error('secure');
-  await Promise.race([
-    navigator.serviceWorker.ready,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('worker')), 10000))
-  ]);
-  if (!navigator.serviceWorker.controller)
-    await new Promise<void>((resolve, reject) => {
-      const listener = () => {
+  let stage = 'worker-ready';
+  try {
+    if (!('serviceWorker' in navigator) || !isSecureContext) throw new Error('secure');
+    let readyTimeout: ReturnType<typeof setTimeout> | undefined;
+    let registration: ServiceWorkerRegistration;
+    try {
+      registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<never>((_, reject) => {
+          readyTimeout = setTimeout(() => reject(new Error('worker-ready')), 10000);
+        })
+      ]);
+    } finally {
+      if (readyTimeout !== undefined) clearTimeout(readyTimeout);
+    }
+    stage = 'worker-control';
+    if (!navigator.serviceWorker.controller)
+      await new Promise<void>((resolve, reject) => {
+        const listener = function () {
+          if (!navigator.serviceWorker.controller) return;
+          clearTimeout(timeout);
+          navigator.serviceWorker.removeEventListener('controllerchange', listener);
+          resolve();
+        };
+
+        const timeout = setTimeout(() => {
+          navigator.serviceWorker.removeEventListener('controllerchange', listener);
+          reject(new Error('worker-control'));
+        }, 10000);
+
+        navigator.serviceWorker.addEventListener('controllerchange', listener);
+        try {
+          // An active registration may exist without controlling this document (e.g. a bypass reload).
+          registration.active?.postMessage({ type: 'vault:claim' });
+        } catch (error) {
+          clearTimeout(timeout);
+          navigator.serviceWorker.removeEventListener('controllerchange', listener);
+          reject(error);
+        }
+      });
+    stage = 'worker-client';
+    const owner = await new Promise<string>((resolve, reject) => {
+      const channel = new MessageChannel();
+      const fail = function () {
         clearTimeout(timeout);
-        navigator.serviceWorker.removeEventListener('controllerchange', listener);
-        resolve();
+        channel.port1.close();
+        reject(new Error('worker-client'));
       };
-
-      const timeout = setTimeout(() => {
-        navigator.serviceWorker.removeEventListener('controllerchange', listener);
-        reject(new Error('worker'));
-      }, 10000);
-
-      navigator.serviceWorker.addEventListener('controllerchange', listener);
+      const timeout = setTimeout(fail, 10000);
+      channel.port1.onmessage = (event) => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        if (typeof event.data !== 'string' || !event.data) reject(new Error('worker-client'));
+        else resolve(event.data);
+      };
+      channel.port1.onmessageerror = fail;
+      try {
+        navigator.serviceWorker.controller!.postMessage({ type: 'vault:client' }, [channel.port2]);
+      } catch (error) {
+        clearTimeout(timeout);
+        channel.port1.close();
+        reject(error);
+      }
     });
-  const owner = await new Promise<string>((resolve, reject) => {
-    const channel = new MessageChannel();
-    const timeout = setTimeout(() => {
-      channel.port1.close();
-      reject(new Error('worker'));
-    }, 10000);
-    channel.port1.onmessage = (event) => {
-      clearTimeout(timeout);
-      channel.port1.close();
-      resolve(event.data);
-    };
-    navigator.serviceWorker.controller!.postMessage({ type: 'vault:client' }, [channel.port2]);
-  });
-  const id = crypto.randomUUID();
-  media.set(id, await openMedia(video, keys));
-  return { url: `/__media/${id}/${video.videoId}/${owner}`, dispose: () => media.delete(id) };
+    stage = 'file-open';
+    const id = crypto.randomUUID();
+    media.set(id, await openMedia(video, keys));
+    return { url: `/__media/${id}/${video.videoId}/${owner}`, dispose: () => media.delete(id) };
+  } catch (error) {
+    // Do not log video metadata, credentials, keys or message payloads.
+    console.error('Video preparation failed', {
+      stage,
+      name: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      controllerState: navigator.serviceWorker?.controller?.state ?? null
+    });
+    throw error;
+  }
 };
 
 const clearMedia = function () {

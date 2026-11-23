@@ -82,6 +82,19 @@ test('a failed image fetch does not activate the new worker or remove the old ca
   expect(remove).not.toHaveBeenCalled();
 });
 
+test('claims an already open uncontrolled page when requested by the media bridge', async () => {
+  let completion: Promise<unknown> | undefined;
+  const handler = handlers.get('message') as unknown as (event: { data: { type: string }; waitUntil: (promise: Promise<unknown>) => void }) => void;
+  handler({
+    data: { type: 'vault:claim' },
+    waitUntil: (promise) => {
+      completion = promise;
+    }
+  });
+  await completion;
+  expect(claim).toHaveBeenCalledOnce();
+});
+
 test('activation removes old app caches while retaining the current cache and unrelated caches', async () => {
   await dispatch('install');
   const current = open.mock.calls[0][0];

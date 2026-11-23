@@ -26,6 +26,10 @@ sw.addEventListener('activate', (event) => {
 });
 
 sw.addEventListener('message', (event) => {
+  if (event.data?.type === 'vault:claim') {
+    event.waitUntil(sw.clients.claim());
+    return;
+  }
   if (event.data?.type === 'vault:client' && event.source && 'id' in event.source)
     event.ports[0]?.postMessage(event.source.id);
 });

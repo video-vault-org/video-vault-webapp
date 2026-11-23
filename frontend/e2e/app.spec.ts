@@ -73,6 +73,37 @@ test('decrypts only requested full chunks for native video playback and a stream
   expect(ranges.some((r) => r.startsWith('bytes=40-'))).toBe(true);
 });
 
+test('recovers native playback when an active service worker does not control the reloaded page', async ({
+  page,
+  browserName
+}) => {
+  // Firefox's force reload leaves the document uncontrolled despite an active registration.
+  test.skip(browserName !== 'firefox');
+  await login(page);
+  await Promise.all([
+    page.waitForEvent('domcontentloaded'),
+    page.evaluate(() => (location.reload as (forceGet: boolean) => void)(true))
+  ]);
+  await page.getByLabel('Passwort', { exact: true }).fill('VaultTesting123!');
+  await page.getByRole('button', { name: 'Entsperren', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ein Sommer am See', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull();
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.ready).active?.state)).toBe('activated');
+  const ranges: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/video/file/')) ranges.push(request.headers()['range'] ?? request.method());
+  });
+  await page.getByRole('button', { name: 'Mehr Details', exact: true }).first().click();
+  await expect(page.locator('video')).toBeVisible();
+  await expect
+    .poll(() => page.locator('video').evaluate((video) => (video as HTMLVideoElement).duration))
+    .toBeGreaterThan(0);
+  expect(await page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated');
+  expect(ranges).toContain('HEAD');
+  expect(ranges).toContain('bytes=0-39');
+  expect(ranges.some((value) => value.startsWith('bytes=40-'))).toBe(true);
+});
+
 test('posts, edits and soft-deletes authenticated encrypted comments', async ({ page, browser }) => {
   await login(page);
   await page.getByRole('button', { name: 'Mehr Details', exact: true }).first().click();
