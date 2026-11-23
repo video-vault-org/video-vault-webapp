@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useId } from 'react';
 import type { Bootstrap, Keys, PlainVideo, Video } from '../lib/types';
 import { Dialog, Field, ErrorMessage, useLanguage, useTask } from '../lib/ui';
 import { MetadataFields, validateMetadata } from './MetadataFields';
@@ -39,6 +39,7 @@ const VideoForm = function ({
     [analysis, setAnalysis] = useState(false),
     [progress, setProgress] = useState('');
   const selection = useRef(0);
+  const thumbnailHintId = useId();
 
   const selected = async function (file: File | undefined) {
     const version = ++selection.current;
@@ -212,20 +213,29 @@ const VideoForm = function ({
                 onChange={(e) => void selected(e.target.files?.[0])}
               />
             </Field>
-            <Field
-              label={
-                existing
-                  ? t('Thumbnail ersetzen (optional)', 'Replace thumbnail (optional)')
-                  : t('Thumbnail', 'Thumbnail')
-              }
-            >
-              <input
-                type="file"
-                accept="image/*"
-                required={!existing}
-                onChange={(e) => setThumbnail(e.target.files?.[0])}
-              />
-            </Field>
+            <div>
+              <Field
+                label={
+                  existing
+                    ? t('Thumbnail ersetzen (optional)', 'Replace thumbnail (optional)')
+                    : t('Thumbnail', 'Thumbnail')
+                }
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  required={!existing}
+                  aria-describedby={thumbnailHintId}
+                  onChange={(e) => setThumbnail(e.target.files?.[0])}
+                />
+              </Field>
+              <small id={thumbnailHintId} className="muted">
+                {t(
+                  'Empfohlen: 1280 × 720 Pixel (16:9), WebP oder JPEG, Qualität ca. 80–85 %, möglichst unter 200 KB. Andere Seitenverhältnisse werden beschnitten. Wichtige Bildinhalte und Text mit Abstand zum Rand platzieren.',
+                  'Recommended: 1280 × 720 pixels (16:9), WebP or JPEG, quality around 80–85%, ideally below 200 KB. Other aspect ratios are cropped. Keep important content and text away from the edges.'
+                )}
+              </small>
+            </div>
           </div>
           {analysis && (
             <p role="status">{t('Container und Codecs werden geprüft …', 'Checking container and codecs …')}</p>
