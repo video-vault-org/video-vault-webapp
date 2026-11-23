@@ -58,6 +58,7 @@ const Compatibility = function ({ report }: { report: MediaReport }) {
           <a href="https://handbrake.fr/" target="_blank" rel="noreferrer">
             HandBrake ↗
           </a>
+          <br />
         </>
       )}
       <small>

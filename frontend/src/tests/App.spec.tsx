@@ -66,6 +66,7 @@ const login = async function () {
 
 test('logs in, loads since=0, stores ciphertext only and grays out forbidden actions', async () => {
   const actor = await login();
+  expect(screen.getByText('1 Video · verschlüsselt gespeichert')).toBeVisible();
   expect(localStorage.getItem(TOKEN)).toBe(token);
   expect(screen.getByRole('banner')).toContainElement(screen.getByRole('combobox', { name: 'Design' }));
   expect(screen.getByRole('banner').querySelector('img')).toHaveAttribute('src', '/logo.png');
@@ -142,6 +143,7 @@ test('searches decrypted content and switches all navigation language', async ()
   await actor.click(screen.getByRole('button', { name: 'Zurücksetzen' }));
   expect(await screen.findByRole('heading', { name: 'A walk' })).toBeVisible();
   await actor.click(screen.getByRole('button', { name: 'Sprache wechseln' }));
+  expect(screen.getByText('1 video · stored encrypted')).toBeVisible();
   expect(screen.getByRole('button', { name: /Add video/ })).toBeDisabled();
   expect(screen.getByRole('link', { name: /Security architecture/ })).toBeVisible();
 });

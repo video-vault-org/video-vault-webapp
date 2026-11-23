@@ -270,7 +270,10 @@ const Vault = function ({
             <span className="eyebrow">{t('DEIN PRIVATES ARCHIV', 'YOUR PRIVATE ARCHIVE')}</span>
             <h1>{t('Geschichten, die bleiben.', 'Stories worth keeping.')}</h1>
             <p className="muted">
-              {videos.length} {t('Videos · verschlüsselt gespeichert', 'videos · stored encrypted')}{' '}
+              {videos.length}{' '}
+              {videos.length === 1
+                ? t('Video · verschlüsselt gespeichert', 'video · stored encrypted')
+                : t('Videos · verschlüsselt gespeichert', 'videos · stored encrypted')}{' '}
               {offline && <span className="offline-badge">{t('Offline-Katalog', 'Offline catalog')}</span>}
             </p>
           </div>

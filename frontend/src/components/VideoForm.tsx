@@ -95,11 +95,14 @@ const VideoForm = function ({
           ['thumbnail', thumbnail]
         ] as const) {
           if (!file) continue;
-          setProgress(t('Verschlüsseln: ', 'Encrypting: ') + kind);
+          const progressLabel = `${t('Verschlüsseln: ', 'Encrypting: ')} ${
+            kind === 'video' ? t('Video', 'video') : t('Thumbnail', 'thumbnail')
+          }:`;
+          setProgress(progressLabel);
           data.append(
             kind,
             await encrypt(file, kind, `${videoId}.${kind}`, keys, (n) =>
-              setProgress(`${t('Verschlüsseln', 'Encrypting')} ${kind}: ${Math.round(n * 100)}%`)
+              setProgress(`${progressLabel}: ${Math.round(n * 100)}%`)
             ),
             `${videoId}.${kind}`
           );
