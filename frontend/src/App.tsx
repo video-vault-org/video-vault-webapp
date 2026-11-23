@@ -13,8 +13,8 @@ import { VideoForm } from './components/VideoForm';
 import { Account, PasswordChange, UserManagement } from './components/Accounts';
 import { ThemeSelect } from './components/ThemeSelect';
 
-const REPO = 'https://github.com/video-vault-org/video-vault-webapp';
-const SECURITY = '/SECURITY-ARCHITECTURE.html';
+const WEBSITE = 'https://video-vault.de/';
+const SECURITY = 'https://video-vault.de/SECURITY-ARCHITECTURE.html';
 const cachedUserKey = 'videovault.user';
 
 const Login = function ({
@@ -660,7 +660,7 @@ const Application = function () {
         />
       )}
       <footer className="site-footer">
-        <a href={REPO} target="_blank" rel="noreferrer">
+        <a href={WEBSITE} target="_blank" rel="noreferrer">
           <img src="/videovault-logo.png" alt="" />
           Powered by <strong>VideoVault</strong> ↗
         </a>
@@ -700,6 +700,6 @@ const App = function () {
   );
 };
 
-export { REPO };
+export { WEBSITE };
 
 export default App;

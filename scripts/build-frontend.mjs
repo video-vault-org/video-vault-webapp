@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
+
 // Preserve unrelated public files; replace generated assets on each build.
 const source = resolve('frontend/dist'),
   target = resolve('public');

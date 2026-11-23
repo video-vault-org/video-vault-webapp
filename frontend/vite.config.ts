@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { build } from 'vite';
-import { copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3210';
@@ -19,7 +19,6 @@ const config = defineConfig({
   server: {
     proxy: {
       '/videovault-logo.png': backendUrl,
-      '/SECURITY-ARCHITECTURE.html': backendUrl,
       '/api': backendUrl,
       '/login': backendUrl,
       '/bootstrap': backendUrl
@@ -59,7 +58,6 @@ const config = defineConfig({
 
         await writeFile(resolve(root, 'videovault-logo.png'), await readFile(resolve(import.meta.dirname, '../img/default.logo.png')));
         await writeFile(resolve(root, '.sw.template.js'), await readFile(resolve(root, 'sw.js')));
-        await copyFile(resolve(import.meta.dirname, '../SECURITY-ARCHITECTURE.html'), resolve(root, 'SECURITY-ARCHITECTURE.html'));
         await writeFile(resolve(root, 'precache.json'), JSON.stringify((await files('')).filter((p) => p !== '/precache.json' && p !== '/.sw.template.js')));
       }
     }

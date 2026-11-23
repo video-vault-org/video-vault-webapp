@@ -12,7 +12,6 @@ COPY lib ./lib
 COPY frontend ./frontend
 COPY scripts/build-frontend.mjs ./scripts/build-frontend.mjs
 COPY img/default.* ./img/
-COPY SECURITY-ARCHITECTURE.html ./
 RUN npm run build
 
 # Native modules are installed for the target CPU and the same Debian/glibc as the runtime.

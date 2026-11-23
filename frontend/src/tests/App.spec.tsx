@@ -70,10 +70,8 @@ test('logs in, loads since=0, stores ciphertext only and grays out forbidden act
   expect(screen.getByRole('banner')).toContainElement(screen.getByRole('combobox', { name: 'Design' }));
   expect(screen.getByRole('banner').querySelector('img')).toHaveAttribute('src', '/logo.png');
   expect(screen.getByRole('contentinfo').querySelector('img')).toHaveAttribute('src', '/videovault-logo.png');
-  expect(screen.getByRole('link', { name: /Sicherheitsarchitektur/ })).toHaveAttribute(
-    'href',
-    '/SECURITY-ARCHITECTURE.html'
-  );
+  expect(screen.getByRole('link', { name: /Powered by VideoVault/ })).toHaveAttribute('href', 'https://video-vault.de/');
+  expect(screen.getByRole('link', { name: /Sicherheitsarchitektur/ })).toHaveAttribute('href', 'https://video-vault.de/SECURITY-ARCHITECTURE.html');
   expect(calls).toContain('/api/video/0');
   expect(screen.getByRole('button', { name: /Video hinzufügen/ })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Benutzerverwaltung' })).toBeDisabled();

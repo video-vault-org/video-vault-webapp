@@ -4,7 +4,7 @@
 
 A shared, end-to-end encrypted video archive with a React PWA and a TypeScript backend. Videos, thumbnails, titles, descriptions and comments are encrypted on the client. Accounts share archive keys, protected separately by each account's password.
 
-Read the [security architecture](./SECURITY-ARCHITECTURE.html) for the protection model, visible metadata and security limits. The document has German and English tabs and can be opened locally in a browser.
+Read the [security architecture](https://video-vault.de/SECURITY-ARCHITECTURE.html) for the protection model, visible metadata and security limits. The German/English document is maintained separately at `../video-vault-docs/SECURITY-ARCHITECTURE.html` in the shared workspace and is not bundled with the application or its releases.
 
 ## Requirements and build
 
@@ -30,7 +30,7 @@ npm run admin:init
 ```
 
 | Command         | Purpose                                                                                                                                                                                                                                                                                                             |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `config:init`   | Asks for the application title, then database and storage settings. Saves `conf/app.json`, `conf/db.json` and `conf/storage.json`. Defaults: title `VideoVault`, SQLite at `./video-vault.db`, local storage at `./storage`. Existing database/storage settings can be kept; replacing files requires confirmation. |
 | `meta:init`     | Configures recording-date display/filtering, metadata fields, filters and sorting. Saves `conf/meta.json`. Optional: without it, there are no extra metadata fields, recording dates omit the time and act as a filter, and videos sort by recording date descending, then title ascending.                         |
 | `frontend:init` | Selects a complete logo/icon set from `img/` and saves `conf/images.json`. Optional: without it, the `default` set is used. See [image setup](./img/README.md).                                                                                                                                                     |

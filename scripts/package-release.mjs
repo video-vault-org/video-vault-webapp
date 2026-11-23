@@ -16,7 +16,7 @@ const packageRelease = async function ({ version, root = resolve(import.meta.dir
   try {
     const target = join(temporary, 'video-vault');
     await mkdir(target);
-    for (const name of ['built', 'dynamodb', 'SECURITY-ARCHITECTURE.html', 'logo.png']) {
+    for (const name of ['built', 'dynamodb', 'logo.png']) {
       await cp(join(root, name), join(target, name), { recursive: true });
     }
     // dist is rebuilt from scratch, unlike public which may also contain an operator's extra files.
@@ -42,7 +42,7 @@ const packageRelease = async function ({ version, root = resolve(import.meta.dir
 
 This is the prebuilt distribution. Follow [INSTALL.md](./INSTALL.md) to install Node.js 26, install production dependencies, initialize and start the app. No source build is needed.
 
-- [Security architecture (German/English)](./SECURITY-ARCHITECTURE.html) — open locally in a browser.
+- [Security architecture (German/English)](https://video-vault.de/SECURITY-ARCHITECTURE.html).
 - [DynamoDB table definitions](./dynamodb/create-tables.json).
 - [Image configuration](./img/README.md).
 - [Source repository and configuration guide](https://github.com/video-vault-org/video-vault-webapp).

@@ -30,7 +30,7 @@ beforeEach(async () => {
       }
     }
   );
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(['/index.html', '/logo.png', '/icon-32.png', '/SECURITY-ARCHITECTURE.html']))));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(['/index.html', '/logo.png', '/icon-32.png']))));
   await import('../sw');
 });
 
@@ -49,20 +49,19 @@ test('versions the app cache by build and image content and reloads every precac
   expect(fetch).toHaveBeenCalledWith('/precache.json', { cache: 'no-store' });
   expect(open).toHaveBeenCalledWith(expect.stringMatching(/^vault-shell-.+-__VIDEOVAULT_IMAGES_VERSION__$/));
   const requests = addAll.mock.calls[0][0] as Request[];
-  expect(requests.map((request) => new URL(request.url).pathname)).toEqual(['/index.html', '/logo.png', '/icon-32.png', '/SECURITY-ARCHITECTURE.html']);
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual(['/index.html', '/logo.png', '/icon-32.png']);
   expect(requests.every((request) => request.cache === 'reload')).toBe(true);
   expect(addAll.mock.invocationCallOrder[0]).toBeLessThan(skipWaiting.mock.invocationCallOrder[0]);
 });
 
-test('serves the security document from the app cache without a network request', async () => {
-  // noinspection HtmlRequiredLangAttribute
-  const document = new Response('<html>Security architecture</html>', {
-    headers: { 'Content-Type': 'text/html' }
+test('serves a static asset from the app cache without a network request', async () => {
+  const asset = new Response(new Uint8Array([1, 2, 3]), {
+    headers: { 'Content-Type': 'image/png' }
   });
-  const match = vi.fn().mockResolvedValue(document);
+  const match = vi.fn().mockResolvedValue(asset);
   open.mockResolvedValueOnce({ match });
   Object.assign(self, { location: { origin: 'https://vault.test' } });
-  const request = new Request('https://vault.test/SECURITY-ARCHITECTURE.html');
+  const request = new Request('https://vault.test/logo.png');
   let response: Promise<Response> | undefined;
   const handler = handlers.get('fetch') as unknown as (event: { request: Request; respondWith: (promise: Promise<Response>) => void }) => void;
   handler({
@@ -71,7 +70,7 @@ test('serves the security document from the app cache without a network request'
       response = promise;
     }
   });
-  expect(await response).toBe(document);
+  expect(await response).toBe(asset);
   expect(match).toHaveBeenCalledWith(request);
   expect(fetch).not.toHaveBeenCalled();
 });
