@@ -1,4 +1,5 @@
 import type { Bootstrap } from './types';
+
 const TOKEN = 'videovault.token',
   BOOTSTRAP = 'videovault.bootstrap';
 class ApiError extends Error {
@@ -36,6 +37,31 @@ const json = async function <T>(
     ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
   });
   return response.status === 204 ? (undefined as T) : response.json();
+};
+
+const upload = async function (path: string, data: FormData, onProgress: (progress: number) => void): Promise<void> {
+  const token = localStorage.getItem(TOKEN);
+  if (!token) {
+    clearToken();
+    throw new ApiError(401);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+    };
+    xhr.upload.onload = () => onProgress(1);
+    xhr.onload = () => {
+      if (xhr.status === 401) clearToken();
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new ApiError(xhr.status));
+    };
+    xhr.onerror = () => reject(new TypeError('Upload failed'));
+    xhr.onabort = () => reject(new DOMException('Upload aborted', 'AbortError'));
+    xhr.send(data);
+  });
 };
 
 const bootstrap = async function (refresh = false): Promise<Bootstrap> {
@@ -96,4 +122,4 @@ const tokenValid = function (token: string): boolean {
   }
 };
 
-export { TOKEN, BOOTSTRAP, ApiError, clearToken, request, json, bootstrap, tokenValid };
+export { TOKEN, BOOTSTRAP, ApiError, clearToken, request, json, upload, bootstrap, tokenValid };

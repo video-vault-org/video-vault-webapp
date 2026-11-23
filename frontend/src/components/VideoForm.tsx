@@ -5,7 +5,7 @@ import { MetadataFields, validateMetadata } from './MetadataFields';
 import { Compatibility } from './Compatibility';
 import { inspect, type MediaReport } from '../lib/compatibility';
 import { encrypt, encryptText, sign, verify } from '../lib/crypto';
-import { json, request } from '../lib/api';
+import { json, upload } from '../lib/api';
 
 const VideoForm = function ({
   existing,
@@ -107,8 +107,14 @@ const VideoForm = function ({
             `${videoId}.${kind}`
           );
         }
-        setProgress(t('Hochladen …', 'Uploading …'));
-        await request(`/api/video/upload/${videoId}`, { method: 'POST', body: data });
+        setProgress(t('Hochladen: 0%', 'Uploading: 0%'));
+        await upload(`/api/video/upload/${videoId}`, data, (progress) =>
+          setProgress(
+            progress >= 1
+              ? t('Upload wird abgeschlossen …', 'Finalizing upload …')
+              : `${t('Hochladen', 'Uploading')}: ${Math.floor(progress * 100)}%`
+          )
+        );
         state.videoMimeType = video ? report?.mime || video.type || 'application/octet-stream' : state.videoMimeType;
         state.thumbnailMimeType = thumbnail ? thumbnail.type || 'image/jpeg' : state.thumbnailMimeType;
         if (existing) {
