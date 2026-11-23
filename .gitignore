@@ -32,3 +32,7 @@ AGENTS.md
 
 /public/videovault-logo.png
 /public/SECURITY-ARCHITECTURE.html
+
+/release
+
+/.env
