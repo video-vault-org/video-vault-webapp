@@ -70,6 +70,21 @@ Keep database, stored files, `conf/`, `.salt` and `jwtkeys/` with the installati
 
 After source changes, rebuild with `npm run build` and restart the server. Stop with Ctrl+C or SIGTERM for a graceful shutdown.
 
+## Docker and downloadable releases
+
+The [Docker and release guide](./docker/README.md) explains the container, persistent data, initialization, HTTPS reverse proxy, Docker Hub/GitHub setup and publishing a version.
+
+```sh
+npm run docker:build
+docker compose run --rm app config:init
+docker compose run --rm app admin:init
+docker compose up -d --no-build
+```
+
+The container runs without root privileges and serves HTTP on port 3210. Compose exposes it on host loopback only; HTTPS terminates at your external reverse proxy. Instance data is retained in the `/data` volume.
+
+The **Release ZIP and Docker** GitHub workflow builds and tests the app, creates a version tag and GitHub Release with a portable ZIP and SHA-256 checksum, and publishes an AMD64/ARM64 image to Docker Hub. The ZIP includes installation instructions; it requires Node.js 26 and `npm ci --omit=dev` on the target machine. The separate **Docker release** workflow can retry image publication for an existing tag.
+
 ## Development and tests
 
 See [frontend/README.md](./frontend/README.md) for frontend development, offline behavior and browser tests.
