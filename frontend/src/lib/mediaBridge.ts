@@ -46,6 +46,7 @@ const mediaUrl = async function (video: Video, keys: Keys) {
     } finally {
       if (readyTimeout !== undefined) clearTimeout(readyTimeout);
     }
+    // noinspection JSUnusedAssignment used in catch
     stage = 'worker-control';
     if (!navigator.serviceWorker.controller)
       await new Promise<void>((resolve, reject) => {
@@ -71,6 +72,7 @@ const mediaUrl = async function (video: Video, keys: Keys) {
           reject(error);
         }
       });
+    // noinspection JSUnusedAssignment used in catch
     stage = 'worker-client';
     const owner = await new Promise<string>((resolve, reject) => {
       const channel = new MessageChannel();
@@ -95,6 +97,7 @@ const mediaUrl = async function (video: Video, keys: Keys) {
         reject(error);
       }
     });
+    // noinspection JSUnusedAssignment used in catch
     stage = 'file-open';
     const id = crypto.randomUUID();
     media.set(id, await openMedia(video, keys));

@@ -103,6 +103,7 @@ test.each(['worker-ready', 'worker-control', 'worker-client'])('reports the fail
     worker.postMessage.mockImplementation(() => {});
   }
   if (stage === 'worker-client') worker.postMessage.mockImplementation(() => {});
+  // noinspection JSVoidFunctionReturnValueUsed it's not void, it's promise void
   const result = expect(mediaUrl(video, keys)).rejects.toThrow(stage);
   await vi.advanceTimersByTimeAsync(10000);
   await result;
