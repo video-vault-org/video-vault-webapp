@@ -110,6 +110,7 @@ const validate = function (value: unknown): Bootstrap {
       )
     )
       throw new Error('configuration');
+    // noinspection SuspiciousTypeOfGuard
     if (
       field.options !== undefined &&
       (field.type !== 'text' ||
