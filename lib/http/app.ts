@@ -25,8 +25,11 @@ import { MetaConfig, DEFAULT_META_CONFIG, metaConfigSchema } from '@/meta/config
 import { metaConfigResponse } from './metaSchema';
 import { escapeHtml, setPageTitle } from '@/util/html';
 
-/** Creates Fastify/Pino before adapter initialization. Forwarded headers are trusted only for explicitly configured proxy IPs/CIDRs. */
-const createHttpServer = function ({ logger = loggingOptions(), trustProxy = process.env.VIDEO_VAULT_TRUST_PROXY || false }: { logger?: FastifyServerOptions['logger']; trustProxy?: FastifyServerOptions['trustProxy'] } = {}): FastifyInstance {
+/** Creates Fastify/Pino before adapter initialization. Trusts loopback proxies by default; VIDEO_VAULT_TRUST_PROXY replaces this list. */
+const createHttpServer = function ({
+  logger = loggingOptions(),
+  trustProxy = process.env.VIDEO_VAULT_TRUST_PROXY?.trim() || '127.0.0.1,::1'
+}: { logger?: FastifyServerOptions['logger']; trustProxy?: FastifyServerOptions['trustProxy'] } = {}): FastifyInstance {
   const app = Fastify({ logger, trustProxy, genReqId: () => randomUUID(), logController: new HttpLogController(), bodyLimit: 1024 * 1024, routerOptions: { maxParamLength: 4096, ignoreTrailingSlash: true } });
   const strict = addFormats(new Ajv({ removeAdditional: false, coerceTypes: false, useDefaults: true }));
   const query = addFormats(new Ajv({ removeAdditional: false, coerceTypes: true, useDefaults: true }));

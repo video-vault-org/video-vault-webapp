@@ -739,7 +739,7 @@ describe('Fastify backend', () => {
     await writeFile(join(staticDirectory, 'index.html'), html);
     app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), appConfig: { title: 'Family & "Friends" <3' }, staticDirectory, temporaryDirectory, logger: false });
     for (const url of ['/', '/index.html']) {
-      const response = await app.inject({ url, headers: { host: 'localhost:3210', 'x-forwarded-host': 'untrusted.example', 'x-forwarded-proto': 'https' } });
+      const response = await app.inject({ url, remoteAddress: '192.0.2.1', headers: { host: 'localhost:3210', 'x-forwarded-host': 'untrusted.example', 'x-forwarded-proto': 'https' } });
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/html');
       expect(response.headers['cache-control']).toBe('no-store');

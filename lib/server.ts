@@ -23,7 +23,7 @@ import { DEFAULT_META_CONFIG } from '@/meta/config/MetaConfig';
  * JWT_TTL_SECONDS overrides the default one-hour token lifetime.
  * Temporary files with ctime older than 24 hours are cleaned on startup and hourly.
  * Prepares configured ./img branding and its service worker version in the static directory before listening.
- * Writes the application title to index.html. VIDEO_VAULT_TRUST_PROXY optionally lists trusted proxy IPs/CIDRs for public OG URLs.
+ * Writes the application title to index.html. VIDEO_VAULT_TRUST_PROXY overrides the default loopback proxy IPs/CIDRs for public OG URLs.
  * Requires ./conf/db.json; JWT keys are loaded or created under ./jwtkeys.
  * @returns The listening server and an idempotent close function that stops temporary-file cleanup and closes the database.
  * @throws If configuration, initialization or listening fails; initialized resources are closed on failure.
