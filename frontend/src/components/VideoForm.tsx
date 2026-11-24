@@ -39,6 +39,7 @@ const VideoForm = function ({
     [analysis, setAnalysis] = useState(false),
     [progress, setProgress] = useState('');
   const selection = useRef(0);
+  const videoHintId = useId();
   const thumbnailHintId = useId();
 
   const selected = async function (file: File | undefined) {
@@ -199,20 +200,29 @@ const VideoForm = function ({
           </Field>
           <MetadataFields fields={config.meta.fields} value={meta} onChange={setMeta} />
           <div className="form-grid">
-            <Field
-              label={
-                existing
-                  ? t('Videodatei ersetzen (optional)', 'Replace video file (optional)')
-                  : t('Videodatei', 'Video file')
-              }
-            >
-              <input
-                type="file"
-                accept="video/*,.mkv,.mov,.mp4,.webm"
-                required={!existing}
-                onChange={(e) => void selected(e.target.files?.[0])}
-              />
-            </Field>
+            <div>
+              <Field
+                label={
+                  existing
+                    ? t('Videodatei ersetzen (optional)', 'Replace video file (optional)')
+                    : t('Videodatei', 'Video file')
+                }
+              >
+                <input
+                  type="file"
+                  accept="video/*,.mkv,.mov,.mp4,.webm"
+                  required={!existing}
+                  aria-describedby={videoHintId}
+                  onChange={(e) => void selected(e.target.files?.[0])}
+                />
+              </Field>
+              <small id={videoHintId} className="muted">
+                {t(
+                  'Für breite Browser-Unterstützung empfohlen: MP4 - Web Optimized (H.264/AVC (x264), Profil Main oder High, Level 4.1, 8 Bit / 4:2:0, maximal 1080p und 30 fps, AAC Stereo)',
+                  'Recommended for broad browser support: MP4 - Web Optimized (H.264/AVC (x264), Main or High profile, level 4.1, 8-bit / 4:2:0, at most 1080p and 30 fps, AAC stereo)'
+                )}
+              </small>
+            </div>
             <div>
               <Field
                 label={
