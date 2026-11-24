@@ -328,7 +328,7 @@ const Vault = function ({
           {config.meta.fields
             .filter((f) => f.useAsFilter)
             .map((f) => (
-              <Field key={f.key} label={f.name}>
+              <Field key={f.key} label={f.name[language]}>
                 {f.options ? (
                   <select
                     value={filters[`meta:${f.key}`] ?? ''}

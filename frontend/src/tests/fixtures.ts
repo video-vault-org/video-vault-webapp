@@ -9,7 +9,7 @@ const config: Bootstrap = {
     fields: [
       {
         key: 'people',
-        name: 'People',
+        name: { de: 'Personen', en: 'People' },
         type: 'text',
         multiple: true,
         required: true,

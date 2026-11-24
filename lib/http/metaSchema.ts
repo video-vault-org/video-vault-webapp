@@ -10,7 +10,7 @@ const metaConfigResponse = object({
   fields: Type.Array(
     object({
       key,
-      name: Type.String({ minLength: 1, maxLength: 100 }),
+      name: object({ de: Type.String({ minLength: 1, maxLength: 100 }), en: Type.String({ minLength: 1, maxLength: 100 }) }),
       type: Type.Unsafe<MetaField['type']>({ type: 'string', enum: [...fieldTypes] }),
       multiple: Type.Boolean(),
       required: Type.Boolean(),

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { loadConfig, saveConfig } from '@/meta';
 import { DEFAULT_META_CONFIG, MetaConfig, metaConfigSchema } from '@/meta/config/MetaConfig';
 
-const field = { key: 'actors', name: 'Darsteller', type: 'text' as const, multiple: true, required: false, showInDetails: true, useAsFilter: true };
+const field = { key: 'actors', name: { de: 'Darsteller', en: 'Actors' }, type: 'text' as const, multiple: true, required: false, showInDetails: true, useAsFilter: true };
 const config: MetaConfig = {
   recorded: { withTime: true, useAsFilter: false },
   fields: [field],
@@ -109,6 +109,11 @@ describe('metadata configuration validation', () => {
     { ...config, fields: [{ ...field, key: '__proto__' }] },
     { ...config, fields: [{ ...field, key: 'has spaces' }] },
     { ...config, fields: [{ ...field, name: ' ' }] },
+    { ...config, fields: [{ ...field, name: { de: 'Darsteller' } }] },
+    { ...config, fields: [{ ...field, name: { en: 'Actors' } }] },
+    { ...config, fields: [{ ...field, name: { de: ' ', en: 'Actors' } }] },
+    { ...config, fields: [{ ...field, name: { de: 'Darsteller', en: ' ' } }] },
+    { ...config, fields: [{ ...field, name: { de: 'Darsteller', en: 'Actors', fr: 'Acteurs' } }] },
     { ...config, fields: [{ ...field, type: 'unknown' }] },
     { ...config, fields: [{ ...field, type: 'boolean', multiple: true }] },
     { ...config, fields: [{ ...field, required: 'yes' }] },

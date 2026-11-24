@@ -138,11 +138,14 @@ test('does not unlock or cache generated keys when initial persistence fails', a
 
 test('searches decrypted content and switches all navigation language', async () => {
   const actor = await login();
+  expect(screen.getByRole('searchbox', { name: 'Personen' })).toBeVisible();
   await actor.type(screen.getByRole('searchbox', { name: 'Videos durchsuchen' }), 'not found');
   expect(screen.queryByRole('heading', { name: 'A walk' })).not.toBeInTheDocument();
   await actor.click(screen.getByRole('button', { name: 'Zurücksetzen' }));
   expect(await screen.findByRole('heading', { name: 'A walk' })).toBeVisible();
   await actor.click(screen.getByRole('button', { name: 'Sprache wechseln' }));
+  expect(screen.getByRole('searchbox', { name: 'People' })).toBeVisible();
+  expect(screen.queryByRole('searchbox', { name: 'Personen' })).not.toBeInTheDocument();
   expect(screen.getByText('1 video · stored encrypted')).toBeVisible();
   expect(screen.getByRole('button', { name: /Add video/ })).toBeDisabled();
   expect(screen.getByRole('link', { name: /Security architecture/ })).toBeVisible();

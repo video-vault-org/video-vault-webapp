@@ -115,7 +115,7 @@ const VideoOverlay = function ({
             .filter((f) => f.showInDetails)
             .map((f) => (
               <div key={f.key}>
-                <dt>{f.name}</dt>
+                <dt>{f.name[language]}</dt>
                 <dd>{formatValue(video.meta[f.key], f, language)}</dd>
               </div>
             ))}

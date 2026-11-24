@@ -121,9 +121,9 @@ const app = createApp(
     metaConfig: {
       recorded: { withTime: false, useAsFilter: true },
       fields: [
-        { key: 'people', name: 'Personen', type: 'text', multiple: true, required: true, showInDetails: true, useAsFilter: true },
-        { key: 'category', name: 'Category', type: 'text', multiple: false, required: false, showInDetails: true, useAsFilter: true, options: ['Family', 'Travel'] },
-        { key: 'tags', name: 'Tags', type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Holiday', 'Friends'] }
+        { key: 'people', name: { de: 'Personen', en: 'People' }, type: 'text', multiple: true, required: true, showInDetails: true, useAsFilter: true },
+        { key: 'category', name: { de: 'Kategorie', en: 'Category' }, type: 'text', multiple: false, required: false, showInDetails: true, useAsFilter: true, options: ['Family', 'Travel'] },
+        { key: 'tags', name: { de: 'Schlagwörter', en: 'Tags' }, type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Holiday', 'Friends'] }
       ],
       sorting: [
         { source: 'recorded', direction: 'desc' },

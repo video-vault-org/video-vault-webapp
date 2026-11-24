@@ -2,7 +2,7 @@ type Language = 'de' | 'en';
 
 interface MetaField {
   key: string;
-  name: string;
+  name: Record<Language, string>;
   type: 'text' | 'number' | 'boolean' | 'date' | 'datetime';
   multiple: boolean;
   required: boolean;

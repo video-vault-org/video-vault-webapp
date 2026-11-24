@@ -69,7 +69,7 @@ describe('public bootstrap', () => {
   test('publishes configured frontend fields and sorting order without authentication', async () => {
     const meta: MetaConfig = {
       recorded: { withTime: true, useAsFilter: false },
-      fields: [{ key: 'actors', name: 'Darsteller', type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true }],
+      fields: [{ key: 'actors', name: { de: 'Darsteller', en: 'Actors' }, type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true }],
       sorting: [
         { source: 'title', direction: 'asc' },
         { source: 'meta', key: 'actors', direction: 'desc' }

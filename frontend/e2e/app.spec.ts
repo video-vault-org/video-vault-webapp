@@ -35,6 +35,12 @@ test('real Argon2 unlocks backend keys, ciphertext survives offline reload and l
   await expect(page.locator('.video-card')).toHaveCount(3);
   await page.getByRole('button', { name: 'Sprache wechseln' }).click();
   await expect(page.getByRole('button', { name: /Add video/ })).toBeDisabled();
+  await expect(page.getByRole('searchbox', { name: 'People', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'More details', exact: true }).first().click();
+  const details = page.getByRole('dialog', { name: 'Ein Sommer am See', exact: true });
+  await expect(details.locator('dt', { hasText: 'People' })).toBeVisible();
+  await expect(details.locator('dt', { hasText: 'Category' })).toBeVisible();
+  await details.getByRole('button', { name: 'Close', exact: true }).click();
   await context.setOffline(true);
   await page.reload();
   await page.getByLabel('Password', { exact: true }).fill('VaultTesting123!');
@@ -147,8 +153,8 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
   await dialog.getByLabel('Beschreibung', { exact: true }).fill('Encrypted browser description');
   await dialog.getByLabel('Aufgezeichnet', { exact: true }).fill('2026-11-01');
   await dialog.getByLabel('Personen *', { exact: true }).fill('Ada\nBob');
-  await dialog.getByRole('combobox', { name: 'Category' }).selectOption('Travel');
-  await dialog.locator('summary[aria-label="Tags"]').click();
+  await dialog.getByRole('combobox', { name: 'Kategorie' }).selectOption('Travel');
+  await dialog.locator('summary[aria-label="Schlagwörter"]').click();
   await dialog.getByRole('checkbox', { name: 'Holiday' }).check();
   await dialog.getByRole('checkbox', { name: 'Friends' }).check();
   await dialog.getByLabel('Videodatei', { exact: true }).setInputFiles('e2e/fixtures/sample.mp4');
@@ -156,16 +162,16 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
   await expect(dialog.getByText('Geschätzte Browser-Unterstützung:', { exact: false })).toBeVisible();
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Browser upload', exact: true })).toBeVisible();
-  await page.getByRole('combobox', { name: 'Category' }).selectOption('Travel');
+  await page.getByRole('combobox', { name: 'Kategorie' }).selectOption('Travel');
   await expect(page.locator('.video-card')).toHaveCount(1);
-  await page.getByRole('combobox', { name: 'Category' }).selectOption('');
+  await page.getByRole('combobox', { name: 'Kategorie' }).selectOption('');
   const card = page
     .locator('.video-card')
     .filter({ has: page.getByRole('heading', { name: 'Browser upload', exact: true }) });
   await card.getByRole('button', { name: 'Mehr Details', exact: true }).click();
   await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Video bearbeiten', exact: true });
-  await expect(dialog.getByRole('combobox', { name: 'Category' })).toHaveValue('Travel');
+  await expect(dialog.getByRole('combobox', { name: 'Kategorie' })).toHaveValue('Travel');
   await expect(dialog.locator('summary', { hasText: 'Holiday, Friends' })).toBeVisible();
   await dialog.getByLabel('Titel', { exact: true }).fill('Browser upload edited');
   await dialog.getByLabel('Beschreibung', { exact: true }).fill('Updated encrypted description');

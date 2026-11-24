@@ -10,11 +10,11 @@ const MetadataFields = function ({
   value: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   return (
     <>
       {fields.map((field) => (
-        <Field key={field.key} label={`${field.name}${field.required ? ' *' : ''}`}>
+        <Field key={field.key} label={`${field.name[language]}${field.required ? ' *' : ''}`}>
           <MetaInput field={field} value={value[field.key]} onChange={(v) => onChange({ ...value, [field.key]: v })} />
           {field.multiple && !field.options && <small>{t('Ein Wert pro Zeile.', 'One value per line.')}</small>}
         </Field>
@@ -34,16 +34,16 @@ const MetaInput = function ({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   if (field.options) {
     if (field.multiple) {
       const selected = Array.isArray(value) ? value : [];
       return (
         <details className="metadata-select">
-          <summary id={id} aria-label={`${field.name}${field.required ? ' *' : ''}`}>
+          <summary id={id} aria-label={`${field.name[language]}${field.required ? ' *' : ''}`}>
             {selected.length ? selected.join(', ') : t('Bitte auswählen', 'Please select')}
           </summary>
-          <div role="group" aria-label={field.name}>
+          <div role="group" aria-label={field.name[language]}>
             {field.options.map((option) => (
               <label key={option}>
                 <input
@@ -84,7 +84,7 @@ const MetaInput = function ({
     return (
       <textarea
         id={id}
-        aria-label={`${field.name}${field.required ? ' *' : ''}`}
+        aria-label={`${field.name[language]}${field.required ? ' *' : ''}`}
         required={field.required}
         value={Array.isArray(value) ? value.join('\n') : ''}
         onChange={(e) => onChange(e.target.value.split('\n'))}

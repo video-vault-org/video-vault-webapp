@@ -146,7 +146,7 @@ describe('compiled Fastify request and response schemas', () => {
     const change = jest.spyOn(videos, 'changeVideosMetadata').mockResolvedValue(undefined);
     app = createApp(
       { auth, users, videos, comments },
-      { instanceSalt: 'ab'.repeat(32), logger: false, metaConfig: { ...DEFAULT_META_CONFIG, fields: [{ key: 'count', name: 'Count', type: 'number', multiple: false, required: true, showInDetails: true, useAsFilter: true }] } }
+      { instanceSalt: 'ab'.repeat(32), logger: false, metaConfig: { ...DEFAULT_META_CONFIG, fields: [{ key: 'count', name: { de: 'Anzahl', en: 'Count' }, type: 'number', multiple: false, required: true, showInDetails: true, useAsFilter: true }] } }
     );
     const metadata = { anything: ['arbitrary', { nested: true }] };
     const response = await app.inject({ method: 'PATCH', url: '/api/video/change/metadata/video', headers, payload: { metadata, lastModified: '2026-01-01T00:00:00Z', hmac: 'hmac' } });

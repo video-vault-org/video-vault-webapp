@@ -20,6 +20,12 @@ test('loads dropdown options from bootstrap and preserves single/multiple text t
   expect(await bootstrap(true)).toEqual(dropdowns);
 });
 
+test.each(['People', { de: 'Personen' }, { en: 'People' }, { de: ' ', en: 'People' }, { de: 'Personen', en: '' }, { de: 'Personen', en: 'People', fr: 'Personnes' }])('rejects incomplete or invalid localized metadata names %j', async (name) => {
+  const invalid = { ...config, meta: { ...config.meta, fields: [{ ...config.meta.fields[0], name }] } };
+  mockFetch().mockResolvedValue(new Response(JSON.stringify(invalid)));
+  await expect(bootstrap(true)).rejects.toThrow('configuration');
+});
+
 test.each([{ options: [] }, { options: ['Paris', 'Paris'] }, { options: [' '] }, { options: [1] }, { options: [' Paris '] }])('rejects malformed bootstrap dropdown options %j', async ({ options }) => {
   const invalid = { ...config, meta: { ...config.meta, fields: [{ ...config.meta.fields[0], options }] } };
   mockFetch().mockResolvedValue(new Response(JSON.stringify(invalid)));

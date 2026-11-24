@@ -48,18 +48,21 @@ describe('metadata configuration CLI', () => {
   });
 
   test.each(['text', 'number', 'boolean', 'date', 'datetime', 'text[]', 'number[]', 'date[]', 'datetime[]'])('collects a %s field with separate key/name and individual flags', async (choice) => {
-    answers = [false, true, 1, 'customField', 'Anzeigename', choice, true, false, false, 'no-more'];
+    answers = [false, true, 1, 'customField', 'Anzeigename', 'Display name', choice, true, false, false, 'no-more'];
     await initializeMetaConfig();
     expect(saveConfig).toHaveBeenCalledWith({
       recorded: DEFAULT_META_CONFIG.recorded,
-      fields: [{ key: 'customField', name: 'Anzeigename', type: choice.replace('[]', ''), multiple: choice.endsWith('[]'), required: true, showInDetails: false, useAsFilter: false }],
+      fields: [{ key: 'customField', name: { de: 'Anzeigename', en: 'Display name' }, type: choice.replace('[]', ''), multiple: choice.endsWith('[]'), required: true, showInDetails: false, useAsFilter: false }],
       sorting: []
     });
     expect(answers).toHaveLength(0);
+    const messages = questions.map((question) => question.message);
+    expect(messages.indexOf('Field 1: German display name')).toBeLessThan(messages.indexOf('Field 1: English display name'));
+    expect(messages.indexOf('Field 1: English display name')).toBeLessThan(messages.indexOf('Field 1: type'));
   });
 
   test('stores title followed by two metadata fields in the selected priority and removes selected choices', async () => {
-    answers = [false, true, 2, 'camera', 'Camera', 'text', false, true, true, 'years', 'Years', 'number[]', false, false, false, 'title', 'asc', 'meta:camera', 'desc', 'meta:years', 'asc', 'no-more'];
+    answers = [false, true, 2, 'camera', 'Kamera', 'Camera', 'text', false, true, true, 'years', 'Jahre', 'Years', 'number[]', false, false, false, 'title', 'asc', 'meta:camera', 'desc', 'meta:years', 'asc', 'no-more'];
     await initializeMetaConfig();
     expect(jest.mocked(saveConfig).mock.calls[0][0].sorting).toEqual([
       { source: 'title', direction: 'asc' },
@@ -78,32 +81,38 @@ describe('metadata configuration CLI', () => {
   });
 
   test.each(['select', 'select[]'])('collects %s options after the other field attributes', async (choice) => {
-    answers = [false, true, 1, 'place', 'Place', choice, true, true, true, 2, 'Berlin', 'Paris', 'no-more'];
+    answers = [false, true, 1, 'place', 'Ort', 'Place', choice, true, true, true, 2, 'Berlin', 'Paris', 'no-more'];
     await initializeMetaConfig();
-    expect(jest.mocked(saveConfig).mock.calls[0][0].fields).toEqual([{ key: 'place', name: 'Place', type: 'text', multiple: choice.endsWith('[]'), required: true, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] }]);
+    expect(jest.mocked(saveConfig).mock.calls[0][0].fields).toEqual([
+      { key: 'place', name: { de: 'Ort', en: 'Place' }, type: 'text', multiple: choice.endsWith('[]'), required: true, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] }
+    ]);
     const messages = questions.map((question) => question.message);
     expect(messages.indexOf('Field 1: number of options')).toBeGreaterThan(messages.indexOf('Field 1: use as a filter?'));
     expect(answers).toHaveLength(0);
   });
 
   test('preserves existing dropdown options and the selection type on empty answers', async () => {
-    const existing: MetaConfig = { ...DEFAULT_META_CONFIG, fields: [{ key: 'place', name: 'Place', type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] }], sorting: [] };
+    const existing: MetaConfig = {
+      ...DEFAULT_META_CONFIG,
+      fields: [{ key: 'place', name: { de: 'Ort', en: 'Place' }, type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] }],
+      sorting: []
+    };
     jest.mocked(access).mockResolvedValue(undefined);
     jest.mocked(loadConfig).mockResolvedValue(existing);
-    answers = [true, ...Array(13).fill(undefined)];
+    answers = [true, ...Array(14).fill(undefined)];
     await initializeMetaConfig();
     expect(saveConfig).toHaveBeenCalledWith(existing);
     expect(answers).toHaveLength(0);
   });
 
   test.each([{ options: [0] }, { options: [2, 'Berlin', ' Berlin '] }, { options: [1, '   '] }])('rejects empty or duplicate options without saving (%j)', async ({ options }) => {
-    answers = [false, true, 1, 'place', 'Place', 'select', false, true, false, ...options];
+    answers = [false, true, 1, 'place', 'Ort', 'Place', 'select', false, true, false, ...options];
     await expect(initializeMetaConfig()).rejects.toMatchObject({ name: 'ZodError' });
     expect(saveConfig).not.toHaveBeenCalled();
   });
 
   test.each([true, false, undefined])('configures a field filter independently of its details visibility (%s)', async (useAsFilter) => {
-    answers = [false, true, 1, 'tags', 'Tags', 'text[]', false, false, useAsFilter, 'no-more'];
+    answers = [false, true, 1, 'tags', 'Schlagwörter', 'Tags', 'text[]', false, false, useAsFilter, 'no-more'];
     await initializeMetaConfig();
     expect(jest.mocked(saveConfig).mock.calls[0][0].fields[0]).toMatchObject({ showInDetails: false, useAsFilter: useAsFilter ?? false });
     expect(questions.find((question) => question.message === 'Field 1: use as a filter?')).toMatchObject({ initial: false });
@@ -113,7 +122,7 @@ describe('metadata configuration CLI', () => {
   test('prefills an existing configuration after confirmation and preserves field flags and sort directions', async () => {
     const existing: MetaConfig = {
       recorded: { withTime: true, useAsFilter: false },
-      fields: [{ key: 'tags', name: 'Tags', type: 'text', multiple: true, required: true, showInDetails: false, useAsFilter: true }],
+      fields: [{ key: 'tags', name: { de: 'Schlagwörter', en: 'Tags' }, type: 'text', multiple: true, required: true, showInDetails: false, useAsFilter: true }],
       sorting: [
         { source: 'meta', key: 'tags', direction: 'desc' },
         { source: 'title', direction: 'asc' }
@@ -121,7 +130,7 @@ describe('metadata configuration CLI', () => {
     };
     jest.mocked(access).mockResolvedValue(undefined);
     jest.mocked(loadConfig).mockResolvedValue(existing);
-    answers = [true, ...Array(14).fill(undefined)];
+    answers = [true, ...Array(15).fill(undefined)];
     await initializeMetaConfig();
     expect(questions[0]).toMatchObject({ type: 'confirm', initial: false });
     expect(jest.mocked(prompts).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadConfig).mock.invocationCallOrder[0]);
@@ -142,7 +151,7 @@ describe('metadata configuration CLI', () => {
     jest.mocked(access).mockResolvedValue(undefined);
     jest.mocked(loadConfig).mockResolvedValue({
       ...DEFAULT_META_CONFIG,
-      fields: [{ key: 'removed', name: 'Removed', type: 'text', multiple: false, required: false, showInDetails: true, useAsFilter: true }],
+      fields: [{ key: 'removed', name: { de: 'Entfernt', en: 'Removed' }, type: 'text', multiple: false, required: false, showInDetails: true, useAsFilter: true }],
       sorting: [
         { source: 'meta', key: 'removed', direction: 'desc' },
         { source: 'title', direction: 'asc' }
@@ -160,8 +169,9 @@ describe('metadata configuration CLI', () => {
     [false, true, 1, 'constructor'],
     [false, true, 1, 'has spaces'],
     [false, true, 1, 'valid', ' '],
-    [false, true, 1, 'valid', 'Name', 'boolean[]'],
-    [false, true, 2, 'same', 'Same', 'text', false, true, false, 'same'],
+    [false, true, 1, 'valid', 'Name', ' '],
+    [false, true, 1, 'valid', 'Name', 'Name', 'boolean[]'],
+    [false, true, 2, 'same', 'Gleich', 'Same', 'text', false, true, false, 'same'],
     [false, true, 0, 'meta:unknown'],
     [false, true, 0, 'title', 'sideways'],
     [false, true, 0, 'title', 'asc', 'title']
@@ -182,7 +192,7 @@ describe('metadata configuration CLI', () => {
       return implementation(question, options);
     });
 
-    answers = [false, true, 1, 'field', 'Name', 'text', false, true, false, 'recorded', 'desc', 'no-more'];
+    answers = [false, true, 1, 'field', 'Name', 'Name', 'text', false, true, false, 'recorded', 'desc', 'no-more'];
     await expect(initializeMetaConfig()).rejects.toThrow('cancelled');
     expect(saveConfig).not.toHaveBeenCalled();
   });

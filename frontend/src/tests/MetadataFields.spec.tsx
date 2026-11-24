@@ -10,7 +10,7 @@ import { config, video } from './fixtures';
 
 const field: MetaField = {
   key: 'place',
-  name: 'Place',
+  name: { de: 'Ort', en: 'Place' },
   type: 'text',
   multiple: false,
   required: false,
@@ -23,7 +23,7 @@ test('single dropdown uses configured text options and permits clearing optional
   const actor = userEvent.setup(),
     onChange = vi.fn();
   render(<MetadataFields fields={[field]} value={{ place: 'Berlin' }} onChange={onChange} />);
-  const select = screen.getByRole('combobox', { name: 'Place' });
+  const select = screen.getByRole('combobox', { name: 'Ort' });
   expect(select).toHaveValue('Berlin');
   await actor.selectOptions(select, 'Paris');
   expect(onChange).toHaveBeenLastCalledWith({ place: 'Paris' });
@@ -58,7 +58,7 @@ test.each(['de', 'en'])('multiple dropdown selects and removes values without fr
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.queryByText('Ein Wert pro Zeile.')).not.toBeInTheDocument();
   await actor.click(screen.getByText('Berlin', { selector: 'summary' }));
-  const group = screen.getByRole('group', { name: 'Place' });
+  const group = screen.getByRole('group', { name: language === 'de' ? 'Ort' : 'Place' });
   await actor.click(within(group).getByRole('checkbox', { name: 'Paris' }));
   expect(onChange).toHaveBeenLastCalledWith({ place: ['Berlin', 'Paris'] });
   await actor.click(within(group).getByRole('checkbox', { name: 'Berlin' }));

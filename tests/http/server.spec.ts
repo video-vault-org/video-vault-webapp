@@ -133,9 +133,9 @@ describe('startServer', () => {
       ...DEFAULT_META_CONFIG,
       recorded: { withTime: true, useAsFilter: false },
       fields: [
-        { key: 'year', name: 'Year', type: 'number', multiple: false, required: true, showInDetails: true, useAsFilter: true },
-        { key: 'place', name: 'Place', type: 'text', multiple: false, required: false, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] },
-        { key: 'tags', name: 'Tags', type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Family', 'Friends'] }
+        { key: 'year', name: { de: 'Jahr', en: 'Year' }, type: 'number', multiple: false, required: true, showInDetails: true, useAsFilter: true },
+        { key: 'place', name: { de: 'Ort', en: 'Place' }, type: 'text', multiple: false, required: false, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] },
+        { key: 'tags', name: { de: 'Schlagwörter', en: 'Tags' }, type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Family', 'Friends'] }
       ],
       sorting: [{ source: 'meta', key: 'year', direction: 'desc' }]
     };

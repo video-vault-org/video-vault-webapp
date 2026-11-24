@@ -31,7 +31,9 @@ const readFields = async function (previous: MetaField[]): Promise<MetaField[]> 
       { type: 'text', name: 'value', message: `Field ${index + 1}: key`, initial: existing?.key },
       fieldKeySchema.refine((value) => !fields.some((field) => field.key === value), 'Metadata keys must be unique')
     );
-    const name = await ask({ type: 'text', name: 'value', message: `Field ${index + 1}: display name`, initial: existing?.name ?? key }, fieldSchema.shape.name);
+    const de = await ask({ type: 'text', name: 'value', message: `Field ${index + 1}: German display name`, initial: existing?.name.de ?? key }, fieldSchema.shape.name.shape.de);
+    const en = await ask({ type: 'text', name: 'value', message: `Field ${index + 1}: English display name`, initial: existing?.name.en ?? key }, fieldSchema.shape.name.shape.en);
+    const name = { de, en };
     const initialType = existing ? `${existing.options ? 'select' : existing.type}${existing.multiple ? '[]' : ''}` : 'text';
     const choice = await ask(
       { type: 'select', name: 'value', message: `Field ${index + 1}: type`, initial: typeChoices.findIndex((item) => item.value === initialType), choices: typeChoices },
@@ -69,7 +71,7 @@ const readSorting = async function (fields: MetaField[], previous: MetaSort[]): 
   const remaining: { title: string; value: string; sort: MetaSort }[] = [
     { title: 'Title', value: 'title', sort: { source: 'title', direction: 'asc' } },
     { title: 'Recorded', value: 'recorded', sort: { source: 'recorded', direction: 'desc' } },
-    ...fields.map((field) => ({ title: `${field.name} (${field.key})`, value: `meta:${field.key}`, sort: { source: 'meta' as const, key: field.key, direction: 'asc' as const } }))
+    ...fields.map((field) => ({ title: `${field.name.en} (${field.key})`, value: `meta:${field.key}`, sort: { source: 'meta' as const, key: field.key, direction: 'asc' as const } }))
   ];
   const prior = previous.filter((sort) => remaining.some((item) => item.value === sortId(sort)));
   const sorting: MetaSort[] = [];
@@ -112,7 +114,7 @@ const readSorting = async function (fields: MetaField[], previous: MetaSort[]): 
 /**
  * Configures the future frontend's recording-date presentation/filter, metadata fields and ordered sorting rules.
  * Existing files require confirmation before any settings are loaded or prompted. Empty answers retain defaults.
- * Each field has a stable key, a display name, a scalar type, multiplicity and required/details/filter flags.
+ * Each field has a stable key, German/English display names, a scalar type, multiplicity and required/details/filter flags.
  * Sort fields are offered once, in priority order, with an individual direction; "No more" ends selection.
  * Dropdown text fields prompt for their options after the other field attributes. Other multiple values remain free arrays.
  * @throws If cancelled, invalid, unreadable or saving fails. Nothing is written until all answers are valid.

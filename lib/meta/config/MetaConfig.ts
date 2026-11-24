@@ -11,7 +11,7 @@ const fieldTypes = ['text', 'number', 'boolean', 'date', 'datetime'] as const;
 const fieldSchema = z
   .object({
     key: fieldKeySchema,
-    name: z.string().trim().min(1).max(100),
+    name: z.object({ de: z.string().trim().min(1).max(100), en: z.string().trim().min(1).max(100) }).strict(),
     type: z.enum(fieldTypes),
     multiple: z.boolean(),
     required: z.boolean(),

@@ -101,13 +101,23 @@ const validate = function (value: unknown): Bootstrap {
     )
       throw new Error('configuration');
     if (
+      !field.name ||
+      typeof field.name !== 'object' ||
+      Array.isArray(field.name) ||
+      Object.keys(field.name).length !== 2 ||
+      ![field.name.de, field.name.en].every(
+        (name) => name.trim().length > 0 && name.length <= 100
+      )
+    )
+      throw new Error('configuration');
+    if (
       field.options !== undefined &&
       (field.type !== 'text' ||
         !Array.isArray(field.options) ||
         field.options.length < 1 ||
         field.options.length > 100 ||
         field.options.some(
-          (option) => !option.trim() || option !== option.trim() || option.length > 100
+          (option) => typeof option !== 'string' || !option.trim() || option !== option.trim() || option.length > 100
         ) ||
         new Set(field.options).size !== field.options.length)
     )
