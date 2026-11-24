@@ -4,6 +4,8 @@ services:
     build: .
     init: true
     restart: unless-stopped
+    environment:
+      VIDEO_VAULT_TRUST_PROXY: ${VIDEO_VAULT_TRUST_PROXY:-}
     ports:
       - '127.0.0.1:${VIDEO_VAULT_HTTP_PORT:-3210}:3210'
     volumes:

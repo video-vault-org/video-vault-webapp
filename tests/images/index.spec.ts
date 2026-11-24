@@ -6,6 +6,7 @@ import { loadConfig, saveConfig, listImageSets, prepareFrontend } from '@/images
 
 const names = ['logo.png', 'icon-32.png', 'icon-192.png', 'icon-512.png'];
 const template = 'const cacheName="vault-shell-build-1-__VIDEOVAULT_IMAGES_VERSION__";';
+const page = '<title>VideoVault</title><meta property="og:title" content="VideoVault" /><meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" />';
 
 describe('frontend images', () => {
   let directory: string;
@@ -19,6 +20,7 @@ describe('frontend images', () => {
     await mkdir('public');
     for (const name of names) await writeFile(`img/default.${name}`, `original ${name}`);
     await writeFile('public/.sw.template.js', template);
+    await writeFile('public/index.html', page);
     await writeFile('public/sw.js', 'previous worker');
   });
 
@@ -134,6 +136,7 @@ describe('frontend images', () => {
   test('preserves unrelated public files and supports a custom static directory', async () => {
     await mkdir('custom');
     await writeFile('custom/.sw.template.js', template);
+    await writeFile('custom/index.html', page);
     await writeFile('custom/other.txt', 'keep');
     await prepareFrontend({ staticDirectory: 'custom', imageDirectory: 'img', prefix: 'default' });
     expect(await readFile('custom/other.txt', 'utf8')).toBe('keep');
@@ -163,5 +166,19 @@ describe('frontend images', () => {
     await expect(prepareFrontend({ prefix: 'default' })).rejects.toBe(error);
     jest.spyOn(fs, 'writeFile').mockRejectedValueOnce(error);
     await expect(prepareFrontend({ prefix: 'default' })).rejects.toBe(error);
+  });
+
+  test('writes escaped titles into the static HTML and OG metadata and refreshes the offline cache when the title changes', async () => {
+    const title = 'Family & <Friends> "$&"';
+    const first = await prepareFrontend({ title });
+    const html = await readFile('public/index.html', 'utf8');
+    expect(html).toContain('<title>Family &amp; &lt;Friends&gt; &quot;$&amp;&quot;</title>');
+    expect(html).toContain('<meta property="og:title" content="Family &amp; &lt;Friends&gt; &quot;$&amp;&quot;" />');
+    expect(html).toContain('content="__VIDEOVAULT_OG_IMAGE_URL__"');
+    expect(await prepareFrontend({ title })).toBe(first);
+    const second = await prepareFrontend({ title: 'Another archive' });
+    expect(second).not.toBe(first);
+    expect(await readFile('public/index.html', 'utf8')).toContain('<title>Another archive</title>');
+    expect(await readFile('public/sw.js', 'utf8')).toContain(second);
   });
 });

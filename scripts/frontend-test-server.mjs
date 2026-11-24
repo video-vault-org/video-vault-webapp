@@ -108,7 +108,7 @@ await cp(join(root, 'img'), imageDirectory, { recursive: true });
 for (const name of ['logo.png', 'icon-32.png', 'icon-192.png', 'icon-512.png']) {
   await cp(join(imageDirectory, `default.${name === 'logo.png' ? 'icon-32.png' : name}`), join(imageDirectory, `fm.${name}`));
 }
-await prepareFrontend({ staticDirectory, imageDirectory, prefix: 'default' });
+await prepareFrontend({ staticDirectory, imageDirectory, prefix: 'default', title: 'Our private archive' });
 const auth = new AuthService(db, { keyDirectory: join(directory, 'jwtkeys') });
 await auth.initialize();
 const app = createApp(
@@ -133,7 +133,7 @@ const app = createApp(
 app.post('/__test/images/:prefix', async (request) => {
   const { prefix } = request.params;
   if (!['default', 'fm'].includes(prefix)) throw new Error('Unknown test image set');
-  return { version: await prepareFrontend({ staticDirectory, imageDirectory, prefix }) };
+  return { version: await prepareFrontend({ staticDirectory, imageDirectory, prefix, title: 'Our private archive' }) };
 });
 await app.listen({ host: '127.0.0.1', port: Number(process.env.FRONTEND_TEST_PORT ?? 4217) });
 for (const signal of ['SIGINT', 'SIGTERM'])

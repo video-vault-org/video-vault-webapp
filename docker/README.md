@@ -16,6 +16,8 @@ videos.example.com {
 
 Configure the proxy upload limits and timeouts for the combined video/thumbnail size, and allow HTTP Range requests for playback and downloads.
 
+For absolute Open Graph image URLs, the proxy must overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` with the public host and protocol. Set `VIDEO_VAULT_TRUST_PROXY` in the Compose environment or `.env` to the proxy's source IP/CIDR as seen by the application container; Compose passes this setting into the container. For a host-installed proxy using the published port this is typically the Docker bridge gateway, not `127.0.0.1`. Trust only the proxy address or a controlled proxy network. Without this setting, forwarded headers are ignored and the backend uses the direct HTTP request's host and protocol.
+
 If the proxy is another container, attach it to the same Docker network and forward to `app:3210`. The loopback host port is not reachable as `localhost` from a separate container. You can remove the published port entirely when using only a shared proxy network. Browsers need HTTPS for network access; plain HTTP works on localhost/loopback.
 
 All instance data lives in the `video-vault-data` volume mounted at `/data`: configuration, `.salt`, JWT signing keys, SQLite database, local storage, temporary uploads and custom branding sets under `img/`. Default branding is refreshed from the image at each invocation; custom prefixes are retained. Static application files live separately in `/opt/video-vault/public` and are writable by the application for branding preparation. Do not mount an empty directory over that static path.

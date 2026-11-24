@@ -66,7 +66,9 @@ VIDEO_VAULT_PORT=4000 npm start
 
 The variable takes precedence over the prompt; the chosen port is not saved. `HOST` defaults to `0.0.0.0`, and `STATIC_DIRECTORY` defaults to `./public`. Use HTTPS for access over a network; local HTTP on localhost/loopback is supported for the service worker and browser cryptography. API documentation is available at `/docs/`.
 
-Keep database, stored files, `conf/`, `.salt` and `jwtkeys/` with the installation. Missing JWT signing keys are generated at server start. Startup copies the selected images into the static directory and updates the service worker's image version, so that directory must be writable. Select another complete image set and restart to change branding; a frontend rebuild is not required for image changes.
+Keep database, stored files, `conf/`, `.salt` and `jwtkeys/` with the installation. Missing JWT signing keys are generated at server start. Startup writes the configured title into the static HTML, copies the selected images and updates the service worker's branding version, so the static directory must be writable. Restart to apply title or image changes; a frontend rebuild is not required.
+
+The backend serves `/` and `/index.html` with Open Graph metadata: the configured title, an explicitly empty description and the selected logo. The absolute logo URL is derived from the request. Behind an HTTPS reverse proxy, set `VIDEO_VAULT_TRUST_PROXY` to its IP address or trusted CIDR range (comma-separated for multiple entries), and configure it to overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` with the original public host and protocol. Forwarded headers are ignored by default. For example, a proxy connecting directly over loopback can use `VIDEO_VAULT_TRUST_PROXY=127.0.0.1,::1`.
 
 After source changes, rebuild with `npm run build` and restart the server. Stop with Ctrl+C or SIGTERM for a graceful shutdown.
 

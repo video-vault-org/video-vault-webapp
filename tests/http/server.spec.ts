@@ -77,7 +77,7 @@ describe('startServer', () => {
     expect(ensureInstanceSalt).toHaveBeenCalledWith();
     expect(ensureInstanceSalt).toHaveBeenCalledTimes(1);
     expect(loadMetaConfig).toHaveBeenCalledTimes(1);
-    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory });
+    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory, title: 'VideoVault' });
     expect(jest.mocked(prepareFrontend).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
     expect(jest.mocked(ensureInstanceSalt).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
     expect(loadDb).toHaveBeenCalledTimes(1);
@@ -125,6 +125,7 @@ describe('startServer', () => {
     }
     expect(loadAppConfig).toHaveBeenCalledTimes(1);
     expect(loadDb).toHaveBeenCalledWith({ title: 'Meine Videos' });
+    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory, title: 'Meine Videos' });
   });
 
   test('loads metadata settings once at startup and reuses them for bootstrap requests', async () => {
@@ -142,7 +143,7 @@ describe('startServer', () => {
         .expect(200, { version: 1, instanceSalt: 'ab'.repeat(32), app: { title: 'VideoVault' }, meta });
     }
     expect(loadMetaConfig).toHaveBeenCalledTimes(1);
-    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory });
+    expect(prepareFrontend).toHaveBeenCalledWith({ staticDirectory: directory, title: 'VideoVault' });
     expect(jest.mocked(prepareFrontend).mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(loadDb).mock.invocationCallOrder[0]);
   });
 

@@ -1,6 +1,7 @@
-import Fastify, { FastifyInstance, FastifyServerOptions } from 'fastify';
+import Fastify, { FastifyInstance, FastifyServerOptions, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import Ajv, { AnySchema } from 'ajv';
 import addFormats from 'ajv-formats';
 import multipart from '@fastify/multipart';
@@ -22,10 +23,11 @@ import { registerDocumentation } from './documentation';
 import { AppConfig, appConfigSchema, DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 import { MetaConfig, DEFAULT_META_CONFIG, metaConfigSchema } from '@/meta/config/MetaConfig';
 import { metaConfigResponse } from './metaSchema';
+import { escapeHtml, setPageTitle } from '@/util/html';
 
-/** Creates the native Fastify server and its Pino logger before adapter initialization, so startup errors can be logged. */
-const createHttpServer = function ({ logger = loggingOptions() }: { logger?: FastifyServerOptions['logger'] } = {}): FastifyInstance {
-  const app = Fastify({ logger, genReqId: () => randomUUID(), logController: new HttpLogController(), bodyLimit: 1024 * 1024, routerOptions: { maxParamLength: 4096, ignoreTrailingSlash: true } });
+/** Creates Fastify/Pino before adapter initialization. Forwarded headers are trusted only for explicitly configured proxy IPs/CIDRs. */
+const createHttpServer = function ({ logger = loggingOptions(), trustProxy = process.env.VIDEO_VAULT_TRUST_PROXY || false }: { logger?: FastifyServerOptions['logger']; trustProxy?: FastifyServerOptions['trustProxy'] } = {}): FastifyInstance {
+  const app = Fastify({ logger, trustProxy, genReqId: () => randomUUID(), logController: new HttpLogController(), bodyLimit: 1024 * 1024, routerOptions: { maxParamLength: 4096, ignoreTrailingSlash: true } });
   const strict = addFormats(new Ajv({ removeAdditional: false, coerceTypes: false, useDefaults: true }));
   const query = addFormats(new Ajv({ removeAdditional: false, coerceTypes: true, useDefaults: true }));
 
@@ -123,11 +125,35 @@ const createApp = function (
 
   app.register(async (router) => commentRoutes(router, comments, videos, auth), { prefix: '/api' });
 
+  app.register(async (router) => {
+    const html = setPageTitle(await readFile(resolve(staticDirectory, 'index.html'), 'utf8'), title);
+
+    /** GET/HEAD / and /index.html — Public. Uses the static HTML with a request-specific, absolute OG image URL. */
+    const index = async function (request: FastifyRequest, reply: FastifyReply) {
+      let imageUrl: string;
+      try {
+        if (!['http', 'https'].includes(request.protocol) || !request.host || /[\s/\\?#@]/.test(request.host)) throw new Error('Invalid origin');
+        imageUrl = new URL('/logo.png', `${request.protocol}://${request.host}`).href;
+      } catch {
+        throw new HttpError(400, 'Invalid request origin');
+      }
+      return reply
+        .type('text/html; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .send(html.replace('content="__VIDEOVAULT_OG_IMAGE_URL__"', () => `content="${escapeHtml(imageUrl)}"`));
+    };
+
+    router.get('/', { schema: { hide: true } }, index);
+
+    router.get('/index.html', { schema: { hide: true } }, index);
+  });
+
   /** GET/HEAD for non-API paths — Public. Serves only public files; dotfiles and directory redirects are disabled. */
   app.register(staticFiles, {
     root: resolve(staticDirectory),
     dotfiles: 'deny',
     redirect: false,
+    index: false,
 
     allowedPath: (_path, _root, request) =>
       !/^\/api(?:\/|\?|$)/.test(request.url) &&
