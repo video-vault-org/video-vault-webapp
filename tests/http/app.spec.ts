@@ -735,7 +735,8 @@ describe('Fastify backend', () => {
   test('renders public OG metadata per request without changing the static HTML or leaking video metadata', async () => {
     await app.close();
     // noinspection HtmlRequiredLangAttribute
-    const html = '<html><head><title>VideoVault</title><meta name="description" content="Our Videos - Protected" /><meta property="og:title" content="VideoVault" /><meta property="og:description" content="Our Videos - Protected" /><meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" /></head><body>app</body></html>';
+    const html =
+      '<html><head><title>VideoVault</title><meta name="description" content="Our Videos - Protected" /><meta property="og:title" content="VideoVault" /><meta property="og:description" content="Our Videos - Protected" /><meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" /></head><body>app</body></html>';
     await writeFile(join(staticDirectory, 'index.html'), html);
     app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), appConfig: { title: 'Family & "Friends" <3' }, staticDirectory, temporaryDirectory, logger: false });
     for (const url of ['/', '/index.html']) {

@@ -15,7 +15,8 @@ const metaConfigResponse = object({
       multiple: Type.Boolean(),
       required: Type.Boolean(),
       showInDetails: Type.Boolean(),
-      useAsFilter: Type.Boolean()
+      useAsFilter: Type.Boolean(),
+      options: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 100, uniqueItems: true }))
     }),
     {
       maxItems: 100

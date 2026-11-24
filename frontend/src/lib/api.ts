@@ -100,6 +100,18 @@ const validate = function (value: unknown): Bootstrap {
       (field.type === 'boolean' && field.multiple)
     )
       throw new Error('configuration');
+    if (
+      field.options !== undefined &&
+      (field.type !== 'text' ||
+        !Array.isArray(field.options) ||
+        field.options.length < 1 ||
+        field.options.length > 100 ||
+        field.options.some(
+          (option) => !option.trim() || option !== option.trim() || option.length > 100
+        ) ||
+        new Set(field.options).size !== field.options.length)
+    )
+      throw new Error('configuration');
     keys.add(field.key);
   }
   const sorting = new Set<string>();

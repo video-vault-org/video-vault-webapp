@@ -77,6 +77,31 @@ describe('metadata configuration CLI', () => {
     expect(answers).toHaveLength(0);
   });
 
+  test.each(['select', 'select[]'])('collects %s options after the other field attributes', async (choice) => {
+    answers = [false, true, 1, 'place', 'Place', choice, true, true, true, 2, 'Berlin', 'Paris', 'no-more'];
+    await initializeMetaConfig();
+    expect(jest.mocked(saveConfig).mock.calls[0][0].fields).toEqual([{ key: 'place', name: 'Place', type: 'text', multiple: choice.endsWith('[]'), required: true, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] }]);
+    const messages = questions.map((question) => question.message);
+    expect(messages.indexOf('Field 1: number of options')).toBeGreaterThan(messages.indexOf('Field 1: use as a filter?'));
+    expect(answers).toHaveLength(0);
+  });
+
+  test('preserves existing dropdown options and the selection type on empty answers', async () => {
+    const existing: MetaConfig = { ...DEFAULT_META_CONFIG, fields: [{ key: 'place', name: 'Place', type: 'text', multiple: true, required: false, showInDetails: true, useAsFilter: true, options: ['Berlin', 'Paris'] }], sorting: [] };
+    jest.mocked(access).mockResolvedValue(undefined);
+    jest.mocked(loadConfig).mockResolvedValue(existing);
+    answers = [true, ...Array(13).fill(undefined)];
+    await initializeMetaConfig();
+    expect(saveConfig).toHaveBeenCalledWith(existing);
+    expect(answers).toHaveLength(0);
+  });
+
+  test.each([{ options: [0] }, { options: [2, 'Berlin', ' Berlin '] }, { options: [1, '   '] }])('rejects empty or duplicate options without saving (%j)', async ({ options }) => {
+    answers = [false, true, 1, 'place', 'Place', 'select', false, true, false, ...options];
+    await expect(initializeMetaConfig()).rejects.toMatchObject({ name: 'ZodError' });
+    expect(saveConfig).not.toHaveBeenCalled();
+  });
+
   test.each([true, false, undefined])('configures a field filter independently of its details visibility (%s)', async (useAsFilter) => {
     answers = [false, true, 1, 'tags', 'Tags', 'text[]', false, false, useAsFilter, 'no-more'];
     await initializeMetaConfig();

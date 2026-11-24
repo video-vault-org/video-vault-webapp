@@ -147,17 +147,26 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
   await dialog.getByLabel('Beschreibung', { exact: true }).fill('Encrypted browser description');
   await dialog.getByLabel('Aufgezeichnet', { exact: true }).fill('2026-11-01');
   await dialog.getByLabel('Personen *', { exact: true }).fill('Ada\nBob');
+  await dialog.getByRole('combobox', { name: 'Category' }).selectOption('Travel');
+  await dialog.locator('summary[aria-label="Tags"]').click();
+  await dialog.getByRole('checkbox', { name: 'Holiday' }).check();
+  await dialog.getByRole('checkbox', { name: 'Friends' }).check();
   await dialog.getByLabel('Videodatei', { exact: true }).setInputFiles('e2e/fixtures/sample.mp4');
   await dialog.getByLabel('Thumbnail', { exact: true }).setInputFiles('../logo.png');
   await expect(dialog.getByText('Geschätzte Browser-Unterstützung:', { exact: false })).toBeVisible();
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Browser upload', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Category' }).selectOption('Travel');
+  await expect(page.locator('.video-card')).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Category' }).selectOption('');
   const card = page
     .locator('.video-card')
     .filter({ has: page.getByRole('heading', { name: 'Browser upload', exact: true }) });
   await card.getByRole('button', { name: 'Mehr Details', exact: true }).click();
   await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Video bearbeiten', exact: true });
+  await expect(dialog.getByRole('combobox', { name: 'Category' })).toHaveValue('Travel');
+  await expect(dialog.locator('summary', { hasText: 'Holiday, Friends' })).toBeVisible();
   await dialog.getByLabel('Titel', { exact: true }).fill('Browser upload edited');
   await dialog.getByLabel('Beschreibung', { exact: true }).fill('Updated encrypted description');
   await dialog.getByLabel('Thumbnail ersetzen (optional)', { exact: true }).setInputFiles('../logo.png');

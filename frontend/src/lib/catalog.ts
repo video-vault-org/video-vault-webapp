@@ -69,13 +69,15 @@ const filterVideos = function (
             (x) =>
               x !== undefined &&
               x !== null &&
-              (field.type === 'text'
-                ? String(x ?? '')
-                    .toLocaleLowerCase()
-                    .includes(value.toLocaleLowerCase())
-                : field.type === 'boolean'
-                  ? String(x) === value
-                  : compare(x, value, field.type) === 0)
+              (field.options
+                ? x === value
+                : field.type === 'text'
+                  ? String(x ?? '')
+                      .toLocaleLowerCase()
+                      .includes(value.toLocaleLowerCase())
+                  : field.type === 'boolean'
+                    ? String(x) === value
+                    : compare(x, value, field.type) === 0)
           )
         )
           return false;

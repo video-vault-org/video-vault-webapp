@@ -16,7 +16,7 @@ const MetadataFields = function ({
       {fields.map((field) => (
         <Field key={field.key} label={`${field.name}${field.required ? ' *' : ''}`}>
           <MetaInput field={field} value={value[field.key]} onChange={(v) => onChange({ ...value, [field.key]: v })} />
-          {field.multiple && <small>{t('Ein Wert pro Zeile.', 'One value per line.')}</small>}
+          {field.multiple && !field.options && <small>{t('Ein Wert pro Zeile.', 'One value per line.')}</small>}
         </Field>
       ))}
     </>
@@ -35,6 +35,51 @@ const MetaInput = function ({
   onChange: (value: unknown) => void;
 }) {
   const { t } = useLanguage();
+  if (field.options) {
+    if (field.multiple) {
+      const selected = Array.isArray(value) ? value : [];
+      return (
+        <details className="metadata-select">
+          <summary id={id} aria-label={`${field.name}${field.required ? ' *' : ''}`}>
+            {selected.length ? selected.join(', ') : t('Bitte auswählen', 'Please select')}
+          </summary>
+          <div role="group" aria-label={field.name}>
+            {field.options.map((option) => (
+              <label key={option}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option)}
+                  onChange={(event) =>
+                    onChange(
+                      field.options!.filter((item) =>
+                        item === option ? event.target.checked : selected.includes(item)
+                      )
+                    )
+                  }
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        </details>
+      );
+    }
+    return (
+      <select
+        id={id}
+        required={field.required}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">{t('Bitte auswählen', 'Please select')}</option>
+        {field.options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
   if (field.multiple)
     return (
       <textarea
@@ -109,6 +154,17 @@ const validateMetadata = function (fields: MetaField[], meta: Record<string, unk
     if (blank) {
       if (f.required) throw new Error('metadata');
       delete result[f.key];
+      continue;
+    }
+    if (f.options) {
+      const selected = f.multiple ? value : [value];
+      if (
+        !Array.isArray(selected) ||
+        !selected.every((item) => typeof item === 'string' && f.options!.includes(item)) ||
+        new Set(selected).size !== selected.length
+      )
+        throw new Error('metadata');
+      result[f.key] = value;
       continue;
     }
     if (f.multiple) {

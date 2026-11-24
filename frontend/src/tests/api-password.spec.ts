@@ -14,6 +14,18 @@ test('uses the cached bootstrap and refreshes it only on request', async () => {
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
+test('loads dropdown options from bootstrap and preserves single/multiple text types', async () => {
+  const dropdowns = { ...config, meta: { ...config.meta, fields: [false, true].map((multiple) => ({ ...config.meta.fields[0], key: multiple ? 'places' : 'place', multiple, options: ['Berlin', 'Paris'] })), sorting: [] } };
+  mockFetch().mockResolvedValue(new Response(JSON.stringify(dropdowns)));
+  expect(await bootstrap(true)).toEqual(dropdowns);
+});
+
+test.each([{ options: [] }, { options: ['Paris', 'Paris'] }, { options: [' '] }, { options: [1] }, { options: [' Paris '] }])('rejects malformed bootstrap dropdown options %j', async ({ options }) => {
+  const invalid = { ...config, meta: { ...config.meta, fields: [{ ...config.meta.fields[0], options }] } };
+  mockFetch().mockResolvedValue(new Response(JSON.stringify(invalid)));
+  await expect(bootstrap(true)).rejects.toThrow('configuration');
+});
+
 test('uses Bearer tokens, never caches API responses and clears invalid tokens', async () => {
   localStorage.setItem(TOKEN, 'token');
   const fetch = mockFetch().mockResolvedValue(new Response(null, { status: 401 })),

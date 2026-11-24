@@ -8,6 +8,7 @@ interface MetaField {
   required: boolean;
   showInDetails: boolean;
   useAsFilter: boolean;
+  options?: string[];
 }
 
 interface Bootstrap {

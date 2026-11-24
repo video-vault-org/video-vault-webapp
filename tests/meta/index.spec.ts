@@ -88,6 +88,12 @@ describe('metadata configuration validation', () => {
     expect(metaConfigSchema.parse({ ...config, fields: [{ ...field, type }] }).fields[0]).toEqual({ ...field, type });
   });
 
+  test.each([false, true])('persists dropdown options for text fields with multiple=%s', async (multiple) => {
+    const dropdown = { ...config, fields: [{ ...field, multiple, options: ['Berlin', 'Paris'] }] };
+    await saveConfig(dropdown);
+    expect(await loadConfig()).toEqual(dropdown);
+  });
+
   test('distinguishes metadata named title/recorded from the built-in sort fields', () => {
     const fields = [
       { ...field, key: 'title' },
@@ -108,7 +114,10 @@ describe('metadata configuration validation', () => {
     { ...config, fields: [{ ...field, required: 'yes' }] },
     { ...config, fields: [{ ...field, useAsFilter: 'yes' }] },
     { ...config, fields: [{ ...field, useAsFilter: undefined }] },
-    { ...config, fields: [{ ...field, options: ['not-supported'] }] },
+    { ...config, fields: [{ ...field, options: [] }] },
+    { ...config, fields: [{ ...field, options: ['Berlin', ' Berlin '] }] },
+    { ...config, fields: [{ ...field, options: ['  '] }] },
+    { ...config, fields: [{ ...field, type: 'number', options: ['1'] }] },
     { ...config, recorded: { withTime: false } },
     { ...config, sorting: [{ source: 'title', direction: 'sideways' }] },
     { ...config, sorting: [{ source: 'meta', key: 'unknown', direction: 'asc' }] },

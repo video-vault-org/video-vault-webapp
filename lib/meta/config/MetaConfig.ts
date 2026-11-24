@@ -16,10 +16,13 @@ const fieldSchema = z
     multiple: z.boolean(),
     required: z.boolean(),
     showInDetails: z.boolean(),
-    useAsFilter: z.boolean()
+    useAsFilter: z.boolean(),
+    options: z.array(z.string().trim().min(1).max(100)).min(1).max(100).optional()
   })
   .strict()
-  .refine((field) => field.type !== 'boolean' || !field.multiple, 'Boolean fields cannot contain multiple values');
+  .refine((field) => field.type !== 'boolean' || !field.multiple, 'Boolean fields cannot contain multiple values')
+  .refine((field) => field.options === undefined || field.type === 'text', 'Only text fields can have dropdown options')
+  .refine((field) => field.options === undefined || new Set(field.options).size === field.options.length, 'Dropdown options must be unique');
 const sortDirectionSchema = z.enum(['asc', 'desc']);
 const sortSchema = z.discriminatedUnion('source', [
   z.object({ source: z.literal('title'), direction: sortDirectionSchema }).strict(),

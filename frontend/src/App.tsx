@@ -329,7 +329,17 @@ const Vault = function ({
             .filter((f) => f.useAsFilter)
             .map((f) => (
               <Field key={f.key} label={f.name}>
-                {f.type === 'boolean' ? (
+                {f.options ? (
+                  <select
+                    value={filters[`meta:${f.key}`] ?? ''}
+                    onChange={(event) => setFilters({ ...filters, [`meta:${f.key}`]: event.target.value })}
+                  >
+                    <option value="">{t('Alle', 'All')}</option>
+                    {f.options.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                ) : f.type === 'boolean' ? (
                   <select
                     value={filters[`meta:${f.key}`] ?? ''}
                     onChange={(e) => setFilters({ ...filters, [`meta:${f.key}`]: e.target.value })}

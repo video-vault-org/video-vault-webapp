@@ -13,7 +13,9 @@ const typeChoices = [
   { title: 'Text (multiple values)', value: 'text[]' },
   { title: 'Number (multiple values)', value: 'number[]' },
   { title: 'Date (multiple values)', value: 'date[]' },
-  { title: 'Date and time (multiple values)', value: 'datetime[]' }
+  { title: 'Date and time (multiple values)', value: 'datetime[]' },
+  { title: 'Text dropdown (single selection)', value: 'select' },
+  { title: 'Text dropdown (multiple selections)', value: 'select[]' }
 ];
 
 const confirm = async function (message: string, initial: boolean): Promise<boolean> {
@@ -30,16 +32,31 @@ const readFields = async function (previous: MetaField[]): Promise<MetaField[]> 
       fieldKeySchema.refine((value) => !fields.some((field) => field.key === value), 'Metadata keys must be unique')
     );
     const name = await ask({ type: 'text', name: 'value', message: `Field ${index + 1}: display name`, initial: existing?.name ?? key }, fieldSchema.shape.name);
-    const initialType = existing ? `${existing.type}${existing.multiple ? '[]' : ''}` : 'text';
+    const initialType = existing ? `${existing.options ? 'select' : existing.type}${existing.multiple ? '[]' : ''}` : 'text';
     const choice = await ask(
       { type: 'select', name: 'value', message: `Field ${index + 1}: type`, initial: typeChoices.findIndex((item) => item.value === initialType), choices: typeChoices },
       z.string().refine((value) => typeChoices.some((item) => item.value === value), 'Unknown metadata type')
     );
-    const type = z.enum(fieldTypes).parse(choice.replace('[]', ''));
+    const dropdown = choice.startsWith('select');
+    const type = z.enum(fieldTypes).parse(dropdown ? 'text' : choice.replace('[]', ''));
     const required = await confirm(`Field ${index + 1}: required?`, existing?.required ?? false);
     const showInDetails = await confirm(`Field ${index + 1}: show in details?`, existing?.showInDetails ?? true);
     const useAsFilter = await confirm(`Field ${index + 1}: use as a filter?`, existing?.useAsFilter ?? false);
-    fields.push({ key, name, type, multiple: choice.endsWith('[]'), required, showInDetails, useAsFilter });
+    const field: MetaField = { key, name, type, multiple: choice.endsWith('[]'), required, showInDetails, useAsFilter };
+    if (dropdown) {
+      const count = await ask({ type: 'number', name: 'value', message: `Field ${index + 1}: number of options`, initial: existing?.options?.length ?? 1 }, z.coerce.number().int().min(1).max(100));
+      const options: string[] = [];
+      for (let option = 0; option < count; option++) {
+        options.push(
+          await ask(
+            { type: 'text', name: 'value', message: `Field ${index + 1}: option ${option + 1}`, initial: existing?.options?.[option] },
+            fieldSchema.shape.options.unwrap().element.refine((value) => !options.includes(value), 'Dropdown options must be unique')
+          )
+        );
+      }
+      field.options = options;
+    }
+    fields.push(field);
   }
   return fields;
 };
@@ -97,7 +114,7 @@ const readSorting = async function (fields: MetaField[], previous: MetaSort[]): 
  * Existing files require confirmation before any settings are loaded or prompted. Empty answers retain defaults.
  * Each field has a stable key, a display name, a scalar type, multiplicity and required/details/filter flags.
  * Sort fields are offered once, in priority order, with an individual direction; "No more" ends selection.
- * Multiple values are free arrays. Their comparison semantics are intentionally deferred to the frontend.
+ * Dropdown text fields prompt for their options after the other field attributes. Other multiple values remain free arrays.
  * @throws If cancelled, invalid, unreadable or saving fails. Nothing is written until all answers are valid.
  */
 const initializeMetaConfig = async function (): Promise<void> {
