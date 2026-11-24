@@ -18,6 +18,7 @@ describe('authenticated media range and offline catalog endpoints', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'vault-media-'));
+    await writeFile(join(directory, 'index.html'), '<!doctype html><title>VideoVault</title>');
     db = new InMemoryDatabaseAdapter();
     const storage = new InMemoryStorageAdapter();
     await writeFile(join(directory, 'seed'), Buffer.from([0, 1, 2, 3, 4]));
