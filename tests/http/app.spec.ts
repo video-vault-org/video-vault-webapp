@@ -736,10 +736,10 @@ describe('Fastify backend', () => {
     await app.close();
     // noinspection HtmlRequiredLangAttribute
     const html =
-      '<html><head><title>VideoVault</title><meta name="description" content="Our Videos - Protected" /><meta property="og:title" content="VideoVault" /><meta property="og:description" content="Our Videos - Protected" /><meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" /></head><body>app</body></html>';
+      '<html><head><title>VideoVault</title><meta name="description" content="Our Videos - Protected" /><meta property="og:title" content="VideoVault" /><meta property="og:description" content="Our Videos - Protected" /><meta property="og:url" content="__VIDEOVAULT_OG_URL__" /><meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" /></head><body>app</body></html>';
     await writeFile(join(staticDirectory, 'index.html'), html);
     app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), appConfig: { title: 'Family & "Friends" <3' }, staticDirectory, temporaryDirectory, logger: false });
-    for (const url of ['/', '/index.html']) {
+    for (const url of ['/', '/index.html', '/index.html?tracking=private-value']) {
       const response = await app.inject({ url, remoteAddress: '192.0.2.1', headers: { host: 'localhost:3210', 'x-forwarded-host': 'untrusted.example', 'x-forwarded-proto': 'https' } });
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/html');
@@ -748,6 +748,9 @@ describe('Fastify backend', () => {
       expect(response.body).toContain('property="og:title" content="Family &amp; &quot;Friends&quot; &lt;3"');
       expect(response.body).toContain('name="description" content="Our Videos - Protected"');
       expect(response.body).toContain('property="og:description" content="Our Videos - Protected"');
+      expect(response.body).toContain('property="og:url" content="http://localhost:3210/"');
+      expect(response.body).not.toContain('private-value');
+      expect(response.body).not.toContain('__VIDEOVAULT_OG_');
       expect(response.body).toContain('property="og:image" content="http://localhost:3210/logo.png"');
       expect(response.body).not.toContain('untrusted.example');
       expect(response.body).not.toContain(video.description);
@@ -756,19 +759,24 @@ describe('Fastify backend', () => {
       expect(head.body).toBe('');
     }
     const other = await app.inject({ url: '/index.html', headers: { host: 'archive.example' } });
+    expect(other.body).toContain('property="og:url" content="http://archive.example/"');
     expect(other.body).toContain('content="http://archive.example/logo.png"');
+    const ipv6 = await app.inject({ url: '/', headers: { host: '[::1]:3210' } });
+    expect(ipv6.body).toContain('property="og:url" content="http://[::1]:3210/"');
     expect(await readFile(join(staticDirectory, 'index.html'), 'utf8')).toBe(html);
   });
 
   test('derives HTTPS OG image URLs only from a trusted proxy and rejects malformed origins', async () => {
     await app.close();
-    await writeFile(join(staticDirectory, 'index.html'), '<meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" />');
+    await writeFile(join(staticDirectory, 'index.html'), '<meta property="og:url" content="__VIDEOVAULT_OG_URL__" /><meta property="og:image" content="__VIDEOVAULT_OG_IMAGE_URL__" />');
     app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), staticDirectory, temporaryDirectory, instance: createHttpServer({ logger: false, trustProxy: '127.0.0.1' }) });
     const headers = { host: 'internal:3210', 'x-forwarded-host': 'videos.example.org', 'x-forwarded-proto': 'https' };
     const trusted = await app.inject({ url: '/', headers, remoteAddress: '127.0.0.1' });
     expect(trusted.statusCode).toBe(200);
+    expect(trusted.body).toContain('property="og:url" content="https://videos.example.org/"');
     expect(trusted.body).toContain('content="https://videos.example.org/logo.png"');
     const untrusted = await app.inject({ url: '/', headers, remoteAddress: '192.0.2.1' });
+    expect(untrusted.body).toContain('property="og:url" content="http://internal:3210/"');
     expect(untrusted.body).toContain('content="http://internal:3210/logo.png"');
     for (const host of ['evil.example/path', 'user@evil.example', 'evil.example?x=1', 'evil.example\\path']) {
       expect((await app.inject({ url: '/', headers: { host } })).statusCode).toBe(400);

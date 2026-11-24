@@ -131,19 +131,19 @@ const createApp = function (
   app.register(async (router) => {
     const html = setPageTitle(await readFile(resolve(staticDirectory, 'index.html'), 'utf8'), title);
 
-    /** GET/HEAD / and /index.html — Public. Uses the static HTML with a request-specific, absolute OG image URL. */
+    /** GET/HEAD / and /index.html — Public. Adds request-specific, absolute OG page/image URLs without query or fragment data. */
     const index = async function (request: FastifyRequest, reply: FastifyReply) {
-      let imageUrl: string;
+      let pageUrl: string;
       try {
         if (!['http', 'https'].includes(request.protocol) || !request.host || /[\s/\\?#@]/.test(request.host)) throw new Error('Invalid origin');
-        imageUrl = new URL('/logo.png', `${request.protocol}://${request.host}`).href;
+        pageUrl = new URL('/', `${request.protocol}://${request.host}`).href;
       } catch {
         throw new HttpError(400, 'Invalid request origin');
       }
       return reply
         .type('text/html; charset=utf-8')
         .header('Cache-Control', 'no-store')
-        .send(html.replace('content="__VIDEOVAULT_OG_IMAGE_URL__"', () => `content="${escapeHtml(imageUrl)}"`));
+        .send(html.replace('content="__VIDEOVAULT_OG_URL__"', () => `content="${escapeHtml(pageUrl)}"`).replace('content="__VIDEOVAULT_OG_IMAGE_URL__"', () => `content="${escapeHtml(new URL('/logo.png', pageUrl).href)}"`));
     };
 
     router.get('/', { schema: { hide: true } }, index);
