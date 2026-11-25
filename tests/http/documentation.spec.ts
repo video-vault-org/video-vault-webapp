@@ -87,7 +87,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     for (const path of Object.keys(document.paths)) {
       if (path === '/api/video/file/{videoId}') expect(document.paths[path].head).toBeDefined();
       else expect(document.paths[path].head).toBeUndefined();
-      for (const method of ['get', 'head', 'post', 'patch', 'delete']) {
+      for (const method of ['get', 'head', 'post', 'put', 'patch', 'delete']) {
         const operation = document.paths[path][method];
         if (!operation) continue;
         expect(operation.summary).toBeTruthy();
@@ -98,7 +98,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/video/catalog']).toBeUndefined();
     expect(document.paths['/api/video/delete/{videoId}'].delete.description).toContain('lastModified');
     expect(document.paths['/api/video/{since}'].get.description).toContain('tombstones');
-    expect(ids).toHaveLength(38);
+    expect(ids).toHaveLength(42);
     expect(document.paths).not.toHaveProperty('/api/comment/find/{commentId}');
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
@@ -111,10 +111,13 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/user/initialize-keys'].post.description).toContain('admin');
     expect(document.paths['/api/user/all'].get.description).toContain('Requires role: admin');
     expect(document.paths['/api/video/upload/{videoId}'].post.description).toContain('Requires role: editor');
+    const packet = document.paths['/api/video/upload/{videoId}/{uploadId}/{kind}'].put;
+    expect(packet.description).toContain('Requires role: editor');
+    expect(packet.requestBody.content['application/octet-stream'].schema).toMatchObject({ type: 'string', format: 'binary' });
     expect(document.paths['/api/comment/change/{commentId}'].patch.description).toContain('Requires role: moderator');
     expect(document.paths['/api/comments/{videoId}'].get.description).toBe('Requires an authenticated user.');
     for (const path of Object.keys(document.paths).filter((path) => path.startsWith('/api/'))) {
-      for (const method of ['get', 'head', 'post', 'patch', 'delete']) if (document.paths[path][method]) expect(document.paths[path][method].security).toEqual([{ bearerAuth: [] }]);
+      for (const method of ['get', 'head', 'post', 'put', 'patch', 'delete']) if (document.paths[path][method]) expect(document.paths[path][method].security).toEqual([{ bearerAuth: [] }]);
     }
     expect((await app.inject('/api/user/me')).statusCode).toBe(401);
     expect((await app.inject({ url: '/api/user/all', headers: { authorization: 'Bearer editor-token' } })).statusCode).toBe(403);

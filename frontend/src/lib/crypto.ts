@@ -196,35 +196,52 @@ const layout = function (size: number) {
 const aad = (context: string, identity: string, index: number, count: number) =>
   utf8(canonical({ version: 1, context, identity, chunkIndex: index, chunkCount: count }));
 
-const encrypt = async function (
+/** Encrypted size is known before encryption, including key header, IVs and authentication tags. */
+const encryptedFileSize = function (size: number): number {
+  const result = WRAPPED + size + Math.max(1, Math.ceil(size / CHUNK)) * OVERHEAD;
+  if (!Number.isSafeInteger(size) || size < 0 || !Number.isSafeInteger(result)) throw new RangeError('Invalid file size');
+  return result;
+};
+
+/** Reads a small batch at a time; each yielded chunk retains the existing authenticated file format. */
+const encryptChunks = async function* (
   blob: Blob,
   context: string,
   identity: string,
-  keys: Keys,
-  onProgress?: (n: number) => void
-): Promise<Blob> {
-  const fileKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, [
-    'encrypt',
-    'decrypt'
-  ]);
-  const parts: BlobPart[] = [await crypto.subtle.wrapKey('raw', fileKey, keys.encryption, 'AES-KW')];
+  keys: Pick<Keys, 'encryption'>
+): AsyncGenerator<Uint8Array<ArrayBuffer>> {
+  const fileKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  yield bytes(await crypto.subtle.wrapKey('raw', fileKey, keys.encryption, 'AES-KW'));
   const count = Math.max(1, Math.ceil(blob.size / CHUNK));
   const usedIVs = new Set<string>();
-  for (let i = 0; i < count; i++) {
-    let iv: Uint8Array<ArrayBuffer>;
-    do {
-      iv = random(12);
-    } while (usedIVs.has(base64(iv)));
-    usedIVs.add(base64(iv));
-    parts.push(
-      iv,
-      await crypto.subtle.encrypt(
+  const batchChunks = 32;
+  for (let first = 0; first < count; first += batchChunks) {
+    const batch = await blob.slice(first * CHUNK, (first + batchChunks) * CHUNK).arrayBuffer();
+    for (let i = first; i < Math.min(count, first + batchChunks); i++) {
+      let iv: Uint8Array<ArrayBuffer>;
+      do {
+        iv = random(12);
+      } while (usedIVs.has(base64(iv)));
+      usedIVs.add(base64(iv));
+      const start = (i - first) * CHUNK;
+      const encrypted = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv, additionalData: aad(context, identity, i, count), tagLength: 128 },
         fileKey,
-        await blob.slice(i * CHUNK, (i + 1) * CHUNK).arrayBuffer()
-      )
-    );
-    onProgress?.((i + 1) / count);
+        new Uint8Array(batch, start, Math.min(CHUNK, batch.byteLength - start))
+      );
+      yield concat(iv, bytes(encrypted));
+    }
+  }
+};
+
+/** Small in-memory values (titles, descriptions, comments); file uploads consume encryptChunks incrementally. */
+const encrypt = async function (blob: Blob, context: string, identity: string, keys: Keys, onProgress?: (n: number) => void): Promise<Blob> {
+  const parts: BlobPart[] = [];
+  const count = Math.max(1, Math.ceil(blob.size / CHUNK));
+  let index = 0;
+  for await (const part of encryptChunks(blob, context, identity, keys)) {
+    parts.push(part);
+    if (index++ > 0) onProgress?.((index - 1) / count);
   }
   return new Blob(parts, { type: 'application/octet-stream' });
 };
@@ -307,6 +324,8 @@ export {
   layout,
   aad,
   encrypt,
+  encryptChunks,
+  encryptedFileSize,
   unwrapFile,
   decryptChunk,
   decrypt,

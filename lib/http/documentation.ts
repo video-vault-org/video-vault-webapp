@@ -24,6 +24,10 @@ const summaries: Record<string, string> = {
   'DELETE /api/user/delete/:userId': 'Delete a user and clear their comments',
   'DELETE /api/user/delete': 'Delete your account and clear your comments',
   'POST /api/video/upload/:videoId': 'Upload temporary video and thumbnail files',
+  'POST /api/video/upload/:videoId/start': 'Reserve a bounded packet upload and check encrypted sizes',
+  'PUT /api/video/upload/:videoId/:uploadId/:kind': 'Store and acknowledge one encrypted upload packet',
+  'POST /api/video/upload/:videoId/:uploadId/complete': 'Complete packet upload and stage files for submit',
+  'DELETE /api/video/upload/:videoId/:uploadId': 'Discard upload session and partial files',
   'POST /api/video/submit': 'Submit a new video',
   'PATCH /api/video/change/title/:videoId': 'Change a video title',
   'PATCH /api/video/change/description/:videoId': 'Change the encrypted video description',
@@ -112,6 +116,12 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
             thumbnail: { type: 'string', format: 'binary', description: `Thumbnail file, maximum ${maxThumbnailBytes} bytes.` }
           }
         };
+      }
+      if (method === 'PUT' && url === '/api/video/upload/:videoId/:uploadId/:kind') {
+        documented.consumes = ['application/octet-stream'];
+        documented.body = { type: 'string', format: 'binary' };
+        documented.description +=
+          ' Maximum 4 MiB per request. offset is the encrypted byte offset. Identical retries are accepted; gaps and conflicting bytes are rejected. received acknowledges the end offset of this packet after writing it to the temporary file.';
       }
       if (method !== 'HEAD' && (url === '/api/video/file/:videoId' || url === '/api/video/thumbnail/:videoId')) {
         documented.response = { ...(documented.response as Record<string, unknown>), 200: { description: 'Encrypted file bytes', content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } } };

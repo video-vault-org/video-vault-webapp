@@ -6,7 +6,7 @@ import { Video } from '@/domain/Video';
 import { authorization } from '../middleware';
 import { HttpError } from '../errors';
 import { parseByteRange } from '../byteRange';
-import { UploadStore } from '../uploads';
+import { UploadStore, UPLOAD_PART_BYTES } from '../uploads';
 import { Type, object, id, text, video, videoRecord, videoChange, sinceDate, metadata, errorResponses, noContent, videoInput, date } from '../validation';
 
 /** Encodes domain timestamps explicitly for the compiled JSON response serializer. */
@@ -19,6 +19,10 @@ const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: 
   const router = app.withTypeProvider<TypeBoxTypeProvider>();
   const editor = authorization(auth, ['editor']);
   const params = object({ videoId: id });
+  const sessionParams = object({ videoId: id, uploadId: Type.String({ format: 'uuid' }) });
+  const kind = Type.Union([Type.Literal('video'), Type.Literal('thumbnail')]);
+
+  router.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: UPLOAD_PART_BYTES }, (_request, body, done) => done(null, body));
 
   const requireVideo = async (videoId: string) => {
     const item = await videos.findVideo({ videoId });
@@ -33,6 +37,58 @@ const videoRoutes = function (app: FastifyInstance, videos: VideoService, auth: 
     if (existing?.deleted) throw new HttpError(409, 'Video ID belongs to a deleted video');
     await uploads.receive(request, videoId, { allowPartial: existing !== null });
     return reply.code(201).send({ videoId });
+  });
+
+  /** POST /api/video/upload/:videoId/start — Editors only. Checks encrypted sizes and reserves a packet upload before encryption starts. */
+  router.post(
+    '/upload/:videoId/start',
+    {
+      onRequest: editor,
+      schema: {
+        params,
+        body: object({ files: Type.Array(object({ kind, size: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) }), { minItems: 1, maxItems: 2 }) }),
+        response: { 201: object({ uploadId: Type.String({ format: 'uuid' }), maxPartBytes: Type.Integer() }), ...errorResponses }
+      }
+    },
+    async (request, reply) => {
+      const existing = await videos.findVideo(request.params);
+      if (existing?.deleted) throw new HttpError(409, 'Video ID belongs to a deleted video');
+      const uploadId = await uploads.start(request.params.videoId, request.body.files, { allowPartial: existing !== null });
+      return reply.code(201).send({ uploadId, maxPartBytes: UPLOAD_PART_BYTES });
+    }
+  );
+
+  /** PUT /api/video/upload/:videoId/:uploadId/:kind?offset=N — Editors only. Stores at most 4 MiB of encrypted bytes; matching retries are idempotent. */
+  router.put(
+    '/upload/:videoId/:uploadId/:kind',
+    {
+      onRequest: editor,
+      bodyLimit: UPLOAD_PART_BYTES,
+      schema: {
+        params: object({ ...sessionParams.properties, kind }),
+        querystring: object({ offset: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }),
+        body: Type.Unsafe<Buffer>({}),
+        response: { 200: object({ received: Type.Integer({ minimum: 1 }) }), ...errorResponses }
+      }
+    },
+    async (request) => {
+      const { videoId, uploadId, kind } = request.params;
+      return { received: await uploads.append(videoId, uploadId, kind, request.query.offset, request.body) };
+    }
+  );
+
+  /** POST /api/video/upload/:videoId/:uploadId/complete — Editors only. Publishes complete files for a later new-video or replacement submit. */
+  router.post('/upload/:videoId/:uploadId/complete', { onRequest: editor, schema: { params: sessionParams, response: noContent } }, async (request, reply) => {
+    const { videoId, uploadId } = request.params;
+    if ((await videos.findVideo({ videoId }))?.deleted) throw new HttpError(409, 'Video ID belongs to a deleted video');
+    await uploads.complete(videoId, uploadId);
+    return reply.code(204).send(null);
+  });
+
+  /** DELETE /api/video/upload/:videoId/:uploadId — Editors only. Removes partial upload data/session metadata, preserving completed staging files. */
+  router.delete('/upload/:videoId/:uploadId', { onRequest: editor, schema: { params: sessionParams, response: noContent } }, async (request, reply) => {
+    await uploads.cancel(request.params.videoId, request.params.uploadId);
+    return reply.code(204).send(null);
   });
 
   /** POST /api/video/submit — Editors only. Copies staged files, saves metadata and removes temporary files. */

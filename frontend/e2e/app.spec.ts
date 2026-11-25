@@ -146,6 +146,14 @@ test('posts, edits and soft-deletes authenticated encrypted comments', async ({ 
 });
 
 test('analyzes local MP4, encrypts upload, changes metadata/files and deletes the video', async ({ page }) => {
+  test.setTimeout(120000);
+  const videoPackets: { offset: number; size: number }[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'PUT' && url.pathname.startsWith('/api/video/upload/') && url.pathname.endsWith('/video')) {
+      videoPackets.push({ offset: Number(url.searchParams.get('offset')), size: request.postDataBuffer()!.byteLength });
+    }
+  });
   await login(page);
   await page.getByRole('button', { name: /Video hinzufügen/ }).click();
   let dialog = page.getByRole('dialog', { name: 'Video hinzufügen', exact: true });
@@ -157,11 +165,18 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
   await dialog.locator('summary[aria-label="Schlagwörter"]').click();
   await dialog.getByRole('checkbox', { name: 'Holiday' }).check();
   await dialog.getByRole('checkbox', { name: 'Friends' }).check();
-  await dialog.getByLabel('Videodatei', { exact: true }).setInputFiles('e2e/fixtures/sample.mp4');
+  const freeBox = Buffer.alloc(8 * 1024 ** 2 + 8);
+  freeBox.writeUInt32BE(freeBox.length, 0);
+  freeBox.write('free', 4);
+  const largeVideo = Buffer.concat([await readFile(resolve('e2e/fixtures/sample.mp4')), freeBox]);
+  await dialog.getByLabel('Videodatei', { exact: true }).setInputFiles({ name: 'packet-upload.mp4', mimeType: 'video/mp4', buffer: largeVideo });
   await dialog.getByLabel('Thumbnail', { exact: true }).setInputFiles('../logo.png');
   await expect(dialog.getByText('Geschätzte Browser-Unterstützung:', { exact: false })).toBeVisible();
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Browser upload', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Browser upload', exact: true })).toBeVisible({ timeout: 30000 });
+  expect(videoPackets).toHaveLength(3);
+  expect(videoPackets.map((packet) => packet.offset)).toEqual([0, 4 * 1024 ** 2, 8 * 1024 ** 2]);
+  expect(videoPackets.every((packet) => packet.size <= 4 * 1024 ** 2)).toBe(true);
   await page.getByRole('combobox', { name: 'Kategorie' }).selectOption('Travel');
   await expect(page.locator('.video-card')).toHaveCount(1);
   await page.getByRole('combobox', { name: 'Kategorie' }).selectOption('');
@@ -169,6 +184,11 @@ test('analyzes local MP4, encrypts upload, changes metadata/files and deletes th
     .locator('.video-card')
     .filter({ has: page.getByRole('heading', { name: 'Browser upload', exact: true }) });
   await card.getByRole('button', { name: 'Mehr Details', exact: true }).click();
+  await expect.poll(() => page.locator('video').evaluate((element) => (element as HTMLVideoElement).duration)).toBeGreaterThan(0);
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Herunterladen', exact: true }).click();
+  const downloadedFile = await downloaded;
+  expect((await readFile((await downloadedFile.path())!)).equals(largeVideo)).toBe(true);
   await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Video bearbeiten', exact: true });
   await expect(dialog.getByRole('combobox', { name: 'Kategorie' })).toHaveValue('Travel');

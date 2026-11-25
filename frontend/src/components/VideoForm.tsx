@@ -1,11 +1,12 @@
-import { useState, useRef, useId } from 'react';
+import { useState, useRef, useId, useEffect } from 'react';
 import type { Bootstrap, Keys, PlainVideo, Video } from '../lib/types';
 import { Dialog, Field, ErrorMessage, useLanguage, useTask } from '../lib/ui';
 import { MetadataFields, validateMetadata } from './MetadataFields';
 import { Compatibility } from './Compatibility';
 import { inspect, type MediaReport } from '../lib/compatibility';
-import { encrypt, encryptText, sign, verify } from '../lib/crypto';
-import { json, upload } from '../lib/api';
+import { encryptText, sign, verify } from '../lib/crypto';
+import { json } from '../lib/api';
+import { uploadFiles } from '../lib/uploadFiles';
 
 const VideoForm = function ({
   existing,
@@ -39,6 +40,10 @@ const VideoForm = function ({
     [analysis, setAnalysis] = useState(false),
     [progress, setProgress] = useState('');
   const selection = useRef(0);
+  const transfer = useRef<AbortController | undefined>(undefined);
+
+  useEffect(() => () => transfer.current?.abort(), []);
+
   const videoHintId = useId();
   const thumbnailHintId = useId();
 
@@ -91,32 +96,25 @@ const VideoForm = function ({
       };
 
       if (video || thumbnail) {
-        const data = new FormData();
-        for (const [kind, file] of [
-          ['video', video],
-          ['thumbnail', thumbnail]
-        ] as const) {
-          if (!file) continue;
-          const progressLabel = `${t('Verschlüsseln: ', 'Encrypting: ')} ${
-            kind === 'video' ? t('Video', 'video') : t('Thumbnail', 'thumbnail')
-          }:`;
-          setProgress(progressLabel);
-          data.append(
-            kind,
-            await encrypt(file, kind, `${videoId}.${kind}`, keys, (n) =>
-              setProgress(`${progressLabel}: ${Math.round(n * 100)}%`)
-            ),
-            `${videoId}.${kind}`
-          );
+        const files: { kind: 'video' | 'thumbnail'; file: File }[] = [];
+        if (video) files.push({ kind: 'video', file: video });
+        if (thumbnail) files.push({ kind: 'thumbnail', file: thumbnail });
+        const controller = new AbortController();
+        transfer.current = controller;
+        try {
+          await uploadFiles({
+            videoId,
+            files,
+            key: keys.encryption,
+            signal: controller.signal,
+            onProgress: ({ encrypted, uploaded }) => setProgress(
+              `${t('Verschlüsseln', 'Encrypting')}: ${Math.floor(encrypted * 100)}% · ${t('Hochladen', 'Uploading')}: ${Math.floor(uploaded * 100)}%`
+            )
+          });
+        } finally {
+          transfer.current = undefined;
         }
-        setProgress(t('Hochladen: 0%', 'Uploading: 0%'));
-        await upload(`/api/video/upload/${videoId}`, data, (progress) =>
-          setProgress(
-            progress >= 1
-              ? t('Upload wird abgeschlossen …', 'Finalizing upload …')
-              : `${t('Hochladen', 'Uploading')}: ${Math.floor(progress * 100)}%`
-          )
-        );
+        setProgress(t('Speichern …', 'Saving …'));
         state.videoMimeType = video ? report?.mime || video.type || 'application/octet-stream' : state.videoMimeType;
         state.thumbnailMimeType = thumbnail ? thumbnail.type || 'image/jpeg' : state.thumbnailMimeType;
         if (existing) {
@@ -253,8 +251,8 @@ const VideoForm = function ({
           {report && <Compatibility report={report} />}
           <p className="muted">
             {t(
-              'Dateien werden vor dem Upload lokal verschlüsselt. Änderungen werden schrittweise gespeichert; bei Fehlern können Teiländerungen bestehen bleiben.',
-              'Files are encrypted locally before upload. Changes are saved in steps; errors may leave partial changes.'
+              'Dateien werden im Browser paketweise verschlüsselt und hochgeladen. Änderungen werden schrittweise gespeichert; bei Fehlern können Teiländerungen bestehen bleiben.',
+              'Files are encrypted and uploaded in packets in your browser. Changes are saved in steps; errors may leave partial changes.'
             )}
           </p>
           <ErrorMessage text={task.error} />
