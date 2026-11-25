@@ -122,8 +122,8 @@ const VideoOverlay = function ({
         </dl>
         <small className="muted">
           {t(
-            'Downloads und Wiedergabe benötigen eine Verbindung und diese geöffnete, entsperrte App.',
-            'Downloads and playback require a connection and this open, unlocked app.'
+            'Für Wiedergabe und Downloads ist eine Internetverbindung erforderlich. Außerdem muss diese Videoansicht solange geöffnet bleiben.',
+            'An internet connection is required for playback and downloads. Additionally, this video view must remain open.'
           )}
         </small>
       </Dialog>
