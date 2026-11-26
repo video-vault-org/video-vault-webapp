@@ -104,6 +104,24 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(response.body).not.toContain('private-hash-never-in-docs');
   });
 
+  test('requires a current admin proof in every writing admin operation', async () => {
+    const document = (await app.inject('/docs/json')).json();
+    let checked = 0;
+    for (const path of Object.keys(document.paths)) {
+      for (const method of ['post', 'patch', 'put', 'delete']) {
+        const operation = document.paths[path][method];
+        if (!operation?.description.includes('Requires role: admin')) continue;
+        const schema = operation.requestBody.content['application/json'].schema;
+        const body = schema.$ref ? document.components.schemas[schema.$ref.split('/').pop()] : schema;
+        expect(body.required).toContain('oldLoginHash');
+        expect(operation.description).toContain('acting admin');
+        checked++;
+      }
+    }
+    expect(checked).toBe(9);
+    expect(document.paths['/api/user/all'].get.requestBody).toBeUndefined();
+  });
+
   test('documents bearer JWTs and actual role requirements without making API access public', async () => {
     const document = (await app.inject('/docs/json')).json();
     expect(document.components.securitySchemes.bearerAuth).toEqual({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' });

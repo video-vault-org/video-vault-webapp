@@ -146,12 +146,47 @@ describe('AuthService', () => {
   test('login and authenticate require initialization', async () => {
     await expect(service.login({ username, loginHash })).rejects.toThrow('not initialized');
     await expect(service.authenticate({ token: 'invalid' })).rejects.toThrow('not initialized');
+    await expect(service.verifyCurrentPassword({ userId, loginHash })).rejects.toThrow('not initialized');
   });
 
   describe('initialized service', () => {
     beforeEach(async () => {
       await service.initialize();
       jest.useFakeTimers({ now: start, doNotFake: ['nextTick', 'setImmediate'] });
+    });
+
+    describe('verifyCurrentPassword', () => {
+      test('verifies the current proof without issuing a token and clears failed attempts', async () => {
+        await db.increaseAttemptsCountByUsername({ username, lastAttempt: start });
+        const sign = jest.spyOn(jwt, 'sign');
+        expect(await service.verifyCurrentPassword({ userId, loginHash })).toBe(true);
+        expect(sign).not.toHaveBeenCalled();
+        expect(await db.findOneAttemptsCountByUsername({ username })).toBeNull();
+      });
+
+      test('rejects an unknown account and an incorrect current password', async () => {
+        expect(await service.verifyCurrentPassword({ userId: 'unknown', loginHash })).toBe(false);
+        expect(await service.verifyCurrentPassword({ userId, loginHash: wrongHash })).toBe(false);
+        expect(await db.findOneAttemptsCountByUsername({ username })).toMatchObject({ attempts: 1 });
+      });
+
+      test('shares login locks, including concurrent failures and lock extension', async () => {
+        const results = await Promise.all(Array.from({ length: 8 }, () => service.verifyCurrentPassword({ userId, loginHash: wrongHash })));
+        expect(results).toEqual(Array(8).fill(false));
+        expect(await db.findOneAttemptsCountByUsername({ username })).toMatchObject({ attempts: 5 });
+        jest.setSystemTime(new Date(start.getTime() + 1000));
+        expect(await service.verifyCurrentPassword({ userId, loginHash })).toBe(false);
+        expect(await db.findOneAttemptsCountByUsername({ username })).toMatchObject({ attempts: 5, lastAttempt: new Date(start.getTime() + 1000) });
+        expect(await service.login({ username, loginHash })).toBeNull();
+        jest.setSystemTime(new Date(start.getTime() + 16_000));
+        expect(await service.verifyCurrentPassword({ userId, loginHash })).toBe(true);
+      });
+
+      test('reads the latest stored password rather than trusting a previous authenticated profile', async () => {
+        await db.changeUsersPasswordByUserId({ userId, loginHash: await hashPassword(wrongHash), passwordKeySalt: 'new', userKey: 'new' });
+        expect(await service.verifyCurrentPassword({ userId, loginHash })).toBe(false);
+        expect(await service.verifyCurrentPassword({ userId, loginHash: wrongHash })).toBe(true);
+      });
     });
 
     describe('login', () => {

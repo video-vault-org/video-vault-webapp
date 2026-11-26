@@ -90,7 +90,11 @@ const Login = function ({
                   generated
                 );
                 try {
-                  await json('/api/user/initialize-keys', { passwordKeySalt, userKey });
+                  await json('/api/user/initialize-keys', {
+                    passwordKeySalt,
+                    userKey,
+                    oldLoginHash: await loginHash(password, user.username, config.instanceSalt)
+                  });
                 } catch (error) {
                   // Another first login may already have stored its keys. Always reload and unlock the winner.
                   if (!(error instanceof ApiError && error.status === 409)) throw error;
@@ -336,7 +340,9 @@ const Vault = function ({
                   >
                     <option value="">{t('Alle', 'All')}</option>
                     {f.options.map((option) => (
-                      <option key={option} value={option}>{option}</option>
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
                     ))}
                   </select>
                 ) : f.type === 'boolean' ? (
@@ -490,6 +496,7 @@ const Application = function () {
     [cached, setCached] = useState<User>(),
     [session, setSession] = useState<{ user: User; keys: Keys }>(),
     [forced, setForced] = useState(false),
+    [invitationPassword, setInvitationPassword] = useState(''),
     [passwordWarning, setPasswordWarning] = useState(false),
     [workerWarning, setWorkerWarning] = useState(false),
     [invitation, setInvitation] = useState(readInvitation);
@@ -498,6 +505,7 @@ const Application = function () {
     setSession(undefined);
     setCached(undefined);
     setForced(false);
+    setInvitationPassword('');
     clearMedia();
   }, []);
 
@@ -640,9 +648,11 @@ const Application = function () {
               keys={session.keys}
               config={config}
               forced
+              initialCurrentPassword={invitationPassword}
               done={async () => {
                 await updated();
                 setForced(false);
+                setInvitationPassword('');
               }}
             />
           </main>
@@ -668,6 +678,7 @@ const Application = function () {
           onLogin={(user, keys, force) => {
             setSession({ user, keys });
             setForced(force);
+            setInvitationPassword(force ? (invitation?.password ?? '') : '');
             setInvitation(null);
           }}
         />

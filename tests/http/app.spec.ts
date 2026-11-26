@@ -43,16 +43,16 @@ const protectedRoutes = [
   ['get', '/api/user/all', 'admin', undefined, 200],
   ['get', '/api/user/find/target', 'admin', undefined, 200],
   ['patch', '/api/user/change/displayname/target/Changed', 'admin', undefined, 204],
-  ['patch', '/api/user/change/username/target/renamed', 'admin', { loginHash }, 204],
-  ['patch', '/api/user/change/password/target', 'admin', password, 204],
+  ['patch', '/api/user/change/username/target/renamed', 'admin', { loginHash, oldLoginHash: loginHash }, 204],
+  ['patch', '/api/user/change/password/target', 'admin', { ...password, oldLoginHash: loginHash }, 204],
   ['patch', '/api/user/change/admin/target', 'admin', { admin: true }, 204],
   ['patch', '/api/user/change/editor/target', 'admin', { editor: true }, 204],
   ['patch', '/api/user/change/moderator/target', 'admin', { moderator: true }, 204],
   ['delete', '/api/user/delete/target', 'admin', undefined, 204],
   ['get', '/api/user/me', 'any', undefined, 200],
   ['patch', '/api/user/change/displayname/Changed', 'any', undefined, 204],
-  ['patch', '/api/user/change/username/renamed', 'any', { loginHash }, 204],
-  ['patch', '/api/user/change/password', 'any', password, 204],
+  ['patch', '/api/user/change/username/renamed', 'any', { loginHash, oldLoginHash: loginHash }, 204],
+  ['patch', '/api/user/change/password', 'any', { ...password, oldLoginHash: loginHash }, 204],
   ['delete', '/api/user/delete', 'any', undefined, 204],
   ['post', '/api/video/upload/new-video', 'editor', undefined, 400],
   ['post', '/api/video/submit', 'editor', { ...video, videoId: 'new-video' }, 404],
@@ -113,7 +113,7 @@ describe('Fastify backend', () => {
     const attributes = { passwordKeySalt: Buffer.alloc(32).toString('base64'), userKey: Buffer.alloc(80).toString('base64') };
     const malformed = await app.inject({ method: 'POST', url: '/api/user/initialize-keys', headers: headers('admin'), payload: { ...attributes, userKey: 'bad' } });
     expect(malformed.statusCode).toBe(400);
-    const results = await Promise.all([0, 1].map(() => app.inject({ method: 'POST', url: '/api/user/initialize-keys', headers: headers('admin'), payload: attributes })));
+    const results = await Promise.all([0, 1].map(() => app.inject({ method: 'POST', url: '/api/user/initialize-keys', headers: headers('admin'), payload: { ...attributes, oldLoginHash: loginHash } })));
     expect(results.map((result) => result.statusCode).sort()).toEqual([204, 409]);
     expect(await db.findOneUserByUserId({ userId: 'admin' })).toMatchObject({ ...attributes, loginHash: storedHash });
   });
@@ -171,7 +171,7 @@ describe('Fastify backend', () => {
       const allowed = access === 'any' || access === 'own' || role === access;
       // Mutations within a row use unique values to avoid colliding usernames and comment IDs.
       const url = path === '/api/user/change/username/renamed' ? `/api/user/change/username/renamed-${role}` : path;
-      const data = path === '/api/comment/submit' ? { ...commentBody, commentId: `comment-${role}` } : body;
+      const data = access === 'admin' && method !== 'get' ? { ...body, oldLoginHash: loginHash } : path === '/api/comment/submit' ? { ...commentBody, commentId: `comment-${role}` } : body;
       const expected = !allowed ? 403 : access === 'own' && role !== 'reader' ? 404 : success;
       await request(app.server)[method](url).set(headers(role)).send(data).expect(expected);
     }
@@ -235,7 +235,7 @@ describe('Fastify backend', () => {
     await request(app.server)
       .patch(url)
       .set(headers(mode === 'own' ? 'reader' : 'admin'))
-      .send({ loginHash: newLoginHash })
+      .send({ loginHash: newLoginHash, oldLoginHash: loginHash })
       .expect(204);
 
     const updated = (await db.findOneUserByUserId({ userId }))!;
@@ -270,10 +270,141 @@ describe('Fastify backend', () => {
     const result = await request(app.server)
       .post('/api/user/add')
       .set(headers('admin'))
-      .send({ ...password, userId: 'new', username: 'new', displayName: 'New' })
+      .send({ ...password, userId: 'new', username: 'new', displayName: 'New', oldLoginHash: loginHash })
       .expect(201);
     expect(result.body).not.toHaveProperty('loginHash');
     expect(await verifyPassword(loginHash, (await db.findOneUserByUserId({ userId: 'new' }))!.loginHash)).toBe(true);
+  });
+
+  test.each([undefined, '', 123, 'x'.repeat(4097)])('rejects missing or malformed current proof without changing credentials (%s)', async (oldLoginHash) => {
+    const previous = structuredClone(await db.findOneUserByUserId({ userId: 'reader' }));
+    await request(app.server)
+      .patch('/api/user/change/password')
+      .set(headers())
+      .send({ ...password, oldLoginHash })
+      .expect(400);
+    expect(await db.findOneUserByUserId({ userId: 'reader' })).toEqual(previous);
+  });
+
+  test('rejects a stolen JWT with a wrong old proof and preserves all password attributes', async () => {
+    const previous = structuredClone(await db.findOneUserByUserId({ userId: 'reader' }));
+    const update = { loginHash: 'new-proof', passwordKeySalt: 'new-salt', userKey: 'new-key' };
+    await request(app.server)
+      .patch('/api/user/change/password')
+      .set(headers())
+      .send({ ...update, oldLoginHash: 'wrong' })
+      .expect(403);
+    expect(await db.findOneUserByUserId({ userId: 'reader' })).toEqual(previous);
+    await request(app.server)
+      .patch('/api/user/change/password')
+      .set(headers())
+      .send({ ...update, oldLoginHash: loginHash })
+      .expect(204);
+    const user = (await db.findOneUserByUserId({ userId: 'reader' }))!;
+    expect(user).toMatchObject({ passwordKeySalt: update.passwordKeySalt, userKey: update.userKey });
+    expect(await verifyPassword(update.loginHash, user.loginHash)).toBe(true);
+    expect(await verifyPassword(loginHash, user.loginHash)).toBe(false);
+  });
+
+  test('password-change attempts share login throttling and cannot bypass an active lock', async () => {
+    const previous = structuredClone(await db.findOneUserByUserId({ userId: 'reader' }));
+    for (let index = 0; index < 5; index++) {
+      await request(app.server)
+        .patch('/api/user/change/password')
+        .set(headers())
+        .send({ ...password, oldLoginHash: 'wrong' })
+        .expect(403);
+    }
+    await request(app.server)
+      .patch('/api/user/change/password')
+      .set(headers())
+      .send({ ...password, oldLoginHash: loginHash })
+      .expect(403);
+    expect(await db.findOneAttemptsCountByUsername({ username: 'reader' })).toMatchObject({ attempts: 5 });
+    expect(await db.findOneUserByUserId({ userId: 'reader' })).toEqual(previous);
+  });
+
+  test.each([
+    ['/api/user/change/username/renamed', 'reader', { loginHash: 'new-proof' }],
+    ['/api/user/change/username/admin/renamed', 'admin', { loginHash: 'new-proof' }],
+    ['/api/user/change/password/admin', 'admin', password]
+  ] as const)('requires the current password for self changes through %s', async (url, role, body) => {
+    const previous = structuredClone(await db.findOneUserByUserId({ userId: role }));
+    await request(app.server).patch(url).set(headers(role)).send(body).expect(400);
+    await request(app.server)
+      .patch(url)
+      .set(headers(role))
+      .send({ ...body, oldLoginHash: 'wrong' })
+      .expect(403);
+    expect(await db.findOneUserByUserId({ userId: role })).toEqual(previous);
+    await request(app.server)
+      .patch(url)
+      .set(headers(role))
+      .send({ ...body, oldLoginHash: loginHash })
+      .expect(204);
+  });
+
+  test.each([
+    ['/api/user/change/username/target/renamed', { loginHash: 'new-proof' }],
+    ['/api/user/change/password/target', { loginHash: 'new-proof', passwordKeySalt: 'new-salt', userKey: 'new-key' }]
+  ] as const)('requires the acting admin password for %s, never the target password', async (url, body) => {
+    const adminProof = 'different-admin-proof';
+    await db.changeUsersPasswordByUserId({ userId: 'admin', loginHash: await hashPassword(adminProof), passwordKeySalt: 'admin-salt', userKey: 'admin-key' });
+    const previous = structuredClone(await db.findOneUserByUserId({ userId: 'target' }));
+    const administrator = await db.findOneUserByUserId({ userId: 'admin' });
+    await request(app.server).patch(url).set(headers('admin')).send(body).expect(400);
+    await request(app.server)
+      .patch(url)
+      .set(headers('admin'))
+      .send({ ...body, oldLoginHash: loginHash })
+      .expect(403);
+    expect(await db.findOneUserByUserId({ userId: 'target' })).toEqual(previous);
+    expect(await db.findOneAttemptsCountByUsername({ username: 'admin' })).toMatchObject({ attempts: 1 });
+    expect(await db.findOneAttemptsCountByUsername({ username: 'target' })).toBeNull();
+    await request(app.server)
+      .patch(url)
+      .set(headers('admin'))
+      .send({ ...body, oldLoginHash: adminProof })
+      .expect(204);
+    expect(await db.findOneUserByUserId({ userId: 'target' })).not.toEqual(previous);
+    expect(await db.findOneUserByUserId({ userId: 'admin' })).toEqual(administrator);
+    expect(await db.findOneAttemptsCountByUsername({ username: 'admin' })).toBeNull();
+  });
+
+  test('an active admin login lock blocks password resets of other users', async () => {
+    const previous = structuredClone(await db.findOneUserByUserId({ userId: 'target' }));
+    for (let index = 0; index < 5; index++) await db.increaseAttemptsCountByUsername({ username: 'admin', lastAttempt: new Date() });
+    await request(app.server)
+      .patch('/api/user/change/password/target')
+      .set(headers('admin'))
+      .send({ ...password, oldLoginHash: loginHash })
+      .expect(403);
+    expect(await db.findOneUserByUserId({ userId: 'target' })).toEqual(previous);
+  });
+
+  test.each(protectedRoutes.filter(([method, , access]) => access === 'admin' && method !== 'get'))('%s %s requires a current admin proof before any write', async (method, path, _access, body, success) => {
+    const { oldLoginHash: _proof, ...attributes } = (body ?? {}) as Record<string, unknown>;
+    const before = structuredClone(await db.findAllUsers());
+    await request(app.server)[method](path).set(headers('admin')).send(attributes).expect(400);
+    for (const oldLoginHash of ['', 123, 'x'.repeat(4097)]) {
+      await request(app.server)
+        [method](path)
+        .set(headers('admin'))
+        .send({ ...attributes, oldLoginHash })
+        .expect(400);
+    }
+    await request(app.server)
+      [method](path)
+      .set(headers('admin'))
+      .send({ ...attributes, oldLoginHash: 'wrong-proof' })
+      .expect(403);
+    expect(await db.findAllUsers()).toEqual(before);
+    await request(app.server)
+      [method](path)
+      .set(headers('admin'))
+      .send({ ...attributes, oldLoginHash: loginHash })
+      .expect(success);
+    expect(JSON.stringify(await db.findAllUsers())).not.toContain('oldLoginHash');
   });
 
   test('own user changes cannot change another user or elevate roles', async () => {
@@ -296,7 +427,7 @@ describe('Fastify backend', () => {
 
   test('role changes take effect on existing JWTs', async () => {
     await request(app.server).get('/api/video/all').set(headers()).expect(403);
-    await request(app.server).patch('/api/user/change/editor/reader').set(headers('admin')).send({ editor: true }).expect(204);
+    await request(app.server).patch('/api/user/change/editor/reader').set(headers('admin')).send({ editor: true, oldLoginHash: loginHash }).expect(204);
     await request(app.server).get('/api/video/all').set(headers()).expect(200);
   });
 
@@ -790,7 +921,7 @@ describe('Fastify backend', () => {
       .post('/login')
       .send({ username: 'x', loginHash: 'x'.repeat(1024 * 1024) })
       .expect(413);
-    await request(app.server).patch('/api/user/change/username/target').set(headers()).send({ loginHash }).expect(409);
+    await request(app.server).patch('/api/user/change/username/target').set(headers()).send({ loginHash, oldLoginHash: loginHash }).expect(409);
     jest.spyOn(users, 'findAllUsers').mockRejectedValueOnce(new Error(`secret ${storedHash}`));
     await request(app.server).get('/api/user/all').set(headers('admin')).expect(500, { error: 'Internal server error' });
     jest.spyOn(auth, 'authenticate').mockRejectedValueOnce(new Error('DB unavailable'));
@@ -808,6 +939,7 @@ describe('Fastify backend', () => {
     const all = makeUser('admin');
     await db.changeUsersEditorRoleByUserId({ userId: all.userId, editor: true });
     const call = request(app.server)[method](path).set(headers('admin'));
+    if (path === '/api/user/delete/missing' || path === '/api/user/change/displayname/missing/name') call.send({ oldLoginHash: loginHash });
     if (path === '/api/video/delete/missing') call.send({ lastModified: instant });
     await call.expect(404);
   });

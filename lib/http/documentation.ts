@@ -14,10 +14,10 @@ const summaries: Record<string, string> = {
   'GET /api/user/find/:userId': 'Find a user',
   'PATCH /api/user/change/displayname/:userId/:displayname': "Change a user's display name",
   'PATCH /api/user/change/displayname/:displayname': 'Change your display name',
-  'PATCH /api/user/change/username/:userId/:username': "Change a user's username",
-  'PATCH /api/user/change/username/:username': 'Change your username',
-  'PATCH /api/user/change/password/:userId': "Change a user's password attributes",
-  'PATCH /api/user/change/password': 'Change your password attributes',
+  'PATCH /api/user/change/username/:userId/:username': "Change a user's username after verifying the acting admin password",
+  'PATCH /api/user/change/username/:username': 'Change your username after verifying your current password',
+  'PATCH /api/user/change/password/:userId': "Change a user's password attributes after verifying the acting admin password",
+  'PATCH /api/user/change/password': 'Change your password attributes after verifying your current password',
   'PATCH /api/user/change/admin/:userId': 'Change the admin role',
   'PATCH /api/user/change/editor/:userId': 'Change the editor role',
   'PATCH /api/user/change/moderator/:userId': 'Change the moderator role',
@@ -84,6 +84,8 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
           : roles.length
             ? `Requires role: ${roles.join(' or ')}.`
             : 'Requires an authenticated user.';
+      if (roles.includes('admin') && !['GET', 'HEAD', 'OPTIONS'].includes(method))
+        description += ' Requires oldLoginHash derived from the acting admin’s current password in the JSON body. Verification shares login failure counters and lock durations.';
       if (url === '/api/user/initialize-keys')
         description += ' Stores the first wrapped archive keys and password-key salt for the current admin only. Requires an empty userKey; concurrent or repeated initialization returns 409. The login proof is unchanged.';
       if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';

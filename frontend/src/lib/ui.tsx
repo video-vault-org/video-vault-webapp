@@ -102,10 +102,15 @@ const errorText = (error: unknown, t: T) =>
                             'Für die Wiedergabe sind ein Service Worker sowie HTTPS oder HTTP auf localhost erforderlich.',
                             'Playback requires a service worker and HTTPS or HTTP on localhost.'
                           )
-                        : t(
-                            'Vorgang fehlgeschlagen. Bitte Verbindung, Passwort und Daten prüfen.',
-                            'Operation failed. Check the connection, password and data.'
-                          );
+                        : error instanceof Error && error.message === 'current-password'
+                          ? t(
+                              'Das aktuelle Passwort ist falsch oder die Anmeldung ist vorübergehend gesperrt.',
+                              'The current password is incorrect or sign-in is temporarily locked.'
+                            )
+                          : t(
+                              'Vorgang fehlgeschlagen. Bitte Verbindung, Passwort und Daten prüfen.',
+                              'Operation failed. Check the connection, password and data.'
+                            );
 
 const useTask = function () {
   const { t } = useLanguage();

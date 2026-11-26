@@ -73,10 +73,11 @@ describe('compiled Fastify request and response schemas', () => {
   });
 
   test('accepts three-character usernames in both own and admin rename routes', async () => {
+    jest.spyOn(auth, 'verifyCurrentPassword').mockResolvedValue(true);
     await db.createUser(account);
-    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/abc', headers, payload: { loginHash: 'new-hash' } })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/abc', headers, payload: { loginHash: 'new-hash', oldLoginHash: 'old-hash' } })).statusCode).toBe(204);
     expect((await db.findOneUserByUserId({ userId: account.userId }))?.username).toBe('abc');
-    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/admin/xyz', headers, payload: { loginHash: 'new-hash' } })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'PATCH', url: '/api/user/change/username/admin/xyz', headers, payload: { loginHash: 'new-hash', oldLoginHash: 'old-hash' } })).statusCode).toBe(204);
     expect((await db.findOneUserByUserId({ userId: account.userId }))?.username).toBe('xyz');
   });
 
@@ -174,9 +175,10 @@ describe('compiled Fastify request and response schemas', () => {
   });
 
   test('defaults omitted role flags to false when creating a user', async () => {
+    jest.spyOn(auth, 'verifyCurrentPassword').mockResolvedValue(true);
     const create = jest.spyOn(users, 'createUser').mockResolvedValue(undefined);
     const { loginHash: _hash, admin: _admin, editor: _editor, moderator: _moderator, ...fields } = account;
-    const response = await app.inject({ method: 'POST', url: '/api/user/add', headers, payload: { ...fields, loginHash: 'client-hash' } });
+    const response = await app.inject({ method: 'POST', url: '/api/user/add', headers, payload: { ...fields, loginHash: 'client-hash', oldLoginHash: 'admin-proof' } });
     expect(response.statusCode).toBe(201);
     expect(create).toHaveBeenCalledWith({ ...fields, loginHash: 'client-hash', admin: false, editor: false, moderator: false });
   });

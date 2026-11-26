@@ -8,11 +8,11 @@ import { hashPassword, verifyPassword } from '@/util/password';
 
 /**
  * Authenticates users with HS256 JWTs and throttles logins using persistent failed-attempt counters.
- * Login attempts for the same username are serialized within this instance.
+ * Login and current-password checks share failed-attempt counters and are serialized per username within this instance.
  * Use one AuthService instance per Node process; separate instances or processes are not coordinated.
  */
 class AuthService {
-  private readonly pendingLogins = new Map<string, Promise<string | null>>();
+  private readonly pendingLogins = new Map<string, Promise<unknown>>();
   private readonly db: DatabaseAdapter;
   private readonly keyDirectory: string;
   private readonly tokenLifetimeSeconds: number;
@@ -63,17 +63,28 @@ class AuthService {
    */
   public async login({ username, loginHash }: { username: string; loginHash: string }): Promise<string | null> {
     this.requireInitialized();
-    // noinspection ES6MissingAwait (we need promise here)
-    const previous = this.pendingLogins.get(username) ?? Promise.resolve(null);
-    const current = previous.catch(() => null).then(() => this.performLogin(username, loginHash));
-    this.pendingLogins.set(username, current);
-    try {
-      return await current;
-    } finally {
-      if (this.pendingLogins.get(username) === current) {
-        this.pendingLogins.delete(username);
-      }
-    }
+    return this.serializeCredentials(username, () => this.performLogin(username, loginHash));
+  }
+
+  /**
+   * Checks the current login proof for a user ID without issuing a JWT.
+   * Uses the same password verification, username serialization and lock handling as login.
+   * Successful verification clears failed attempts; unknown users and wrong or locked proofs return false.
+   * @param userId The authenticated account whose current password must be confirmed.
+   * @param loginHash The client-derived current Base64 loginHash.
+   * @returns Whether the current password was verified.
+   * @throws If initialization has not completed or a database or cryptographic operation fails.
+   */
+  public async verifyCurrentPassword({ userId, loginHash }: { userId: string; loginHash: string }): Promise<boolean> {
+    this.requireInitialized();
+    const current = await this.db.findOneUserByUserId({ userId });
+    if (!current) return false;
+    return this.serializeCredentials(current.username, async () => {
+      const user = await this.checkCredentials(current.username, loginHash, userId);
+      if (!user) return false;
+      await this.db.clearAttemptsCountByUsername({ username: current.username });
+      return true;
+    });
   }
 
   /**
@@ -153,7 +164,28 @@ class AuthService {
     this.keys = keys;
   }
 
+  private async serializeCredentials<T>(username: string, action: () => Promise<T>): Promise<T> {
+    // noinspection ES6MissingAwait promise is handled later
+    const previous = this.pendingLogins.get(username) ?? Promise.resolve();
+    const current = previous.catch(() => null).then(action);
+    this.pendingLogins.set(username, current);
+    try {
+      return await current;
+    } finally {
+      if (this.pendingLogins.get(username) === current) this.pendingLogins.delete(username);
+    }
+  }
+
   private async performLogin(username: string, loginHash: string): Promise<string | null> {
+    const user = await this.checkCredentials(username, loginHash);
+    if (!user) return null;
+    const [kid, key] = Array.from(this.keys.entries())[randomInt(this.keys.size)];
+    const token = jwt.sign({}, key, { algorithm: 'HS256', keyid: kid, subject: user.userId, expiresIn: this.tokenLifetimeSeconds, issuer: 'video-vault', audience: 'video-vault' });
+    await this.db.clearAttemptsCountByUsername({ username });
+    return token;
+  }
+
+  private async checkCredentials(username: string, loginHash: string, userId?: string): Promise<User | null> {
     const attempts = await this.db.findOneAttemptsCountByUsername({ username });
     const now = new Date();
     const duration = attempts && attempts.attempts >= 5 ? Math.min(15_000 * 2 ** Math.min(attempts.attempts - 5, 6), 900_000) : 0;
@@ -163,14 +195,11 @@ class AuthService {
     }
     const user = await this.db.findOneUserByUsername({ username });
     const matches = await verifyPassword(loginHash, user?.loginHash ?? this.dummyPasswordHash);
-    if (!user || !matches) {
+    if (!user || !matches || (userId !== undefined && user.userId !== userId)) {
       await this.db.increaseAttemptsCountByUsername({ username, lastAttempt: new Date() });
       return null;
     }
-    const [kid, key] = Array.from(this.keys.entries())[randomInt(this.keys.size)];
-    const token = jwt.sign({}, key, { algorithm: 'HS256', keyid: kid, subject: user.userId, expiresIn: this.tokenLifetimeSeconds, issuer: 'video-vault', audience: 'video-vault' });
-    await this.db.clearAttemptsCountByUsername({ username });
-    return token;
+    return user;
   }
 }
 

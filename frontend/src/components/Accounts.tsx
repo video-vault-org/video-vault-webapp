@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { json } from '../lib/api';
+import { ApiError, json } from '../lib/api';
 import { loginHash, passwordAttributes, unlock } from '../lib/crypto';
 import { inviteLink, passwordProblems, pwned, temporaryPassword } from '../lib/password';
 import type { Bootstrap, Keys, User } from '../lib/types';
@@ -24,16 +24,19 @@ const PasswordChange = function ({
   keys,
   config,
   done,
-  forced = false
+  forced = false,
+  initialCurrentPassword = ''
 }: {
   user: User;
   keys: Keys;
   config: Bootstrap;
   done: () => Promise<void>;
   forced?: boolean;
+  initialCurrentPassword?: string;
 }) {
   const { t } = useLanguage(),
     task = useTask(),
+    [currentPassword, setCurrentPassword] = useState(initialCurrentPassword),
     [password, setPassword] = useState(''),
     [repeat, setRepeat] = useState(''),
     [warning, setWarning] = useState('');
@@ -45,11 +48,20 @@ const PasswordChange = function ({
           if (password !== repeat) throw new Error('password-match');
           const notice = await validatePassword(password, t);
           setWarning(notice);
-          await json(
-            '/api/user/change/password',
-            await passwordAttributes(password, user.username, config.instanceSalt, keys),
-            'PATCH'
-          );
+          try {
+            await json(
+              '/api/user/change/password',
+              {
+                ...(await passwordAttributes(password, user.username, config.instanceSalt, keys)),
+                oldLoginHash: await loginHash(currentPassword, user.username, config.instanceSalt)
+              },
+              'PATCH'
+            );
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 403) throw new Error('current-password');
+            throw error;
+          }
+          setCurrentPassword('');
           setPassword('');
           setRepeat('');
           await done();
@@ -67,6 +79,16 @@ const PasswordChange = function ({
           'At least 12 characters; at least three categories: uppercase, lowercase, numbers, special characters.'
         )}
       </p>
+      <Field label={t('Aktuelles Passwort', 'Current password')}>
+        <input
+          type="password"
+          required
+          maxLength={4096}
+          autoComplete="current-password"
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+        />
+      </Field>
       <Field label={t('Neues Passwort', 'New password')}>
         <input
           type="password"
@@ -94,7 +116,9 @@ const PasswordChange = function ({
         </p>
       )}
       <button className="primary" disabled={task.pending}>
-        {task.pending ? t('Prüfen und speichern …', 'Checking and saving …') : t('Passwort speichern', 'Save password')}
+        {task.pending
+          ? t('Prüfen und speichern …', 'Checking and saving …')
+          : t('Passwort speichern', 'Save password')}
       </button>
     </form>
   );
@@ -145,11 +169,19 @@ const Account = function ({
           e.preventDefault();
           void task.run(async () => {
             await unlock(password, user);
-            await json(
-              `/api/user/change/username/${encodeURIComponent(username)}`,
-              { loginHash: await loginHash(password, username, config.instanceSalt) },
-              'PATCH'
-            );
+            try {
+              await json(
+                `/api/user/change/username/${encodeURIComponent(username)}`,
+                {
+                  loginHash: await loginHash(password, username, config.instanceSalt),
+                  oldLoginHash: await loginHash(password, user.username, config.instanceSalt)
+                },
+                'PATCH'
+              );
+            } catch (error) {
+              if (error instanceof ApiError && error.status === 403) throw new Error('current-password');
+              throw error;
+            }
             setPassword('');
             await updated();
             setDone(true);
@@ -231,7 +263,8 @@ const UserManagement = function ({
     [username, setUsername] = useState(''),
     [roles, setRoles] = useState({ admin: false, editor: false, moderator: false }),
     [link, setLink] = useState(''),
-    [warning, setWarning] = useState('');
+    [warning, setWarning] = useState(''),
+    [adminPassword, setAdminPassword] = useState('');
 
   const load = async () => {
     setUsers(await json<User[]>('/api/user/all'));
@@ -246,24 +279,46 @@ const UserManagement = function ({
     setCreate(!user);
     setName(user?.displayName ?? '');
     setUsername(user?.username ?? '');
-    setRoles({ admin: user?.admin ?? false, editor: user?.editor ?? false, moderator: user?.moderator ?? false });
+    setRoles({
+      admin: user?.admin ?? false,
+      editor: user?.editor ?? false,
+      moderator: user?.moderator ?? false
+    });
     setLink('');
+    setAdminPassword('');
   };
 
-  const issue = async function (user: User, type: 'invite' | 'reset', targetUsername = user.username) {
+  const withAdminPassword = async function (action: (oldLoginHash: string) => Promise<void>) {
+    if (!adminPassword) throw new Error('current-password');
+    const oldLoginHash = await loginHash(adminPassword, current.username, config.instanceSalt);
+    try {
+      await action(oldLoginHash);
+      setAdminPassword('');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) throw new Error('current-password');
+      throw error;
+    }
+  };
+
+  const issue = async function (
+    user: User,
+    type: 'invite' | 'reset',
+    oldLoginHash: string,
+    targetUsername = user.username
+  ) {
     const password = temporaryPassword();
     setWarning(await validatePassword(password, t));
     const attrs = await passwordAttributes(password, targetUsername, config.instanceSalt, keys);
     if (type === 'invite') {
-      await json('/api/user/add', { ...user, ...attrs });
+      await json('/api/user/add', { ...user, ...attrs, oldLoginHash });
     } else {
       if (targetUsername !== user.username)
         await json(
           `/api/user/change/username/${user.userId}/${encodeURIComponent(targetUsername)}`,
-          { loginHash: attrs.loginHash },
+          { loginHash: attrs.loginHash, oldLoginHash },
           'PATCH'
         );
-      await json(`/api/user/change/password/${user.userId}`, attrs, 'PATCH');
+      await json(`/api/user/change/password/${user.userId}`, { ...attrs, oldLoginHash }, 'PATCH');
     }
     setLink(inviteLink({ type, username: targetUsername, password }));
   };
@@ -288,44 +343,55 @@ const UserManagement = function ({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                void task.run(async () => {
-                  if (selected?.userId === current.userId && username !== selected.username)
-                    throw new Error('own-username');
-                  if (create) {
-                    const user: User = {
-                      userId: crypto.randomUUID(),
-                      username,
-                      displayName: name,
-                      ...roles,
-                      userKey: '',
-                      passwordKeySalt: ''
-                    };
-                    await issue(user, 'invite');
-                    setCreate(false);
-                  } else if (selected) {
-                    await json(
-                      `/api/user/change/displayname/${selected.userId}/${encodeURIComponent(name)}`,
-                      undefined,
-                      'PATCH'
-                    );
-                    for (const role of ['admin', 'editor', 'moderator'] as const)
-                      if (roles[role] !== selected[role])
-                        await json(`/api/user/change/${role}/${selected.userId}`, { [role]: roles[role] }, 'PATCH');
-                    if (username !== selected.username) {
-                      await issue(selected, 'reset', username);
+                void task.run(() =>
+                  withAdminPassword(async (oldLoginHash) => {
+                    if (selected?.userId === current.userId && username !== selected.username)
+                      throw new Error('own-username');
+                    if (create) {
+                      const user: User = {
+                        userId: crypto.randomUUID(),
+                        username,
+                        displayName: name,
+                        ...roles,
+                        userKey: '',
+                        passwordKeySalt: ''
+                      };
+                      await issue(user, 'invite', oldLoginHash);
+                      setCreate(false);
+                    } else if (selected) {
+                      await json(
+                        `/api/user/change/displayname/${selected.userId}/${encodeURIComponent(name)}`,
+                        { oldLoginHash },
+                        'PATCH'
+                      );
+                      for (const role of ['admin', 'editor', 'moderator'] as const)
+                        if (roles[role] !== selected[role])
+                          await json(
+                            `/api/user/change/${role}/${selected.userId}`,
+                            { [role]: roles[role], oldLoginHash },
+                            'PATCH'
+                          );
+                      if (username !== selected.username) {
+                        await issue(selected, 'reset', oldLoginHash, username);
+                      }
                     }
-                  }
-                  await updated();
-                  if (selected?.userId !== current.userId || roles.admin) await load();
-                  setSelected(undefined);
-                });
+                    await updated();
+                    if (selected?.userId !== current.userId || roles.admin) await load();
+                    setSelected(undefined);
+                  })
+                );
               }}
             >
               <Field label={t('Anzeigename', 'Display name')}>
                 <input required value={name} onChange={(e) => setName(e.target.value)} />
               </Field>
               <Field label={t('Benutzername', 'Username')}>
-                <input required minLength={3} value={username} onChange={(e) => setUsername(e.target.value)} />
+                <input
+                  required
+                  minLength={3}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
               </Field>
               {!create && (
                 <p className="muted">
@@ -334,6 +400,26 @@ const UserManagement = function ({
                     'Changing a username also creates a temporary password and reset link. Use “My account” for your own changes.'
                   )}
                 </p>
+              )}
+              {(selected || create) && (
+                <>
+                  <Field label={t('Dein aktuelles Admin-Passwort', 'Your current admin password')}>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      maxLength={4096}
+                      required
+                      value={adminPassword}
+                      onChange={(event) => setAdminPassword(event.target.value)}
+                    />
+                  </Field>
+                  <small className="muted">
+                    {t(
+                      'Für alle schreibenden Admin-Aktionen erforderlich. Nach erfolgreicher Änderung wird das Feld geleert.',
+                      'Required for all administrative changes. The field is cleared after a successful change.'
+                    )}
+                  </small>
+                </>
               )}
               <div className="actions">
                 {(['admin', 'editor', 'moderator'] as const).map((role) => (
@@ -360,10 +446,12 @@ const UserManagement = function ({
                     type="button"
                     disabled={task.pending || selected.userId === current.userId}
                     onClick={() =>
-                      void task.run(async () => {
-                        await issue(selected, 'reset');
-                        await load();
-                      })
+                      void task.run(() =>
+                        withAdminPassword(async (oldLoginHash) => {
+                          await issue(selected, 'reset', oldLoginHash);
+                          await load();
+                        })
+                      )
                     }
                   >
                     {t('Passwort zurücksetzen & Link erzeugen', 'Reset password & create link')}
@@ -381,11 +469,13 @@ const UserManagement = function ({
                           )
                         )
                       )
-                        void task.run(async () => {
-                          await json(`/api/user/delete/${selected.userId}`, undefined, 'DELETE');
-                          setSelected(undefined);
-                          await load();
-                        });
+                        void task.run(() =>
+                          withAdminPassword(async (oldLoginHash) => {
+                            await json(`/api/user/delete/${selected.userId}`, { oldLoginHash }, 'DELETE');
+                            setSelected(undefined);
+                            await load();
+                          })
+                        );
                     }}
                   >
                     {t('Nutzer löschen', 'Delete user')}
