@@ -24,6 +24,7 @@ import { AppConfig, appConfigSchema, DEFAULT_APP_TITLE } from '@/app/config/AppC
 import { MetaConfig, DEFAULT_META_CONFIG, metaConfigSchema } from '@/meta/config/MetaConfig';
 import { metaConfigResponse } from './metaSchema';
 import { escapeHtml, setPageTitle } from '@/util/html';
+import { basePolicy, workerPolicy, loadFrontendSecurity } from './frontendSecurity';
 
 /** Creates Fastify/Pino before adapter initialization. Trusts loopback proxies by default; VIDEO_VAULT_TRUST_PROXY replaces this list. */
 const createHttpServer = function ({
@@ -42,7 +43,7 @@ const createHttpServer = function ({
   app.setErrorHandler(handleErrors);
 
   app.addHook('onRequest', async (request, reply) => {
-    reply.header('X-Request-ID', request.id).header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Request-ID', request.id).header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer').header('X-Frame-Options', 'DENY').header('Content-Security-Policy', `${basePolicy}; script-src 'none'`);
   });
 
   return app;
@@ -130,6 +131,24 @@ const createApp = function (
 
   app.register(async (router) => {
     const html = setPageTitle(await readFile(resolve(staticDirectory, 'index.html'), 'utf8'), title);
+    const security = await loadFrontendSecurity(resolve(staticDirectory), html);
+
+    // Immutable assets use verified memory; worker branding updates must still match the retained template.
+    const asset = async function (request: FastifyRequest, reply: FastifyReply) {
+      const path = request.url.split('?')[0];
+      const bytes = path === '/sw.js' && security.worker ? await security.worker() : security.assets.get(path);
+      if (!bytes) throw new HttpError(404, 'Not found');
+      const mime = path.endsWith('.js') ? 'text/javascript; charset=utf-8' : path.endsWith('.wasm') ? 'application/wasm' : path.endsWith('.css') ? 'text/css; charset=utf-8' : 'application/octet-stream';
+      return reply
+        .type(mime)
+        .header('Content-Security-Policy', workerPolicy)
+        .header('Cache-Control', path === '/sw.js' ? 'no-cache' : 'public, max-age=31536000, immutable')
+        .send(bytes);
+    };
+
+    router.get('/assets/*', { schema: { hide: true } }, asset);
+
+    if (security.assets.has('/sw.js')) router.get('/sw.js', { schema: { hide: true } }, asset);
 
     /** GET/HEAD / and /index.html — Public. Adds request-specific, absolute OG page/image URLs without query or fragment data. */
     const index = async function (request: FastifyRequest, reply: FastifyReply) {
@@ -142,6 +161,7 @@ const createApp = function (
       }
       return reply
         .type('text/html; charset=utf-8')
+        .header('Content-Security-Policy', security.policy)
         .header('Cache-Control', 'no-store')
         .send(html.replace('content="__VIDEOVAULT_OG_URL__"', () => `content="${escapeHtml(pageUrl)}"`).replace('content="__VIDEOVAULT_OG_IMAGE_URL__"', () => `content="${escapeHtml(new URL('/logo.png', pageUrl).href)}"`));
     };

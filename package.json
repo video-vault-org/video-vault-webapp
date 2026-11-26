@@ -35,7 +35,9 @@
     "frontend:init": "node built/lib/initialize-frontend.js",
     "release:zip": "node scripts/package-release.mjs",
     "test:release": "node --test scripts/release.spec.mjs",
-    "docker:build": "docker build -t video-vault:local ."
+    "docker:build": "docker build -t video-vault:local .",
+    "security:check": "node scripts/check-security.mjs",
+    "test:security": "node --test scripts/security.spec.mjs"
   },
   "repository": {
     "type": "git",

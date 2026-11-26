@@ -60,7 +60,11 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(ui.statusCode).toBe(200);
     expect(ui.headers['content-type']).toContain('text/html');
     expect(ui.body).toContain('swagger-ui');
-    expect(ui.headers['content-security-policy']).toContain("default-src 'self'");
+    expect(ui.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(ui.headers['content-security-policy']).toContain("'strict-dynamic'");
+    expect(ui.headers['content-security-policy']).toMatch(/script-src 'nonce-/);
+    const another = await app.inject('/docs/');
+    expect(another.headers['content-security-policy']).not.toBe(ui.headers['content-security-policy']);
     expect(ui.headers['content-security-policy']).not.toContain('upgrade-insecure-requests');
     const css = await app.inject('/docs/static/swagger-ui.css');
     expect(css.statusCode).toBe(200);

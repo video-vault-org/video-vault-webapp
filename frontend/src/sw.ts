@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { range } from './lib/byteRange';
+import { mediaHeaders } from './lib/mediaSecurity';
 
 const sw = self as unknown as ServiceWorkerGlobalScope,
   cacheName = `vault-shell-${__BUILD_ID__}-__VIDEOVAULT_IMAGES_VERSION__`;
@@ -18,8 +19,7 @@ sw.addEventListener('install', (event) => {
 sw.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      for (const name of await caches.keys())
-        if (name.startsWith('vault-shell-') && name !== cacheName) await caches.delete(name);
+      for (const name of await caches.keys()) if (name.startsWith('vault-shell-') && name !== cacheName) await caches.delete(name);
       await sw.clients.claim();
     })()
   );
@@ -30,14 +30,10 @@ sw.addEventListener('message', (event) => {
     event.waitUntil(sw.clients.claim());
     return;
   }
-  if (event.data?.type === 'vault:client' && event.source && 'id' in event.source)
-    event.ports[0]?.postMessage(event.source.id);
+  if (event.data?.type === 'vault:client' && event.source && 'id' in event.source) event.ports[0]?.postMessage(event.source.id);
 });
 
-const ask = function (
-  client: Client,
-  payload: Record<string, unknown>
-): Promise<{ size: number; mime: string; title: string; data: Uint8Array }> {
+const ask = function (client: Client, payload: Record<string, unknown>): Promise<{ size: number; mime: string; title: string; data: Uint8Array }> {
   return new Promise((resolve, reject) => {
     const channel = new MessageChannel(),
       timeout = setTimeout(() => {
@@ -100,16 +96,17 @@ const media = async function (event: FetchEvent): Promise<Response> {
     return new Response(event.request.method === 'HEAD' ? null : stream, {
       status: ranged ? 206 : 200,
       headers: {
-        'Content-Type': /^[\w.+-]+\/[\w.+-]+(?:;[^\r\n]*)?$/.test(info.mime) ? info.mime : 'application/octet-stream',
+        ...mediaHeaders(info.mime),
         'Content-Length': String(end - start + 1),
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'no-store',
         ...(ranged ? { 'Content-Range': `bytes ${start}-${end}/${info.size}` } : {}),
         ...(download
           ? {
-              'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(
-                `${info.title}.${info.mime === 'video/mp4' ? 'mp4' : info.mime === 'video/webm' ? 'webm' : 'bin'}`
-              ).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)}`
+              'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(`${info.title}.${info.mime === 'video/mp4' ? 'mp4' : info.mime === 'video/webm' ? 'webm' : 'bin'}`).replace(
+                /['()*]/g,
+                (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+              )}`
             }
           : {})
       }
@@ -126,19 +123,11 @@ sw.addEventListener('fetch', (event) => {
     event.respondWith(media(event));
     return;
   }
-  if (
-    event.request.method !== 'GET' ||
-    url.pathname.startsWith('/api/') ||
-    url.pathname === '/login' ||
-    url.pathname === '/bootstrap'
-  )
-    return;
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname === '/login' || url.pathname === '/bootstrap') return;
   event.respondWith(
     (async () => {
       const cache = await caches.open(cacheName),
-        cached = await cache.match(
-          event.request.mode === 'navigate' && url.pathname === '/' ? '/index.html' : event.request
-        );
+        cached = await cache.match(event.request.mode === 'navigate' && url.pathname === '/' ? '/index.html' : event.request);
       if (cached) return cached;
       return fetch(event.request);
     })()

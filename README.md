@@ -11,8 +11,10 @@ Read the [security architecture](https://video-vault.de/SECURITY-ARCHITECTURE.ht
 Use Node.js **26** and npm. Run all commands below from the repository root. If you select PostgreSQL, MongoDB, DynamoDB or S3 storage, their services must be available and their credentials configured. Provision any required external databases and S3 buckets separately; `config:init` only writes configuration. DynamoDB table provisioning is described below.
 
 ```sh
-npm ci
-npm --prefix frontend ci
+npm ci --ignore-scripts
+npm rebuild argon2 esbuild
+npm --prefix frontend ci --ignore-scripts
+npm --prefix frontend rebuild esbuild
 npm run build
 ```
 
@@ -85,7 +87,7 @@ docker compose up -d --no-build
 
 The container runs without root privileges and serves HTTP on port 3210. Compose exposes it on host loopback only; HTTPS terminates at your external reverse proxy. Instance data is retained in the `/data` volume.
 
-The **Release ZIP and Docker** GitHub workflow builds and tests the app, creates a version tag and GitHub Release with a portable ZIP and SHA-256 checksum, and publishes an AMD64/ARM64 image to Docker Hub. The ZIP includes installation instructions; it requires Node.js 26 and `npm ci --omit=dev` on the target machine. The separate **Docker release** workflow can retry image publication for an existing tag.
+The **Release ZIP and Docker** GitHub workflow builds and tests the app, creates a version tag and GitHub Release with a portable ZIP and SHA-256 checksum, and publishes an AMD64/ARM64 image to Docker Hub. The ZIP includes installation instructions; it requires Node.js 26 and `npm ci --omit=dev --ignore-scripts` followed by `npm rebuild argon2` on the target machine. The separate **Docker release** workflow can retry image publication for an existing tag.
 
 ## Development and tests
 
@@ -98,3 +100,5 @@ npm run test:frontend
 ```
 
 Backend integration tests use Testcontainers and need Docker for the external database/storage adapters.
+
+Build and deployment protections, artifact verification and required GitHub account/repository settings are described in the [build integrity guide](./docker/README.md#build-integrity-and-repository-settings). Use `npm run security:check` and `npm run test:security` alongside the existing checks.

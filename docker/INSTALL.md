@@ -4,15 +4,15 @@ This ZIP contains the compiled backend, built frontend, default images, DynamoDB
 
 1. Install Node.js 26 and npm for your operating system and CPU.
 2. Extract the ZIP and open a terminal in the `video-vault` directory.
-3. Run `npm ci --omit=dev` to install the runtime dependencies. Native modules are installed for your own system; do not copy node_modules from another CPU or operating system.
+3. Run `npm ci --omit=dev --ignore-scripts` followed by `npm rebuild argon2` to install the runtime dependencies. Native modules are installed for your own system; do not copy node_modules from another CPU or operating system.
 4. Run `npm run config:init`, optionally `npm run meta:init` and `npm run frontend:init`, then `npm run admin:init`.
 5. Run `npm start`. The default port is 3210; `VIDEO_VAULT_PORT` overrides it. For unattended operation use a service manager.
 6. Open http://localhost:3210 locally. For network access put an HTTPS reverse proxy in front of the HTTP backend. The backend does not handle TLS.
 
 The first browser sign-in creates the archive keys. Give the initial admin the editor role in user management to enable uploads.
 
-Keep the `conf`, `jwtkeys`, `storage` (if local storage), `.salt` and SQLite database with the installation. Back them up together. Relative paths in the configuration refer to the working directory from which the app and its CLI commands run. `public` must be writable so startup can prepare branding.
+Keep the `conf`, `jwtkeys`, `storage` (if local storage), `.salt` and SQLite database with the installation. Back them up together. Relative paths in the configuration refer to the working directory from which the app and its CLI commands run. Only the existing branding output files (`public/index.html`, `public/sw.js`, the logo and icons) need to be writable for startup. Keep `built/`, `node_modules/`, `public/assets/`, `public/.frontend-integrity.json` and `public/.sw.template.js` owned by a separate deployment user and read-only to the server account. Preserve dotfiles when deploying.
 
-For upgrades, stop the server, back up instance data, replace built code/static files/default images and the two package files, run `npm ci --omit=dev` again and restart. Do not replace configuration or instance data with files from another installation.
+For upgrades, stop the server, back up instance data, replace built code/static files/default images and the two package files, run `npm ci --omit=dev --ignore-scripts` followed by `npm rebuild argon2` again and restart. Do not replace configuration or instance data with files from another installation.
 
 Read the [project README](https://github.com/video-vault-org/video-vault-webapp) for configuration details. Source build commands in the project documentation apply to a source checkout, not this prebuilt ZIP.

@@ -7,8 +7,10 @@ Independent React + TypeScript + Vite project. German and English interfaces, wi
 From the repository root:
 
 ```sh
-npm ci
-npm --prefix frontend ci
+npm ci --ignore-scripts
+npm rebuild argon2 esbuild
+npm --prefix frontend ci --ignore-scripts
+npm --prefix frontend rebuild esbuild
 npm run build
 npm start
 ```

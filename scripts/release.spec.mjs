@@ -31,6 +31,7 @@ test('packages a runnable build and default images without instance data, custom
       'logo.png',
       'frontend/dist/index.html',
       'frontend/dist/.sw.template.js',
+      'frontend/dist/.frontend-integrity.json',
       'frontend/dist/assets/app.js',
       'docker/INSTALL.md',
       'img/README.md',
@@ -50,19 +51,23 @@ test('packages a runnable build and default images without instance data, custom
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'video-vault', version: '0.0.1', type: 'module', scripts: { start: 'node built/lib/index.js' } }));
     await writeFile(join(root, 'package-lock.json'), JSON.stringify({ name: 'video-vault', version: '0.0.1', packages: { '': { name: 'video-vault', version: '0.0.1' } } }));
     const archive = await packageRelease({ root, version: 'v1.2.3' });
+    // noinspection JSCheckFunctionSignatures JetBrains doesn't check the two args method overload
     const { stdout } = await run('unzip', ['-Z1', archive]);
     const entries = stdout.trim().split('\n');
-    for (const name of ['built/lib/index.js', 'public/index.html', 'public/.sw.template.js', 'public/assets/app.js', 'img/default.logo.png', 'img/default.icon-512.png', 'INSTALL.md', 'dynamodb/create-tables.json'])
+    for (const name of ['built/lib/index.js', 'public/index.html', 'public/.sw.template.js', 'public/.frontend-integrity.json', 'public/assets/app.js', 'img/default.logo.png', 'img/default.icon-512.png', 'INSTALL.md', 'dynamodb/create-tables.json'])
       assert.ok(entries.includes(`video-vault/${name}`), name);
     assert.ok(entries.every((name) => name.startsWith('video-vault/')));
     assert.ok(entries.every((name) => !name.endsWith('/SECURITY-ARCHITECTURE.html')));
     assert.ok(entries.every((name) => !/(\.salt|\.db|conf\/|jwtkeys\/|node_modules\/|private)/.test(name)));
+    // noinspection JSCheckFunctionSignatures, JSUnresolvedReference JetBrains doesn't check the two args method overload
     const readme = (await run('unzip', ['-p', archive, 'video-vault/README.md'])).stdout;
     assert.ok(readme.includes('https://video-vault.de/SECURITY-ARCHITECTURE.html'));
     assert.ok(!readme.includes('](./SECURITY-ARCHITECTURE.html)'));
+    // noinspection JSCheckFunctionSignatures, JSUnresolvedReference JetBrains doesn't check the two args method overload
     const packaged = JSON.parse((await run('unzip', ['-p', archive, 'video-vault/package.json'])).stdout);
     assert.equal(packaged.version, '1.2.3');
     assert.equal(packaged.scripts.start, 'node built/lib/index.js');
+    // noinspection JSCheckFunctionSignatures, JSUnresolvedReference JetBrains doesn't check the two args method overload
     const lock = JSON.parse((await run('unzip', ['-p', archive, 'video-vault/package-lock.json'])).stdout);
     assert.equal(lock.version, '1.2.3');
     assert.equal(lock.packages[''].version, '1.2.3');
@@ -73,6 +78,7 @@ test('packages a runnable build and default images without instance data, custom
     // Rebuilding a version must replace the archive rather than retain obsolete ZIP entries.
     await rm(join(root, 'frontend/dist/assets/app.js'));
     await packageRelease({ root, version: '1.2.3' });
+    // noinspection JSCheckFunctionSignatures, JSUnresolvedReference JetBrains doesn't check the two args method overload
     assert.ok(!(await run('unzip', ['-Z1', archive])).stdout.includes('assets/app.js'));
   } finally {
     await rm(root, { recursive: true, force: true });

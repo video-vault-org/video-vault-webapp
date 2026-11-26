@@ -20,7 +20,7 @@ For absolute Open Graph image URLs, the proxy must overwrite `X-Forwarded-Host` 
 
 If the proxy is another container, attach it to the same Docker network and forward to `app:3210`. The loopback host port is not reachable as `localhost` from a separate container. You can remove the published port entirely when using only a shared proxy network. Browsers need HTTPS for network access; plain HTTP works on localhost/loopback.
 
-All instance data lives in the `video-vault-data` volume mounted at `/data`: configuration, `.salt`, JWT signing keys, SQLite database, local storage, temporary uploads and custom branding sets under `img/`. Default branding is refreshed from the image at each invocation; custom prefixes are retained. Static application files live separately in `/opt/video-vault/public` and are writable by the application for branding preparation. Do not mount an empty directory over that static path.
+All instance data lives in the `video-vault-data` volume mounted at `/data`: configuration, `.salt`, JWT signing keys, SQLite database, local storage, temporary uploads and custom branding sets under `img/`. Default branding is refreshed from the image at each invocation; custom prefixes are retained. Static application files live separately in `/opt/video-vault/public`; only the existing branding output files are writable, while executable assets and integrity metadata remain read-only. Do not mount an empty directory over that static path.
 
 Back up the data volume and any external database/S3 data consistently. Do not delete `.salt` or run `docker compose down -v` unless you intend to delete the installation. If you use a host bind mount instead of a named volume, make its directory writable by UID/GID 1000. Keep database and local storage paths relative to `/data`, or explicitly mount any other chosen paths. A database hostname such as `localhost` refers to this container, not the Docker host or a different container.
 
@@ -103,10 +103,46 @@ The **Also publish the Docker Hub image** checkbox defaults to `enabled`. Disabl
 To package a local build without publishing:
 
 ```sh
-npm ci
-npm --prefix frontend ci
+npm ci --ignore-scripts
+npm rebuild argon2 esbuild
+npm --prefix frontend ci --ignore-scripts
+npm --prefix frontend rebuild esbuild
 npm run build
 npm run release:zip -- 1.2.3
 ```
 
 This needs the `zip` command (and `unzip` for packaging tests); GitHub's Ubuntu runner includes both. Output goes to ignored `release/`. Verify a downloaded ZIP with `sha256sum -c video-vault-v1.2.3.zip.sha256`, extract it and follow `INSTALL.md`. The complete workflows require Docker for the integration tests; GitHub-hosted Ubuntu runners provide it.
+
+## Build integrity and repository settings
+
+The workflows install from both lockfiles with lifecycle scripts disabled, then explicitly rebuild only Argon2 and esbuild. The backend audit respects the existing `.nsprc` exception list; a passing audit does not imply zero reported advisories. Review these exceptions periodically. Dependency code still runs during compilation and tests: lockfile checksums, audits and a signed provenance record establish consistency and origin, not an automatic security review. Dependabot proposes npm, Action and Docker updates weekly; changes are reviewed rather than merged automatically.
+
+Every external Action uses a full commit SHA. Docker defaults to verified multi-platform Node image digests. To change the runtime version, update **both** `NODE_BUILD_IMAGE` and `NODE_RUNTIME_IMAGE` defaults in the Dockerfile, retaining digest pins and matching Node/Debian versions. The runtime user cannot replace compiled code, frontend assets, the integrity manifest or worker template. Only the existing branding output files in `public/` are writable. Keep this separation when using a source/ZIP installation too.
+
+The release workflow builds and tests with a read-only GitHub token. A fresh publisher job downloads the archive without running repository code or installing dependencies, verifies its checksum and creates a GitHub/Sigstore provenance attestation. The Docker workflow accepts only version tags whose source commit belongs to the default branch; it publishes BuildKit provenance, an SBOM and a GitHub attestation for the image digest. Reusable-workflow permissions explicitly allow attestation generation. These jobs are configured in the repository; their actual execution and signed output require a GitHub release run.
+
+Configure the controls owned by GitHub and your accounts separately:
+
+- Protect the default branch and `v*` release tags against direct changes, force-pushes and deletion. Require the QA check and review for workflow, Dockerfile, lockfile and build-script changes; define trusted CODEOWNERS if several people maintain the repository.
+- Require strong two-factor authentication/passkeys on GitHub and Docker Hub. Limit who may edit workflows, publish tags or access the least-privileged Docker Hub token. Rotate or revoke credentials after suspected compromise.
+- Set the default Actions token permission to read-only and restrict allowed Actions to the pinned official publishers. Workflow-specific publishing permissions are already declared. Attestations need `id-token: write` and `attestations: write`; verify that organization policies allow them. GitHub's plan restrictions for private repositories also apply.
+- Keep HTTPS termination, server accounts, deployment credentials and host updates under operator control. Do not give the runtime process permission to write code or integrity metadata; ordinary Linux processes running as the same Unix user can otherwise replace each other's writable files.
+
+Verify downloaded artifacts **before** running them. For a ZIP, the checksum detects accidental changes; the attestation additionally verifies the GitHub repository/workflow identity:
+
+```sh
+sha256sum -c video-vault-v1.2.3.zip.sha256
+gh attestation verify video-vault-v1.2.3.zip --repo video-vault-org/video-vault-webapp --signer-workflow video-vault-org/video-vault-webapp/.github/workflows/release.yml
+```
+
+For an image, prefer the exact release digest and verify its provenance rather than relying only on a mutable tag:
+
+```sh
+gh attestation verify oci://docker.io/YOUR_NAMESPACE/video-vault@sha256:RELEASE_DIGEST --repo video-vault-org/video-vault-webapp --signer-workflow video-vault-org/video-vault-webapp/.github/workflows/docker-release.yml
+```
+
+For a stricter verification policy, add `--source-digest EXPECTED_REVIEWED_COMMIT` to require the exact source commit you reviewed; matching a repository name alone is not enough. For a fork, replace the repository and workflow identities with the identities you trust. See [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify) and [repository hardening](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions).
+
+The frontend build emits `.frontend-integrity.json` alongside the immutable assets. The server verifies all listed files before accepting executable frontend HTML, checks the branded worker against its immutable template and keeps verified immutable asset bytes in memory. Worker responses are checked against the retained template on every request, allowing only a 64-character hexadecimal branding-version replacement. Missing or mismatched executable assets stop startup. Always deploy the complete matching build, including dotfiles; do not hand-edit generated JavaScript, WASM or the manifest. Rebuild and restart after code changes. Branding changes continue to use the initialization CLI and server startup.
+
+CSP allows only the pinned app entry (hash + SRI), its trusted imports and same-origin workers; JavaScript inline handlers and general `eval` are disallowed. WebAssembly remains enabled for Argon2/MediaInfo. Outgoing app connections are limited to this instance and the Have I Been Pwned range endpoint (plus local data URLs used by WASM). Application style attributes remain allowed for progress/layout; Swagger additionally needs its own inline stylesheet. A different CSP/header added by a reverse proxy must not unintentionally block these required resources. A fully compromised host or trusted build system can replace code and its trust metadata together; these measures do not provide an independent client trust anchor.

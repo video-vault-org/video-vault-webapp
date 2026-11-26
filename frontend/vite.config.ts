@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import { build } from 'vite';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { writeIntegrity } from './build/integrity';
 
 const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3210';
 
@@ -53,12 +54,27 @@ const config = defineConfig({
 
         const files = async function (path: string): Promise<string[]> {
           const entries = await readdir(resolve(root, path), { withFileTypes: true });
-          return (await Promise.all(entries.map((e) => (e.isDirectory() ? files(`${path}${e.name}/`) : [`/${path}${e.name}`])))).flat();
+          return (
+            await Promise.all(
+              entries.map((e) => (e.isDirectory() ? files(`${path}${e.name}/`) : [`/${path}${e.name}`]))
+            )
+          ).flat();
         };
 
-        await writeFile(resolve(root, 'videovault-logo.png'), await readFile(resolve(import.meta.dirname, '../img/default.logo.png')));
+        await writeFile(
+          resolve(root, 'videovault-logo.png'),
+          await readFile(resolve(import.meta.dirname, '../img/default.logo.png'))
+        );
         await writeFile(resolve(root, '.sw.template.js'), await readFile(resolve(root, 'sw.js')));
-        await writeFile(resolve(root, 'precache.json'), JSON.stringify((await files('')).filter((p) => p !== '/precache.json' && p !== '/.sw.template.js')));
+        await writeIntegrity(root);
+        await writeFile(
+          resolve(root, 'precache.json'),
+          JSON.stringify(
+            (await files('')).filter(
+              (p) => p !== '/precache.json' && p !== '/.sw.template.js' && p !== '/.frontend-integrity.json'
+            )
+          )
+        );
       }
     }
   ],

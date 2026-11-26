@@ -1,4 +1,6 @@
 import { FastifyInstance, FastifySchema } from 'fastify';
+import { randomBytes } from 'node:crypto';
+import { basePolicy } from './frontendSecurity';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { authorization } from './middleware';
@@ -148,14 +150,24 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
     }
   });
 
-  app.register(swaggerUi, {
-    routePrefix: '/docs',
-    staticCSP: true,
+  app.register(async (docs) => {
+    docs.addHook('onSend', async (_request, reply, payload) => {
+      if (typeof payload !== 'string' || !String(reply.getHeader('content-type')).startsWith('text/html')) return payload;
+      const nonce = randomBytes(24).toString('base64');
+      reply
+        .header('Cache-Control', 'no-store')
+        .header(
+          'Content-Security-Policy',
+          `${basePolicy}; script-src 'nonce-${nonce}' 'strict-dynamic'; script-src-attr 'none'; connect-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline'`
+        );
+      return payload.replace(/<script\b/g, `<script nonce="${nonce}"`);
+    });
 
-    // This backend also serves plain HTTP; keep the remaining CSP without forcing local assets to HTTPS.
-    transformStaticCSP: (header) => header.replace('upgrade-insecure-requests;', ''),
-
-    uiConfig: { deepLinking: true, docExpansion: 'list', persistAuthorization: false, validatorUrl: null }
+    docs.register(swaggerUi, {
+      routePrefix: '/docs',
+      staticCSP: false,
+      uiConfig: { deepLinking: true, docExpansion: 'list', persistAuthorization: false, validatorUrl: null }
+    });
   });
 };
 
