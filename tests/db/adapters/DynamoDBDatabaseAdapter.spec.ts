@@ -1,3 +1,4 @@
+import { sessionContract } from './sessionContract';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { CreateTableCommand, CreateTableCommandInput, DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchGetCommand, BatchWriteCommand, DynamoDBDocumentClient, QueryCommand, ScanCommand, ScanCommandOutput } from '@aws-sdk/lib-dynamodb';
@@ -172,7 +173,7 @@ describe('DynamoDBDatabaseAdapter', () => {
       await titled.createUser(customUser);
       expect(await titled.findOneUserByUsername({ username: customUser.username })).toEqual(customUser);
       expect(await db.findOneUserByUserId({ userId: customUser.userId })).toBeNull();
-      for (const name of ['users', 'usernames', 'videos', 'comments', 'login-attempts']) {
+      for (const name of ['users', 'usernames', 'videos', 'comments', 'login-attempts', 'sessions', 'session-versions']) {
         const description = await transport!.send(new DescribeTableCommand({ TableName: `meine-videos-${name}` }));
         expect(description.Table?.TableName).toBe(`meine-videos-${name}`);
       }
@@ -648,6 +649,7 @@ describe('DynamoDBDatabaseAdapter', () => {
       expect(await db.findOneAttemptsCountByUsername({ username: 'missing' })).toBeNull();
     });
   });
+  sessionContract(() => db);
 });
 
 describe('DynamoDBDatabaseAdapter initialization permissions', () => {

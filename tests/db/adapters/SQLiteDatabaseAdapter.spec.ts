@@ -1,3 +1,4 @@
+import { sessionContract } from './sessionContract';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -593,4 +594,25 @@ describe('SQLiteDatabaseAdapter', () => {
       expect(await db.findOneAttemptsCountByUsername({ username: 'missing' })).toBeNull();
     });
   });
+  test('persists sessions and revocation versions when reopening an on-disk database', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'vault-sqlite-session-'));
+    const disk = new SQLiteDatabaseAdapter({ filePath: join(directory, 'sessions.db') });
+    const session = { sessionId: 'c'.repeat(64), userId: 'user', version: 'revocation', expiresAt: Date.now() + 3600_000 };
+    try {
+      await disk.open();
+      await disk.initialize();
+      await disk.createSession(session);
+      await disk.changeSessionVersionByUserId({ userId: session.userId, version: session.version });
+      await disk.close();
+      await disk.open();
+      await disk.initialize();
+      expect(await disk.findSessionById({ sessionId: session.sessionId })).toEqual(session);
+      expect(await disk.findSessionVersionByUserId({ userId: session.userId })).toBe(session.version);
+    } finally {
+      await disk.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  sessionContract(() => db);
 });

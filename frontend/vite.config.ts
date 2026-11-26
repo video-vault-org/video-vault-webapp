@@ -22,6 +22,7 @@ const config = defineConfig({
       '/videovault-logo.png': backendUrl,
       '/api': backendUrl,
       '/login': backendUrl,
+      '/session': backendUrl,
       '/bootstrap': backendUrl
     }
   },

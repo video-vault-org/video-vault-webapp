@@ -34,7 +34,11 @@ describe('Swagger UI and OpenAPI documentation', () => {
     await writeFile(join(directory, 'index.html'), 'Public site');
     const db = new InMemoryDatabaseAdapter();
     auth = new AuthService(db);
-    jest.spyOn(auth, 'authenticate').mockResolvedValue({ userId: 'editor', username: 'editor', displayName: 'Editor', loginHash: 'private-hash-never-in-docs', passwordKeySalt: 'salt', userKey: 'key', admin: false, editor: true, moderator: false });
+    jest.spyOn(auth, 'findSession').mockResolvedValue({
+      user: { userId: 'editor', username: 'editor', displayName: 'Editor', loginHash: 'private-hash-never-in-docs', passwordKeySalt: 'salt', userKey: 'key', admin: false, editor: true, moderator: false },
+      expiresAt: Date.now() + 3600_000,
+      csrfToken: 'c'.repeat(43)
+    });
     app = createApp(
       { auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter(), { temporaryDirectory: join(directory, 'tmp') }), db), comments: new CommentService(db) },
       {
@@ -86,7 +90,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/video/change/files/{videoId}'].patch).toBeDefined();
     expect(document.paths['/api/comments/{videoId}'].get).toBeDefined();
     expect(document.paths['/api/user/change/displayname/{userId}/{displayname}'].patch).toBeDefined();
-    expect(Object.keys(document.paths).every((path) => path === '/login' || path === '/bootstrap' || path.startsWith('/api/'))).toBe(true);
+    expect(Object.keys(document.paths).every((path) => path === '/session' || path === '/login' || path === '/bootstrap' || path.startsWith('/api/'))).toBe(true);
     const ids: string[] = [];
     for (const path of Object.keys(document.paths)) {
       if (path === '/api/video/file/{videoId}') expect(document.paths[path].head).toBeDefined();
@@ -102,7 +106,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/video/catalog']).toBeUndefined();
     expect(document.paths['/api/video/delete/{videoId}'].delete.description).toContain('lastModified');
     expect(document.paths['/api/video/{since}'].get.description).toContain('tombstones');
-    expect(ids).toHaveLength(42);
+    expect(ids).toHaveLength(45);
     expect(document.paths).not.toHaveProperty('/api/comment/find/{commentId}');
     expect(new Set(ids).size).toBe(ids.length);
     expect(response.body).not.toContain('private-hash-never-in-docs');
@@ -126,10 +130,10 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/user/all'].get.requestBody).toBeUndefined();
   });
 
-  test('documents bearer JWTs and actual role requirements without making API access public', async () => {
+  test('documents cookie sessions and actual role requirements without making API access public', async () => {
     const document = (await app.inject('/docs/json')).json();
-    expect(document.components.securitySchemes.bearerAuth).toEqual({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' });
-    expect(document.paths['/login'].post.security).toEqual([]);
+    expect(document.components.securitySchemes.cookieAuth).toEqual({ type: 'apiKey', in: 'cookie', name: '__Host-videovault-session' });
+    expect(document.paths['/login'].post.security).toEqual([{ csrf: [] }]);
     expect(document.paths['/api/user/initialize-keys'].post.description).toContain('admin');
     expect(document.paths['/api/user/all'].get.description).toContain('Requires role: admin');
     expect(document.paths['/api/video/upload/{videoId}'].post.description).toContain('Requires role: editor');
@@ -139,10 +143,10 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect(document.paths['/api/comment/change/{commentId}'].patch.description).toContain('Requires role: moderator');
     expect(document.paths['/api/comments/{videoId}'].get.description).toBe('Requires an authenticated user.');
     for (const path of Object.keys(document.paths).filter((path) => path.startsWith('/api/'))) {
-      for (const method of ['get', 'head', 'post', 'put', 'patch', 'delete']) if (document.paths[path][method]) expect(document.paths[path][method].security).toEqual([{ bearerAuth: [] }]);
+      for (const method of ['get', 'head', 'post', 'put', 'patch', 'delete']) if (document.paths[path][method]) expect(document.paths[path][method].security).toEqual([{ cookieAuth: [], ...(!['get', 'head'].includes(method) ? { csrf: [] } : {}) }]);
     }
     expect((await app.inject('/api/user/me')).statusCode).toBe(401);
-    expect((await app.inject({ url: '/api/user/all', headers: { authorization: 'Bearer editor-token' } })).statusCode).toBe(403);
+    expect((await app.inject({ url: '/api/user/all', headers: { cookie: '__Host-videovault-session=editor-token', 'x-csrf-token': 'c'.repeat(43) } })).statusCode).toBe(403);
   });
 
   test('documents request/response schemas, pagination limits and empty 204 responses', async () => {
@@ -191,7 +195,7 @@ describe('Swagger UI and OpenAPI documentation', () => {
     for (const field of ['description', 'recorded']) {
       const route = document.paths[`/api/video/change/${field}/{videoId}`].patch;
       expect(route.description).toContain('Requires role: editor');
-      expect(route.security).toEqual([{ bearerAuth: [] }]);
+      expect(route.security).toEqual([{ cookieAuth: [], csrf: [] }]);
       const change = dereference(document, route.requestBody.content['application/json'].schema);
       expect(change.required).toEqual(expect.arrayContaining([field, 'lastModified', 'hmac']));
       expect(change.additionalProperties).toBe(false);
@@ -234,7 +238,12 @@ describe('Swagger UI and OpenAPI documentation', () => {
     const boundary = 'swagger-upload-test';
     const payload =
       ['video', 'thumbnail'].map((field) => `--${boundary}\r\nContent-Disposition: form-data; name="${field}"; filename="${field}.bin"\r\nContent-Type: application/octet-stream\r\n\r\n${field}-bytes\r\n`).join('') + `--${boundary}--\r\n`;
-    const response = await app.inject({ method: 'POST', url: '/api/video/upload/documented', headers: { authorization: 'Bearer token', 'content-type': `multipart/form-data; boundary=${boundary}` }, payload });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/video/upload/documented',
+      headers: { cookie: '__Host-videovault-session=token', 'x-csrf-token': 'c'.repeat(43), 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload
+    });
     expect(response.statusCode).toBe(201);
     expect(await readFile(join(directory, 'tmp', 'documented.video'), 'utf8')).toBe('video-bytes');
     expect(await readFile(join(directory, 'tmp', 'documented.thumbnail'), 'utf8')).toBe('thumbnail-bytes');

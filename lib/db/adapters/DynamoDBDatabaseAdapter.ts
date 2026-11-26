@@ -1,3 +1,4 @@
+import { Session } from '@/domain/Session';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 import { dynamoTablePrefix } from '@/app/dynamoTablePrefix';
@@ -33,7 +34,7 @@ type Item = Key;
 
 type Transaction = NonNullable<TransactWriteCommandInput['TransactItems']>;
 
-type Table = 'users' | 'usernames' | 'videos' | 'comments' | 'login-attempts';
+type Table = 'sessions' | 'session-versions' | 'users' | 'usernames' | 'videos' | 'comments' | 'login-attempts';
 
 type StoredVideo = Omit<Video, 'recorded' | 'lastModified'> & { recorded: number; lastModified: number; videoPartition: string };
 
@@ -81,6 +82,8 @@ const createTableInputs = function (prefix: string): CreateTableCommandInput[] {
     table('users', keySchema('userId'), [string('userId')]),
     table('usernames', keySchema('username'), [string('username')]),
     table('login-attempts', keySchema('username'), [string('username')]),
+    table('sessions', keySchema('sessionId'), [string('sessionId')]),
+    table('session-versions', keySchema('userId'), [string('userId')]),
     table('videos', keySchema('videoPartition', 'videoId'), [string('videoPartition'), string('videoId'), { AttributeName: 'lastModified', AttributeType: 'N' }], {
       LocalSecondaryIndexes: [{ IndexName: byModified, KeySchema: keySchema('videoPartition', 'lastModified'), Projection: { ProjectionType: 'ALL' } }]
     }),
@@ -160,13 +163,16 @@ const readCursor = function (cursor: string, videoId: string): Key {
 };
 
 /**
- * IAM: initialize requires dynamodb:DescribeTable on the five configured table
+ * IAM: initialize requires dynamodb:DescribeTable on the seven configured table
  * ARNs. It attempts dynamodb:CreateTable only for missing tables (including
  * their indexes in the request). No CreateTable permission is needed when the
  * tables already match createTableInputs. A denied create reports the manual
  * provisioning fallback. The regular role needs dynamodb:BatchGetItem, dynamodb:GetItem, PutItem,
  * UpdateItem, DeleteItem and Scan on the tables, and dynamodb:Query on the
  * relevant index ARNs (arn:aws:dynamodb:REGION:ACCOUNT:table/TABLE/index/INDEX).
+ * Sessions use strongly consistent primary-key reads. Revocation versions must never be TTL-deleted.
+ * Enable DynamoDB TTL on the sessions table attribute `ttl` for automatic expiry cleanup
+ * (optional provisioning permission dynamodb:UpdateTimeToLive; session expiry is always enforced by AuthService).
  * Transaction actions use the underlying PutItem/UpdateItem/DeleteItem grants.
  * If no credentials are configured, the AWS SDK credential chain is used.
  *
@@ -212,6 +218,28 @@ class DynamoDBDatabaseAdapter implements DatabaseAdapter {
     for (const input of createTableInputs(this.prefix)) {
       await this.ensureTable(transport, input);
     }
+  }
+
+  public async createSession(session: Session): Promise<void> {
+    await this.documentClient().send(new PutCommand({ TableName: this.table('sessions'), Item: { ...session, ttl: Math.ceil(session.expiresAt / 1000) } }));
+  }
+
+  public async findSessionById({ sessionId }: { sessionId: string }): Promise<Session | null> {
+    const { Item } = await this.documentClient().send(new GetCommand({ TableName: this.table('sessions'), Key: { sessionId }, ConsistentRead: true }));
+    return Item ? { sessionId: Item.sessionId, userId: Item.userId, version: Item.version, expiresAt: Item.expiresAt } : null;
+  }
+
+  public async deleteSessionById({ sessionId }: { sessionId: string }): Promise<void> {
+    await this.documentClient().send(new DeleteCommand({ TableName: this.table('sessions'), Key: { sessionId } }));
+  }
+
+  public async findSessionVersionByUserId({ userId }: { userId: string }): Promise<string> {
+    const { Item } = await this.documentClient().send(new GetCommand({ TableName: this.table('session-versions'), Key: { userId }, ConsistentRead: true }));
+    return Item?.version ?? '';
+  }
+
+  public async changeSessionVersionByUserId({ userId, version }: { userId: string; version: string }): Promise<void> {
+    await this.documentClient().send(new PutCommand({ TableName: this.table('session-versions'), Item: { userId, version } }));
   }
 
   public async createUser(user: User): Promise<void> {

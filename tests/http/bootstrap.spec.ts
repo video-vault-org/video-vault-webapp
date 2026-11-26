@@ -16,7 +16,7 @@ describe('public bootstrap', () => {
   const application = function (salt: string, title = 'VideoVault', metaConfig: MetaConfig = DEFAULT_META_CONFIG) {
     const db = new InMemoryDatabaseAdapter();
     const auth = new AuthService(db);
-    const authenticate = jest.spyOn(auth, 'authenticate');
+    const authenticate = jest.spyOn(auth, 'findSession');
     const server = createApp(
       { auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db), comments: new CommentService(db) },
       { instanceSalt: salt, appConfig: { title }, metaConfig, logger: false }
@@ -48,7 +48,7 @@ describe('public bootstrap', () => {
     app = server;
 
     for (let i = 0; i < 3; i++) {
-      const response = await app.inject({ url: '/bootstrap', headers: { authorization: 'Bearer invalid' } });
+      const response = await app.inject({ url: '/bootstrap', headers: { cookie: '__Host-videovault-session=invalid', 'x-csrf-token': 'c'.repeat(43) } });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ version: 1, instanceSalt, app: { title: 'VideoVault' }, meta: DEFAULT_META_CONFIG });
       expect(response.headers['cache-control']).toBe('no-store');

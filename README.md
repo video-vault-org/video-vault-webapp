@@ -58,7 +58,7 @@ The adapter creates missing tables when permitted and accepts matching pre-creat
 npm start
 ```
 
-An interactive start asks for the port. Press **Enter** to use **3210**, then open **http://localhost:3210/**. Without an interactive terminal, the default is also 3210.
+An interactive start asks for the port. Press **Enter** to use **3210**, then open the application through your HTTPS reverse proxy. Without an interactive terminal, the default is also 3210.
 
 Set `VIDEO_VAULT_PORT` to choose a port without a prompt:
 
@@ -66,11 +66,23 @@ Set `VIDEO_VAULT_PORT` to choose a port without a prompt:
 VIDEO_VAULT_PORT=4000 npm start
 ```
 
-The variable takes precedence over the prompt; the chosen port is not saved. `HOST` defaults to `0.0.0.0`, and `STATIC_DIRECTORY` defaults to `./public`. Use HTTPS for access over a network; local HTTP on localhost/loopback is supported for the service worker and browser cryptography. API documentation is available at `/docs/`.
+The variable takes precedence over the prompt; the chosen port is not saved. `HOST` defaults to `0.0.0.0`, and `STATIC_DIRECTORY` defaults to `./public`. Use HTTPS for access over a network; for local HTTP development, explicitly set `HOST=127.0.0.1 VIDEO_VAULT_INSECURE_LOCAL_COOKIES=true` (disabled with `NODE_ENV=production`; never enable this for network access). This is required for browser-independent local HTTP cookies, even though service workers and browser cryptography support HTTP loopback. API documentation is available at `/docs/`.
 
-Keep database, stored files, `conf/`, `.salt` and `jwtkeys/` with the installation. Missing JWT signing keys are generated at server start. Startup writes the configured title into the static HTML, copies the selected images and updates the service worker's branding version, so the static directory must be writable. Restart to apply title or image changes; a frontend rebuild is not required.
+Keep database, stored files, `conf/` and `.salt` with the installation. Startup writes the configured title into the static HTML, copies the selected images and updates the service worker's branding version, so the static directory must be writable. Restart to apply title or image changes; a frontend rebuild is not required.
 
 The backend serves `/` and `/index.html` with Open Graph metadata: the configured title, the fixed description “Our Videos - Protected” and the selected logo. The absolute logo URL is derived from the request. Behind an HTTPS reverse proxy, set `VIDEO_VAULT_TRUST_PROXY` to its IP address or trusted CIDR range (comma-separated for multiple entries), and configure it to overwrite `X-Forwarded-Host` and `X-Forwarded-Proto` with the original public host and protocol. By default, forwarded headers are trusted only from loopback addresses `127.0.0.1` and `::1`. A non-empty `VIDEO_VAULT_TRUST_PROXY` replaces this default list entirely; an unset or blank value retains the loopback default.
+
+Authentication uses persistent server-side sessions and host-only HttpOnly, Secure, SameSite=Strict cookies. `SESSION_TTL_SECONDS` overrides the fixed one-hour lifetime. GET `/session` returns public expiry metadata and a CSRF token; send that token in `X-CSRF-Token` on every write, including `/login`. POST `/api/logout` revokes this session; POST `/api/logout-everywhere` revokes all your sessions. Deleting a user revokes all their sessions. Offline unlocking remains possible until the cached expiry, and cannot receive revocations while disconnected. Sessions do not expose archive keys.
+
+For DynamoDB, provision the two additional `sessions` and `session-versions` tables using [dynamodb/create-tables.json](./dynamodb/create-tables.json). Enable TTL on the `sessions` attribute `ttl` to reclaim expired records; never expire `session-versions`. Expiry and revocation are checked on every request even before TTL cleanup. The other persistent adapters clean expired session rows when a new session is created. For the default DynamoDB prefix:
+
+```sh
+aws dynamodb update-time-to-live --table-name video-vault-sessions --time-to-live-specification Enabled=true,AttributeName=ttl
+```
+
+This provisioning command requires `dynamodb:UpdateTimeToLive`. Use your configured table prefix.
+
+Correct proxy host/protocol forwarding is also required for CSRF origin checks on browser writes.
 
 After source changes, rebuild with `npm run build` and restart the server. Stop with Ctrl+C or SIGTERM for a graceful shutdown.
 

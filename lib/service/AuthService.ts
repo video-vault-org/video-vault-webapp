@@ -1,80 +1,62 @@
-import { randomBytes, randomInt } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import jwt from 'jsonwebtoken';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
 import { hashPassword, verifyPassword } from '@/util/password';
 
-/**
- * Authenticates users with HS256 JWTs and throttles logins using persistent failed-attempt counters.
- * Login and current-password checks share failed-attempt counters and are serialized per username within this instance.
- * Use one AuthService instance per Node process; separate instances or processes are not coordinated.
- */
+interface AuthenticatedSession {
+  user: User;
+  expiresAt: number;
+  csrfToken: string;
+}
+
+/** Persistent opaque sessions; credential checks share a per-username lock within this process. */
 class AuthService {
   private readonly pendingLogins = new Map<string, Promise<unknown>>();
   private readonly db: DatabaseAdapter;
-  private readonly keyDirectory: string;
-  private readonly tokenLifetimeSeconds: number;
-  private keys = new Map<string, Buffer>();
+  private readonly sessionLifetimeSeconds: number;
   private initialization: Promise<void> | null = null;
   private dummyPasswordHash = '';
 
-  /**
-   * @param db The database adapter used for users and failed login attempts.
-   * @param options JWT key directory and token lifetime; defaults to ./jwtkeys and one hour.
-   * @throws If the token lifetime is not a positive safe integer in seconds.
-   */
-  public constructor(db: DatabaseAdapter, { keyDirectory = './jwtkeys', tokenLifetimeSeconds = 3600 }: { keyDirectory?: string; tokenLifetimeSeconds?: number } = {}) {
-    if (!Number.isSafeInteger(tokenLifetimeSeconds) || tokenLifetimeSeconds <= 0) {
-      throw new RangeError('tokenLifetimeSeconds must be a positive safe integer');
-    }
+  /** Sessions have a fixed, server-enforced lifetime, defaulting to one hour. */
+  public constructor(db: DatabaseAdapter, { sessionLifetimeSeconds = 3600 }: { sessionLifetimeSeconds?: number } = {}) {
+    if (!Number.isSafeInteger(sessionLifetimeSeconds) || sessionLifetimeSeconds <= 0 || sessionLifetimeSeconds > 31_536_000) throw new RangeError('Invalid sessionLifetimeSeconds');
     this.db = db;
-    this.keyDirectory = resolve(keyDirectory);
-    this.tokenLifetimeSeconds = tokenLifetimeSeconds;
+    this.sessionLifetimeSeconds = sessionLifetimeSeconds;
   }
 
-  /**
-   * Loads ten 256-bit HMAC keys, creating missing key-0.key through key-9.key files without overwriting existing keys.
-   * New directories use mode 0700 and new key files use mode 0600.
-   * Call before login or authenticate. Repeated and concurrent calls reuse the initialization.
-   * @throws If key files cannot be loaded or created, or a key is not exactly 32 bytes long.
-   */
+  /** Prepares constant-work verification for unknown usernames. Repeated calls share initialization. */
   public async initialize(): Promise<void> {
-    if (!this.initialization) {
-      this.initialization = this.loadKeys().catch((error: unknown) => {
+    this.initialization ??= hashPassword(randomBytes(32).toString('base64'))
+      .then((hash) => {
+        this.dummyPasswordHash = hash;
+      })
+      .catch((error: unknown) => {
         this.initialization = null;
         throw error;
       });
-    }
     await this.initialization;
   }
 
   /**
-   * Verifies the client's Base64 loginHash as a password and signs a JWT using a randomly selected key.
-   * Failures are counted per username, including unknown usernames. Failure 5 starts a 15-second lock;
-   * subsequent failures after expiry double the duration, capped at 15 minutes.
-   * Attempts during a lock restart its duration without checking the password or incrementing the counter.
-   * A successful login removes the failed-attempt counter.
-   * @param username The username to authenticate.
-   * @param loginHash The Base64 loginHash produced by the client, not the stored scrypt string.
-   * @returns A signed JWT on success, or null for invalid credentials or an active lock.
-   * @throws If initialization has not completed or a database or cryptographic operation fails.
+   * Verifies the client loginHash as a password and creates a fresh random session; returns null for invalid or locked credentials.
+   * Failure 5 locks for 15 seconds; each later failure after expiry doubles the lock up to 15 minutes.
+   * Attempts during a lock restart its duration without increasing the counter; successful login clears it.
+   * Credentials checks are serialized per username in this instance. Separate processes are not coordinated.
    */
   public async login({ username, loginHash }: { username: string; loginHash: string }): Promise<string | null> {
     this.requireInitialized();
-    return this.serializeCredentials(username, () => this.performLogin(username, loginHash));
+    return this.serializeCredentials(username, async () => {
+      const user = await this.checkCredentials(username, loginHash);
+      if (!user) return null;
+      const sessionId = randomBytes(32).toString('base64url');
+      const version = await this.db.findSessionVersionByUserId({ userId: user.userId });
+      await this.db.createSession({ sessionId: this.digest(sessionId), userId: user.userId, version, expiresAt: Date.now() + this.sessionLifetimeSeconds * 1000 });
+      await this.db.clearAttemptsCountByUsername({ username });
+      return sessionId;
+    });
   }
 
-  /**
-   * Checks the current login proof for a user ID without issuing a JWT.
-   * Uses the same password verification, username serialization and lock handling as login.
-   * Successful verification clears failed attempts; unknown users and wrong or locked proofs return false.
-   * @param userId The authenticated account whose current password must be confirmed.
-   * @param loginHash The client-derived current Base64 loginHash.
-   * @returns Whether the current password was verified.
-   * @throws If initialization has not completed or a database or cryptographic operation fails.
-   */
+  /** Checks the current password without issuing a session, using the same failed-attempt lock as login. */
   public async verifyCurrentPassword({ userId, loginHash }: { userId: string; loginHash: string }): Promise<boolean> {
     this.requireInitialized();
     const current = await this.db.findOneUserByUserId({ userId });
@@ -87,44 +69,45 @@ class AuthService {
     });
   }
 
-  /**
-   * Verifies a JWT's HS256 signature, key ID, issuer, audience and expiration, then loads its current user.
-   * User data and roles are read from the database rather than trusted from token claims.
-   * @param token The raw JWT, without a Bearer prefix.
-   * @returns The current user, or null for an invalid or expired token or a deleted user.
-   * @throws If initialization has not completed or the database query fails.
-   */
-  public async authenticate({ token }: { token: string }): Promise<User | null> {
-    this.requireInitialized();
-    let userId: string;
-    try {
-      const decoded = jwt.decode(token, { complete: true });
-      if (!decoded || decoded.header.alg !== 'HS256' || typeof decoded.header.kid !== 'string') {
-        return null;
-      }
-      const key = this.keys.get(decoded.header.kid);
-      if (!key) {
-        return null;
-      }
-      const verified = jwt.verify(token, key, { algorithms: ['HS256'], issuer: 'video-vault', audience: 'video-vault' });
-      if (typeof verified === 'string' || typeof verified.sub !== 'string' || !verified.sub || !Number.isSafeInteger(verified.exp)) {
-        return null;
-      }
-      userId = verified.sub;
-    } catch (error: unknown) {
-      if (error instanceof jwt.JsonWebTokenError || error instanceof SyntaxError) {
-        return null;
-      }
-      throw error;
-    }
-    return await this.db.findOneUserByUserId({ userId });
+  /** Loads the current user; expired, revoked, malformed and deleted-user sessions return null. */
+  public async authenticate({ sessionId }: { sessionId: string }): Promise<User | null> {
+    return (await this.findSession({ sessionId }))?.user ?? null;
   }
 
-  /**
-   * Returns the roles enabled on an authenticated user, in admin, editor, moderator order.
-   * @param user The authenticated user whose current role flags should be evaluated.
-   * @returns Enabled roles, or an empty array if no role is enabled.
-   */
+  /** Validates expiry and the strongly read revocation version, then loads current roles from the user record. */
+  public async findSession({ sessionId }: { sessionId: string }): Promise<AuthenticatedSession | null> {
+    this.requireInitialized();
+    if (!/^[A-Za-z0-9_-]{43}$/.test(sessionId)) return null;
+    const session = await this.db.findSessionById({ sessionId: this.digest(sessionId) });
+    if (!session) return null;
+    if (session.expiresAt <= Date.now() || session.version !== (await this.db.findSessionVersionByUserId({ userId: session.userId }))) {
+      await this.logout({ sessionId });
+      return null;
+    }
+    const user = await this.db.findOneUserByUserId({ userId: session.userId });
+    if (!user) {
+      await this.logout({ sessionId });
+      return null;
+    }
+    return { user, expiresAt: session.expiresAt, csrfToken: this.csrfToken(sessionId) };
+  }
+
+  /** Revokes only this browser credential. Idempotent, including unknown credentials. */
+  public async logout({ sessionId }: { sessionId: string }): Promise<void> {
+    await this.db.deleteSessionById({ sessionId: this.digest(sessionId) });
+  }
+
+  /** Atomically invalidates all previously issued sessions for this user, including this browser. */
+  public async logoutEverywhere({ userId }: { userId: string }): Promise<void> {
+    await this.db.changeSessionVersionByUserId({ userId, version: randomUUID() });
+  }
+
+  /** Derives a separate CSRF token; it cannot be used as a session credential. Also used for pre-login challenges. */
+  public csrfToken(sessionId: string): string {
+    return createHmac('sha256', sessionId).update('video-vault:csrf:v1').digest('base64url');
+  }
+
+  /** Returns current enabled roles; roles are never taken from browser credentials. */
   public authorize(user: User): ('admin' | 'editor' | 'moderator')[] {
     const roles: ('admin' | 'editor' | 'moderator')[] = [];
     if (user.admin) roles.push('admin');
@@ -133,35 +116,12 @@ class AuthService {
     return roles;
   }
 
-  private requireInitialized(): void {
-    if (this.keys.size !== 10) {
-      throw new Error('AuthService is not initialized');
-    }
+  private digest(sessionId: string): string {
+    return createHash('sha256').update(sessionId).digest('hex');
   }
 
-  private async loadKeys(): Promise<void> {
-    await mkdir(this.keyDirectory, { recursive: true, mode: 0o700 });
-    const keys = new Map<string, Buffer>();
-    for (let index = 0; index < 10; index++) {
-      const id = `key-${index}`;
-      const path = join(this.keyDirectory, `${id}.key`);
-      let key: Buffer;
-      try {
-        key = await readFile(path);
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-          throw error;
-        }
-        key = randomBytes(32);
-        await writeFile(path, key, { flag: 'wx', mode: 0o600 });
-      }
-      if (key.length !== 32) {
-        throw new Error(`Invalid JWT key: ${id}; expected 32 bytes`);
-      }
-      keys.set(id, key);
-    }
-    this.dummyPasswordHash = await hashPassword(randomBytes(32).toString('base64'));
-    this.keys = keys;
+  private requireInitialized(): void {
+    if (!this.dummyPasswordHash) throw new Error('AuthService is not initialized');
   }
 
   private async serializeCredentials<T>(username: string, action: () => Promise<T>): Promise<T> {
@@ -174,15 +134,6 @@ class AuthService {
     } finally {
       if (this.pendingLogins.get(username) === current) this.pendingLogins.delete(username);
     }
-  }
-
-  private async performLogin(username: string, loginHash: string): Promise<string | null> {
-    const user = await this.checkCredentials(username, loginHash);
-    if (!user) return null;
-    const [kid, key] = Array.from(this.keys.entries())[randomInt(this.keys.size)];
-    const token = jwt.sign({}, key, { algorithm: 'HS256', keyid: kid, subject: user.userId, expiresIn: this.tokenLifetimeSeconds, issuer: 'video-vault', audience: 'video-vault' });
-    await this.db.clearAttemptsCountByUsername({ username });
-    return token;
   }
 
   private async checkCredentials(username: string, loginHash: string, userId?: string): Promise<User | null> {
@@ -203,4 +154,4 @@ class AuthService {
   }
 }
 
-export { AuthService };
+export { AuthService, AuthenticatedSession };

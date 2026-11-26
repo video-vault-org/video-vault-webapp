@@ -1,3 +1,4 @@
+import { Session } from '@/domain/Session';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { Pool, PoolConfig, QueryResultRow } from 'pg';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
@@ -9,6 +10,14 @@ import { Video } from '@/domain/Video';
 import { PostgresqlDatabaseConf } from '@/db/config/PostgresqlDatabaseConf';
 
 const schema = `
+  CREATE TABLE IF NOT EXISTS sessions (
+    "sessionId" text PRIMARY KEY, "userId" text NOT NULL, version text NOT NULL, "expiresAt" bigint NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions ("expiresAt");
+  CREATE TABLE IF NOT EXISTS session_versions (
+    "userId" text PRIMARY KEY, version text NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     "userId" text PRIMARY KEY,
     username text NOT NULL UNIQUE,
@@ -114,6 +123,28 @@ class PostgresqlDatabaseAdapter implements DatabaseAdapter {
       this.rethrow(error);
     }
     client.release();
+  }
+
+  public async createSession({ sessionId, userId, version, expiresAt }: Session): Promise<void> {
+    await this.query('DELETE FROM sessions WHERE "expiresAt" <= $1', [Date.now()]);
+    await this.query('INSERT INTO sessions ("sessionId", "userId", version, "expiresAt") VALUES ($1, $2, $3, $4)', [sessionId, userId, version, expiresAt]);
+  }
+
+  public async findSessionById({ sessionId }: { sessionId: string }): Promise<Session | null> {
+    const session = (await this.query<Session>('SELECT * FROM sessions WHERE "sessionId" = $1', [sessionId]))[0] ?? null;
+    return session ? { ...session, expiresAt: Number(session.expiresAt) } : null;
+  }
+
+  public async deleteSessionById({ sessionId }: { sessionId: string }): Promise<void> {
+    await this.query('DELETE FROM sessions WHERE "sessionId" = $1', [sessionId]);
+  }
+
+  public async findSessionVersionByUserId({ userId }: { userId: string }): Promise<string> {
+    return (await this.query<{ version: string }>('SELECT version FROM session_versions WHERE "userId" = $1', [userId]))[0]?.version ?? '';
+  }
+
+  public async changeSessionVersionByUserId({ userId, version }: { userId: string; version: string }): Promise<void> {
+    await this.query('INSERT INTO session_versions ("userId", version) VALUES ($1, $2) ON CONFLICT ("userId") DO UPDATE SET version = excluded.version', [userId, version]);
   }
 
   public async createUser({ userId, username, displayName, loginHash, passwordKeySalt, userKey, admin, editor, moderator }: User): Promise<void> {

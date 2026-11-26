@@ -400,13 +400,16 @@ test('first sign-in creates wrapped archive keys in the browser and unlocks them
     passwordKeySalt: ''
   };
   let initializations = 0;
-  await page.route('**/login', (route) =>
-    route.fulfill({
+  let signedIn = false;
+  await page.route('**/session', (route) => route.fulfill({ json: { authenticated: signedIn, csrfToken: 'c'.repeat(43), expiresAt: signedIn ? Date.now() + 3600_000 : null } }));
+  await page.route('**/login', (route) => {
+    signedIn = true;
+    return route.fulfill({
       json: {
-        token: `e30.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.sig`
+        authenticated: true, csrfToken: 'c'.repeat(43), expiresAt: Date.now() + 3600_000
       }
-    })
-  );
+    });
+  });
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/user/me') return route.fulfill({ json: profile });
@@ -437,4 +440,28 @@ test('first sign-in creates wrapped archive keys in the browser and unlocks them
   await expect(page.getByRole('button', { name: 'Benutzerverwaltung', exact: true })).toBeVisible();
   expect(initializations).toBe(1);
   expect(profile.userKey).toBe(userKey);
+});
+
+test('HttpOnly sessions support independent logout and logout everywhere across browsers', async ({ page, browser }) => {
+  const other = await browser.newContext({ baseURL: 'http://127.0.0.1:4217' });
+  try {
+    const second = await other.newPage();
+    await login(page, 'reader');
+    await login(second, 'reader');
+    const cookie = (await page.context().cookies()).find((value) => value.name === 'videovault-local-session');
+    expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'Strict', secure: false, path: '/' });
+    expect(await page.evaluate(() => localStorage.getItem('videovault.token'))).toBeNull();
+    expect(Object.keys(JSON.parse((await page.evaluate(() => localStorage.getItem('videovault.session')))!))).toEqual(['expiresAt']);
+    await page.getByRole('button', { name: 'Abmelden', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
+    await second.getByRole('button', { name: /Aktualisieren/ }).click();
+    await expect(second.getByRole('heading', { name: 'Ein Sommer am See', exact: true })).toBeVisible();
+    await login(page, 'reader');
+    await page.getByRole('button', { name: 'Überall abmelden', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
+    await second.getByRole('button', { name: /Aktualisieren/ }).click();
+    await expect(second.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
+  } finally {
+    await other.close();
+  }
 });

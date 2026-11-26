@@ -1,9 +1,9 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { TOKEN, upload } from '../lib/api';
+import { SESSION, upload, clearSession, sessionInfo } from '../lib/api';
 
 let xhr: XMLHttpRequest;
 
-beforeEach(() => {
+beforeEach(async () => {
   xhr = {
     open: vi.fn(),
     setRequestHeader: vi.fn(),
@@ -17,7 +17,9 @@ beforeEach(() => {
       return xhr;
     })
   );
-  localStorage.setItem(TOKEN, 'token');
+  clearSession();
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ authenticated: true, csrfToken: 'csrf', expiresAt: Date.now() + 3600_000 })));
+  await sessionInfo();
 });
 
 test('uploads both files in one authenticated multipart request and reports byte progress', async () => {
@@ -28,7 +30,7 @@ test('uploads both files in one authenticated multipart request and reports byte
   data.append('thumbnail', 'encrypted-thumbnail');
   const pending = upload('/api/video/upload/v1', data, progress).then(finished);
   expect(xhr.open).toHaveBeenCalledWith('POST', '/api/video/upload/v1');
-  expect(xhr.setRequestHeader).toHaveBeenCalledExactlyOnceWith('Authorization', 'Bearer token');
+  expect(xhr.setRequestHeader).toHaveBeenCalledExactlyOnceWith('X-CSRF-Token', 'csrf');
   expect(xhr.send).toHaveBeenCalledExactlyOnceWith(data);
   xhr.upload.onprogress!.call(
     xhr,
@@ -50,12 +52,6 @@ test('uploads both files in one authenticated multipart request and reports byte
   expect(finished).toHaveBeenCalledOnce();
 });
 
-test('rejects missing credentials before starting an upload', async () => {
-  localStorage.removeItem(TOKEN);
-  await expect(upload('/api/video/upload/v1', new FormData(), vi.fn())).rejects.toMatchObject({ status: 401 });
-  expect(xhr.send).not.toHaveBeenCalled();
-});
-
 test.each([401, 403, 413, 500])('propagates HTTP %i and clears invalid tokens', async (status) => {
   Object.defineProperty(xhr, 'status', { value: status });
   const unauthorized = vi.fn();
@@ -66,7 +62,7 @@ test.each([401, 403, 413, 500])('propagates HTTP %i and clears invalid tokens', 
     const rejected = expect(pending).rejects.toMatchObject({ status });
     xhr.onload!.call(xhr, new ProgressEvent('load'));
     await rejected;
-    expect(localStorage.getItem(TOKEN)).toBe(status === 401 ? null : 'token');
+    expect(localStorage.getItem(SESSION) === null).toBe(status === 401);
     expect(unauthorized).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
   } finally {
     window.removeEventListener('vault:unauthorized', unauthorized);

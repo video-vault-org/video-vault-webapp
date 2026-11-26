@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
@@ -26,14 +27,15 @@ class UserService {
   }
 
   /**
-   * Marks the user's comments as deleted and clears their content, then deletes the user.
+   * Marks the user's comments as deleted and clears their content, revokes all sessions, then deletes the user.
    * Stops if marking the comments fails, leaving the user account intact.
-   * The two operations are not one transaction; comment changes are not rolled back if deletion fails.
+   * Comment updates, session revocation and user deletion are separate operations; completed steps are not rolled back if a later step fails.
    * @param userId The ID of the user to delete.
    * @throws If marking the comments or deleting the user fails.
    */
   public async deleteUser({ userId }: { userId: string }): Promise<void> {
     await this.db.markCommentsAsDeletedByUserId({ userId });
+    await this.db.changeSessionVersionByUserId({ userId, version: randomUUID() });
     await this.db.deleteUserByUserId({ userId });
   }
 

@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { bootstrap, BOOTSTRAP, clearToken, json, TOKEN, request, tokenValid } from '../lib/api';
+import { bootstrap, BOOTSTRAP, clearSession, json, SESSION, sessionValid, sessionInfo, logout } from '../lib/api';
 import { inviteLink, passwordProblems, pwned, readInvitation, temporaryPassword } from '../lib/password';
 import { config } from './fixtures';
 
@@ -32,36 +32,48 @@ test.each([{ options: [] }, { options: ['Paris', 'Paris'] }, { options: [' '] },
   await expect(bootstrap(true)).rejects.toThrow('configuration');
 });
 
-test('uses Bearer tokens, never caches API responses and clears invalid tokens', async () => {
-  localStorage.setItem(TOKEN, 'token');
+test('uses same-origin cookies, never caches API responses and clears invalid session metadata', async () => {
+  localStorage.setItem(SESSION, 'token');
   const fetch = mockFetch().mockResolvedValue(new Response(null, { status: 401 })),
     listener = vi.fn();
 
   window.addEventListener('vault:unauthorized', listener);
 
   await expect(json('/api/user/me')).rejects.toMatchObject({ status: 401 });
-  expect(localStorage.getItem(TOKEN)).toBeNull();
+  expect(localStorage.getItem(SESSION)).toBeNull();
   expect(listener).toHaveBeenCalled();
-  expect(new Headers(fetch.mock.calls[0][1]?.headers).get('Authorization')).toBe('Bearer token');
+  expect(new Headers(fetch.mock.calls[0][1]?.headers).get('Authorization')).toBeNull();
   expect(fetch.mock.calls[0][1]?.cache).toBe('no-store');
   window.removeEventListener('vault:unauthorized', listener);
 });
 
-test('rejects a missing token without issuing a request and accepts 204', async () => {
-  const fetch = mockFetch().mockResolvedValue(new Response(null, { status: 204 }));
-  await expect(request('/api/video/0')).rejects.toMatchObject({ status: 401 });
-  expect(fetch).not.toHaveBeenCalled();
-  localStorage.setItem(TOKEN, 'token');
+test('fetches CSRF metadata before a write, sends cookies and accepts 204', async () => {
+  clearSession();
+  const fetch = mockFetch().mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrfToken: 'csrf', expiresAt: Date.now() + 3600_000 }))).mockResolvedValueOnce(new Response(null, { status: 204 }));
   await expect(json('/api/user/change/password', {}, 'PATCH')).resolves.toBeUndefined();
-  clearToken();
+  expect(fetch.mock.calls[0][0]).toBe('/session');
+  expect(fetch.mock.calls[1][1]?.credentials).toBe('same-origin');
+  expect(new Headers(fetch.mock.calls[1][1]?.headers).get('X-CSRF-Token')).toBe('csrf');
+  clearSession();
 });
 
-test('validates token expiry for local startup only', () => {
-  const token = (exp: number) => `e30.${btoa(JSON.stringify({ exp }))}.x`;
+test('validates public session expiry metadata for offline startup only', () => {
+  localStorage.setItem(SESSION, JSON.stringify({ expiresAt: Date.now() + 1000 }));
+  expect(sessionValid()).toBe(true);
+  localStorage.setItem(SESSION, JSON.stringify({ expiresAt: 1 }));
+  expect(sessionValid()).toBe(false);
+  localStorage.setItem(SESSION, 'invalid');
+  expect(sessionValid()).toBe(false);
+});
 
-  expect(tokenValid(token(Date.now() / 1000 + 1000))).toBe(true);
-  expect(tokenValid(token(1))).toBe(false);
-  expect(tokenValid('invalid')).toBe(false);
+test('logout everywhere sends a CSRF-protected request and clears only local session metadata', async () => {
+  clearSession();
+  const fetch = mockFetch().mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrfToken: 'csrf', expiresAt: Date.now() + 3600_000 }))).mockResolvedValueOnce(new Response(null, { status: 204 }));
+  await sessionInfo();
+  await logout(true);
+  expect(fetch.mock.calls[1][0]).toBe('/api/logout-everywhere');
+  expect(new Headers(fetch.mock.calls[1][1]?.headers).get('X-CSRF-Token')).toBe('csrf');
+  expect(localStorage.getItem(SESSION)).toBeNull();
 });
 
 test('enforces length and at least three character categories without forcing all four', () => {

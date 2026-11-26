@@ -13,7 +13,7 @@ import { CommentService } from '@/service/CommentService';
 import { AuthService } from '@/service/AuthService';
 
 const video = { deleted: false, videoId: 'v1', title: 'encrypted', description: 'encrypted', meta: {}, recorded: new Date(0), lastModified: new Date(1), hmac: 'hmac', videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png' };
-const headers = { authorization: 'Bearer editor' };
+const headers = { cookie: '__Host-videovault-session=editor', 'x-csrf-token': 'c'.repeat(43) };
 
 describe('bounded encrypted packet uploads', () => {
   let app: FastifyInstance, directory: string, db: InMemoryDatabaseAdapter, storage: InMemoryStorageAdapter;
@@ -25,7 +25,9 @@ describe('bounded encrypted packet uploads', () => {
     storage = new InMemoryStorageAdapter();
     await db.postVideo(video);
     const auth = {
-      authenticate: jest.fn(async ({ token }: { token: string }) => (['editor', 'reader'].includes(token) ? { userId: token, editor: token === 'editor' } : null)),
+      findSession: jest.fn(async ({ sessionId }: { sessionId: string }) =>
+        ['editor', 'reader'].includes(sessionId) ? { user: { userId: sessionId, editor: sessionId === 'editor' }, expiresAt: Date.now() + 3600_000, csrfToken: 'c'.repeat(43) } : null
+      ),
       authorize: jest.fn((user: { editor: boolean }) => (user.editor ? ['editor'] : []))
     } as unknown as AuthService;
     app = createApp(
@@ -150,7 +152,7 @@ describe('bounded encrypted packet uploads', () => {
   test('requires editor privileges for all session operations and rejects tombstoned video IDs', async () => {
     const session = await start();
     for (const authorization of [undefined, 'Bearer reader']) {
-      const denied = authorization ? { authorization } : {};
+      const denied = authorization ? { cookie: '__Host-videovault-session=reader', 'x-csrf-token': 'c'.repeat(43) } : {};
       for (const [method, url] of [
         ['POST', '/api/video/upload/v1/start'],
         ['PUT', `${session}/video?offset=0`],

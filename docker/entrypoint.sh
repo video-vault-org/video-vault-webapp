@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 cd /data
-mkdir -p conf jwtkeys tmp storage img
+mkdir -p conf tmp storage img
 # Refresh the original branding on image upgrades; keep operator-provided image sets.
 cp /opt/video-vault/default-images/default.* img/
 

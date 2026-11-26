@@ -11,6 +11,7 @@ import { AuthService } from '@/service/AuthService';
 import { UserService } from '@/service/UserService';
 import { VideoService } from '@/service/VideoService';
 import { CommentService } from '@/service/CommentService';
+import { sessionSecurity } from './sessions';
 import { authentication } from './middleware';
 import { handleErrors, HttpError } from './errors';
 import { UploadStore } from './uploads';
@@ -39,6 +40,8 @@ const createHttpServer = function ({
 
   app.decorateRequest('user', null);
   app.decorateRequest('failure', null);
+  app.decorateRequest('authSession', null);
+  app.decorateRequest('sessionId', '');
 
   app.setErrorHandler(handleErrors);
 
@@ -65,6 +68,7 @@ const createApp = function (
     temporaryDirectory = './tmp',
     maxVideoBytes,
     maxThumbnailBytes,
+    insecureLocalCookies = false,
     logger,
     instance
   }: {
@@ -75,22 +79,39 @@ const createApp = function (
     temporaryDirectory?: string;
     maxVideoBytes?: number;
     maxThumbnailBytes?: number;
+    insecureLocalCookies?: boolean;
     logger?: FastifyServerOptions['logger'];
     instance?: FastifyInstance;
   }
 ): FastifyInstance {
+  if (insecureLocalCookies && process.env.NODE_ENV === 'production') throw new Error('Insecure development cookies are disabled in production');
   if (instanceSalt.length !== 64 || !/^[0-9a-f]{64}$/i.test(instanceSalt)) throw new TypeError('Instance salt must contain exactly 64 hexadecimal characters');
   const { title } = appConfigSchema.parse(appConfig);
   const meta = metaConfigSchema.parse(metaConfig);
   const app = instance ?? createHttpServer({ logger });
   const uploads = new UploadStore({ directory: temporaryDirectory, maxVideoBytes, maxThumbnailBytes });
-  const authenticate = authentication(auth);
-  registerDocumentation(app, { title, maxVideoBytes, maxThumbnailBytes });
+  const cookies = sessionSecurity(auth, insecureLocalCookies);
+  const authenticate = authentication(auth, cookies);
+  registerDocumentation(app, { title, maxVideoBytes, maxThumbnailBytes, sessionCookieName: cookies.cookieName });
 
   app.addHook('onRequest', async (request, reply) => {
-    const path = request.url.split('?')[0];
-    if (path === '/login' || path.startsWith('/login/') || path === '/api' || path.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
-    if (path === '/api' || path.startsWith('/api/')) await authenticate.call(app, request, reply);
+    const path = request.routeOptions.url ?? request.url.split('?')[0];
+    if (path === '/session' || path === '/login' || path.startsWith('/login/') || path === '/api' || path.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    if (path === '/api' || path.startsWith('/api/')) {
+      await authenticate.call(app, request, reply);
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) cookies.verify(request, request.authSession);
+    }
+    if (path === '/login' && request.method === 'POST') {
+      const sessionId = cookies.credential(request);
+      cookies.verify(request, sessionId ? await auth.findSession({ sessionId }) : null);
+    }
+  });
+
+  app.addHook('onSend', async (request, reply, payload) => {
+    const path = request.routeOptions.url;
+    const target = (request.params as { userId?: string })?.userId;
+    if (request.method === 'DELETE' && reply.statusCode === 204 && (path === '/api/user/delete' || (path === '/api/user/delete/:userId' && target === request.user?.userId))) cookies.clear(reply);
+    return payload;
   });
 
   app.register(multipart, { limits: { files: 2, fields: 0, parts: 2, fileSize: Math.max(maxVideoBytes ?? 2 * 1024 ** 3, maxThumbnailBytes ?? 20 * 1024 ** 2) } });
@@ -115,11 +136,37 @@ const createApp = function (
       }
     );
 
-    /** POST /login — Public. Accepts username and client loginHash; returns a JWT or 401 on failure/lock. */
-    routes.post('/login', { schema: { body: object({ username, loginHash: text }), response: { 200: object({ token: text }), ...errorResponses } } }, async (request) => {
-      const token = await auth.login(request.body);
-      if (!token) throw new HttpError(401, 'Invalid credentials or account locked');
-      return { token };
+    /** GET /session — Public. Returns a no-store CSRF challenge or current session metadata; never returns the cookie credential. */
+    routes.get('/session', { schema: { response: { 200: object({ authenticated: Type.Boolean(), csrfToken: text, expiresAt: Type.Union([Type.Number(), Type.Null()]) }), ...errorResponses } } }, async (request, reply) => {
+      const sessionId = cookies.credential(request);
+      const session = sessionId ? await auth.findSession({ sessionId }) : null;
+      return session ? { authenticated: true, csrfToken: session.csrfToken, expiresAt: session.expiresAt } : { authenticated: false, csrfToken: cookies.challenge(reply), expiresAt: null };
+    });
+
+    /** POST /login — Public with a pre-login CSRF challenge. Creates a new HttpOnly session cookie. */
+    routes.post('/login', { schema: { body: object({ username, loginHash: text }), response: { 200: object({ authenticated: Type.Literal(true), csrfToken: text, expiresAt: Type.Number() }), ...errorResponses } } }, async (request, reply) => {
+      const sessionId = await auth.login(request.body);
+      if (!sessionId) throw new HttpError(401, 'Invalid credentials or account locked');
+      const session = await auth.findSession({ sessionId });
+      if (!session) throw new HttpError(401, 'Session revoked');
+      const previous = cookies.credential(request);
+      if (previous) await auth.logout({ sessionId: previous });
+      cookies.issue(reply, sessionId, session.expiresAt);
+      return { authenticated: true as const, csrfToken: session.csrfToken, expiresAt: session.expiresAt };
+    });
+
+    /** POST /api/logout — Any authenticated user with CSRF proof. Revokes this session and clears its cookie. */
+    routes.post('/api/logout', { schema: { response: { 204: Type.Null(), ...errorResponses } } }, async (request, reply) => {
+      await auth.logout({ sessionId: request.sessionId });
+      cookies.clear(reply);
+      return reply.code(204).send(null);
+    });
+
+    /** POST /api/logout-everywhere — Any authenticated user with CSRF proof. Revokes all their sessions. */
+    routes.post('/api/logout-everywhere', { schema: { response: { 204: Type.Null(), ...errorResponses } } }, async (request, reply) => {
+      await auth.logoutEverywhere({ userId: request.user!.userId });
+      cookies.clear(reply);
+      return reply.code(204).send(null);
     });
   });
 

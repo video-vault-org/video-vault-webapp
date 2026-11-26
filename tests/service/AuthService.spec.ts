@@ -1,8 +1,4 @@
-import crypto, { randomBytes } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import jwt, { SignOptions, JwtPayload } from 'jsonwebtoken';
+import { createHash } from 'node:crypto';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { User } from '@/domain/User';
 import { AuthService } from '@/service/AuthService';
@@ -26,8 +22,6 @@ describe('AuthService', () => {
     moderator: false
   };
   const { username, userId } = user;
-  let directory: string;
-  let keyDirectory: string;
   let db: InMemoryDatabaseAdapter;
   let service: AuthService;
 
@@ -36,17 +30,14 @@ describe('AuthService', () => {
   });
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'video-vault-auth-'));
-    keyDirectory = join(directory, 'jwtkeys');
     db = new InMemoryDatabaseAdapter();
     await db.createUser(user);
-    service = new AuthService(db, { keyDirectory });
+    service = new AuthService(db);
   });
 
   afterEach(async () => {
     jest.useRealTimers();
     jest.restoreAllMocks();
-    await rm(directory, { recursive: true, force: true });
   });
 
   const seedAttempts = async function (count: number, lastAttempt = start, name = username): Promise<void> {
@@ -55,110 +46,23 @@ describe('AuthService', () => {
     }
   };
 
-  const signedToken = async function (payload: object = {}, options: SignOptions = {}): Promise<string> {
-    const key = await readFile(join(keyDirectory, 'key-0.key'));
-    return jwt.sign(payload, key, { algorithm: 'HS256', keyid: 'key-0', subject: userId, issuer: 'video-vault', audience: 'video-vault', expiresIn: 3600, ...options });
-  };
-
-  describe('constructor', () => {
-    test.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects invalid tokenLifetimeSeconds %s', (tokenLifetimeSeconds) => {
-      expect(() => new AuthService(db, { keyDirectory, tokenLifetimeSeconds })).toThrow(RangeError);
-    });
-  });
-
-  describe('initialize', () => {
-    test('creates ten distinct 256-bit keys with private directory and file permissions', async () => {
-      await service.initialize();
-
-      const files = await readdir(keyDirectory);
-      expect(files).toHaveLength(10);
-      const keys = [];
-      for (const file of files) {
-        const key = await readFile(join(keyDirectory, file));
-        expect(key).toHaveLength(32);
-        expect((await stat(join(keyDirectory, file))).mode & 0o777).toBe(0o600);
-        keys.push(key.toString('hex'));
-      }
-      expect(new Set(keys).size).toBe(10);
-      expect((await stat(keyDirectory)).mode & 0o777).toBe(0o700);
-    });
-
-    test('preserves existing keys and creates only missing files', async () => {
-      await mkdir(keyDirectory);
-      const existingKey = randomBytes(32);
-      await writeFile(join(keyDirectory, 'key-3.key'), existingKey);
-      await writeFile(join(keyDirectory, 'notes.txt'), 'unrelated');
-
-      await Promise.all([service.initialize(), service.initialize()]);
-      const original = await readFile(join(keyDirectory, 'key-0.key'));
-      await service.initialize();
-
-      expect(await readFile(join(keyDirectory, 'key-3.key'))).toEqual(existingKey);
-      expect(await readFile(join(keyDirectory, 'key-0.key'))).toEqual(original);
-      expect(await readFile(join(keyDirectory, 'notes.txt'), 'utf8')).toBe('unrelated');
-      expect((await readdir(keyDirectory)).filter((file) => file.endsWith('.key'))).toHaveLength(10);
-    });
-
-    test('loads persisted keys after a service restart without changing them', async () => {
-      await service.initialize();
-      const token = await service.login({ username, loginHash });
-      const original = await readFile(join(keyDirectory, 'key-0.key'));
-      const restarted = new AuthService(db, { keyDirectory });
-
-      await restarted.initialize();
-
-      expect(await restarted.authenticate({ token: token! })).toEqual(user);
-      expect(await readFile(join(keyDirectory, 'key-0.key'))).toEqual(original);
-    });
-
-    test('rejects malformed keys without replacing them and permits retry after repair', async () => {
-      await mkdir(keyDirectory);
-      const path = join(keyDirectory, 'key-0.key');
-      await writeFile(path, 'invalid');
-
-      await expect(service.initialize()).rejects.toThrow('Invalid JWT key');
-      expect(await readFile(path, 'utf8')).toBe('invalid');
-      await expect(service.login({ username, loginHash })).rejects.toThrow('not initialized');
-
-      await writeFile(path, randomBytes(32));
-      await service.initialize();
-      expect(await service.login({ username, loginHash })).toEqual(expect.any(String));
-    });
-
-    test('propagates filesystem errors', async () => {
-      await writeFile(keyDirectory, 'not a directory');
-
-      await expect(service.initialize()).rejects.toThrow();
-    });
-
-    test('uses ./jwtkeys by default', async () => {
-      const originalDirectory = process.cwd();
-      process.chdir(directory);
-      try {
-        await new AuthService(db).initialize();
-        expect(await readdir('./jwtkeys')).toHaveLength(10);
-      } finally {
-        process.chdir(originalDirectory);
-      }
-    });
-  });
-
-  test('login and authenticate require initialization', async () => {
+  test('requires initialization and validates lifetime', async () => {
     await expect(service.login({ username, loginHash })).rejects.toThrow('not initialized');
-    await expect(service.authenticate({ token: 'invalid' })).rejects.toThrow('not initialized');
+    await expect(service.authenticate({ sessionId: 'invalid' })).rejects.toThrow('not initialized');
     await expect(service.verifyCurrentPassword({ userId, loginHash })).rejects.toThrow('not initialized');
+    for (const sessionLifetimeSeconds of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER]) expect(() => new AuthService(db, { sessionLifetimeSeconds })).toThrow(RangeError);
   });
 
   describe('initialized service', () => {
     beforeEach(async () => {
-      await service.initialize();
+      await Promise.all([service.initialize(), service.initialize()]);
       jest.useFakeTimers({ now: start, doNotFake: ['nextTick', 'setImmediate'] });
     });
 
     describe('verifyCurrentPassword', () => {
       test('verifies the current proof without issuing a token and clears failed attempts', async () => {
         await db.increaseAttemptsCountByUsername({ username, lastAttempt: start });
-        const sign = jest.spyOn(jwt, 'sign');
+        const sign = jest.spyOn(db, 'createSession');
         expect(await service.verifyCurrentPassword({ userId, loginHash })).toBe(true);
         expect(sign).not.toHaveBeenCalled();
         expect(await db.findOneAttemptsCountByUsername({ username })).toBeNull();
@@ -190,41 +94,29 @@ describe('AuthService', () => {
     });
 
     describe('login', () => {
-      test('signs an HS256 JWT with a known key and one-hour lifetime without exposing credentials', async () => {
-        const token = await service.login({ username, loginHash });
-        expect(token).toEqual(expect.any(String));
-        const decoded = jwt.decode(token!, { complete: true })!;
-        expect(decoded.header).toMatchObject({ alg: 'HS256', typ: 'JWT', kid: expect.stringMatching(/^key-[0-9]$/) });
-        expect(decoded.payload).toEqual({ sub: userId, iss: 'video-vault', aud: 'video-vault', iat: start.getTime() / 1000, exp: start.getTime() / 1000 + 3600 });
-        const key = await readFile(join(keyDirectory, `${decoded.header.kid}.key`));
-        expect(jwt.verify(token!, key, { algorithms: ['HS256'] })).toEqual(decoded.payload);
-        expect(await service.authenticate({ token: token! })).toEqual(user);
-        expect(await db.findOneAttemptsCountByUsername({ username })).toBeNull();
+      test('creates unique opaque credentials and persists only their digests', async () => {
+        const create = jest.spyOn(db, 'createSession');
+        const first = (await service.login({ username, loginHash }))!;
+        const second = (await service.login({ username, loginHash }))!;
+        expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
+        expect(second).not.toBe(first);
+        expect(create.mock.calls[0][0]).toEqual({ sessionId: createHash('sha256').update(first).digest('hex'), userId, version: '', expiresAt: start.getTime() + 3600_000 });
+        expect(await service.authenticate({ sessionId: first })).toEqual(user);
+        expect(await service.findSession({ sessionId: first })).toEqual({ user, expiresAt: start.getTime() + 3600_000, csrfToken: service.csrfToken(first) });
+        expect(service.csrfToken(first)).not.toBe(first);
+        expect(await service.authenticate({ sessionId: service.csrfToken(first) })).toBeNull();
       });
 
-      test('supports a configurable JWT lifetime and rejects the token at its expiration', async () => {
-        const shortLived = new AuthService(db, { keyDirectory, tokenLifetimeSeconds: 60 });
-        await shortLived.initialize();
-        const token = (await shortLived.login({ username, loginHash }))!;
+      test('persists sessions across service restarts and enforces exact expiry', async () => {
+        const short = new AuthService(db, { sessionLifetimeSeconds: 60 });
+        await short.initialize();
+        const sessionId = (await short.login({ username, loginHash }))!;
+        const restarted = new AuthService(db);
+        await restarted.initialize();
         jest.setSystemTime(start.getTime() + 59_999);
-        expect(await shortLived.authenticate({ token })).toEqual(user);
+        expect(await restarted.authenticate({ sessionId })).toEqual(user);
         jest.setSystemTime(start.getTime() + 60_000);
-        expect(await shortLived.authenticate({ token })).toBeNull();
-      });
-
-      test('uses a randomly selected key when signing each JWT', async () => {
-        const choose = jest
-          .spyOn(crypto, 'randomInt')
-          .mockImplementationOnce(() => 2)
-          .mockImplementationOnce(() => 7);
-        const first = await service.login({ username, loginHash });
-        const second = await service.login({ username, loginHash });
-
-        expect(jwt.decode(first!, { complete: true })!.header.kid).toBe('key-2');
-        expect(jwt.decode(second!, { complete: true })!.header.kid).toBe('key-7');
-        expect(choose).toHaveBeenCalledWith(10);
-        expect(await service.authenticate({ token: first! })).toEqual(user);
-        expect(await service.authenticate({ token: second! })).toEqual(user);
+        expect(await restarted.authenticate({ sessionId })).toBeNull();
       });
 
       test.each([username, 'unknown-user'])('counts invalid credentials for %s without changing another counter', async (name) => {
@@ -361,74 +253,52 @@ describe('AuthService', () => {
       });
     });
 
-    describe('authenticate', () => {
-      test.each(['', 'not-a-jwt', 'a.b.c', 'eyJhbGciOiJIUzI1NiJ9.!.!', 'Bearer token'])('rejects malformed token %s', async (token) => {
-        await expect(service.authenticate({ token })).resolves.toBeNull();
-      });
+    test('logout revokes only one session and is idempotent', async () => {
+      const first = (await service.login({ username, loginHash }))!;
+      const second = (await service.login({ username, loginHash }))!;
+      await service.logout({ sessionId: first });
+      await service.logout({ sessionId: first });
+      expect(await service.authenticate({ sessionId: first })).toBeNull();
+      expect(await service.authenticate({ sessionId: second })).toEqual(user);
+    });
 
-      test('rejects altered claims and an invalid signature', async () => {
-        const token = await signedToken();
-        const [header, , signature] = token.split('.');
-        const payload = Buffer.from(JSON.stringify({ sub: 'attacker', exp: start.getTime() / 1000 + 3600 })).toString('base64url');
-        expect(await service.authenticate({ token: `${header}.${payload}.${signature}` })).toBeNull();
-        const forged = jwt.sign({ sub: userId } as JwtPayload, randomBytes(32), { algorithm: 'HS256', keyid: 'key-0', expiresIn: 3600 });
-        expect(await service.authenticate({ token: forged })).toBeNull();
-      });
+    test('logout everywhere revokes old sessions across restarts but permits a new login', async () => {
+      const first = (await service.login({ username, loginHash }))!;
+      const second = (await service.login({ username, loginHash }))!;
+      await service.logoutEverywhere({ userId });
+      const restarted = new AuthService(db);
+      await restarted.initialize();
+      expect(await restarted.authenticate({ sessionId: first })).toBeNull();
+      expect(await restarted.authenticate({ sessionId: second })).toBeNull();
+      expect(await restarted.authenticate({ sessionId: (await restarted.login({ username, loginHash }))! })).toEqual(user);
+    });
 
-      test.each(['none', 'HS384', 'HS512'] as const)('rejects the algorithm %s', async (algorithm) => {
-        expect(await service.authenticate({ token: await signedToken({}, { algorithm }) })).toBeNull();
-      });
+    test('deleting and recreating a user cannot revive their sessions', async () => {
+      const sessionId = (await service.login({ username, loginHash }))!;
+      await new UserService(db).deleteUser({ userId });
+      await db.createUser(user);
+      expect(await service.authenticate({ sessionId })).toBeNull();
+    });
 
-      test.each(['unknown-key', '../../secret'])('rejects the unknown key ID %s', async (keyid) => {
-        expect(await service.authenticate({ token: await signedToken({}, { keyid }) })).toBeNull();
-      });
+    test('loads current roles and rejects deleted users, random credentials and malformed values', async () => {
+      const sessionId = (await service.login({ username, loginHash }))!;
+      await db.changeUsersEditorRoleByUserId({ userId, editor: true });
+      expect(await service.authenticate({ sessionId })).toMatchObject({ editor: true });
+      for (const id of ['', 'a.b.c', 'x'.repeat(43), 'Bearer token']) expect(await service.authenticate({ sessionId: id })).toBeNull();
+      await db.deleteUserByUserId({ userId });
+      expect(await service.authenticate({ sessionId })).toBeNull();
+    });
 
-      test('rejects a missing key ID', async () => {
-        const key = await readFile(join(keyDirectory, 'key-0.key'));
-        const token = jwt.sign({ sub: userId } as JwtPayload, key, { algorithm: 'HS256', expiresIn: 3600 });
-        expect(await service.authenticate({ token })).toBeNull();
-      });
-
-      test.each([{ issuer: 'foreign-app' }, { audience: 'foreign-app' }, { expiresIn: -1 }, { notBefore: 60 }])('rejects invalid token claims %j', async (options) => {
-        expect(await service.authenticate({ token: await signedToken({}, options) })).toBeNull();
-      });
-
-      test('requires an expiration and a nonempty user ID', async () => {
-        const key = await readFile(join(keyDirectory, 'key-0.key'));
-        for (const payload of [{ sub: userId }, { exp: start.getTime() / 1000 + 3600 }, { sub: '', exp: start.getTime() / 1000 + 3600 }, { sub: 123, exp: start.getTime() / 1000 + 3600 }]) {
-          const token = jwt.sign(payload, key, { algorithm: 'HS256', keyid: 'key-0', issuer: 'video-vault', audience: 'video-vault' });
-          expect(await service.authenticate({ token })).toBeNull();
-        }
-      });
-
-      test('loads the current user by ID, including updated roles and username', async () => {
-        const token = await signedToken();
-        await db.changeUsersAdminRoleByUserId({ userId, admin: false });
-        await db.changeUsersEditorRoleByUserId({ userId, editor: true });
-        await db.changeUsersUsernameByUserId({ userId, username: 'renamed', loginHash: user.loginHash });
-        const lookup = jest.spyOn(db, 'findOneUserByUserId');
-
-        const current = await service.authenticate({ token });
-
-        expect(lookup).toHaveBeenCalledWith({ userId });
-        expect(current).toEqual({ ...user, username: 'renamed', admin: false, editor: true });
-        expect(service.authorize(current!)).toEqual(['editor']);
-      });
-
-      test('returns null after the user has been deleted', async () => {
-        const token = await signedToken();
-        await db.deleteUserByUserId({ userId });
-
-        expect(await service.authenticate({ token })).toBeNull();
-      });
-
-      test('propagates database errors for a valid JWT', async () => {
-        const error = new Error('Database unavailable');
-        const token = await signedToken();
-        jest.spyOn(db, 'findOneUserByUserId').mockRejectedValueOnce(error);
-
-        await expect(service.authenticate({ token })).rejects.toBe(error);
-      });
+    test('propagates session persistence and revocation failures', async () => {
+      const error = new Error('Unavailable');
+      jest.spyOn(db, 'createSession').mockRejectedValueOnce(error);
+      await expect(service.login({ username, loginHash })).rejects.toBe(error);
+      jest.spyOn(db, 'findSessionById').mockRejectedValueOnce(error);
+      await expect(service.findSession({ sessionId: 'a'.repeat(43) })).rejects.toBe(error);
+      jest.spyOn(db, 'deleteSessionById').mockRejectedValueOnce(error);
+      await expect(service.logout({ sessionId: 'a'.repeat(43) })).rejects.toBe(error);
+      jest.spyOn(db, 'changeSessionVersionByUserId').mockRejectedValueOnce(error);
+      await expect(service.logoutEverywhere({ userId })).rejects.toBe(error);
     });
   });
 

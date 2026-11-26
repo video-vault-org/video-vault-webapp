@@ -58,7 +58,7 @@ describe('startServer', () => {
     running = undefined;
     occupying = undefined;
     jest.restoreAllMocks();
-    for (const key of ['VIDEO_VAULT_PORT', 'HOST', 'STATIC_DIRECTORY', 'VIDEO_UPLOAD_LIMIT_BYTES', 'THUMBNAIL_UPLOAD_LIMIT_BYTES', 'JWT_TTL_SECONDS']) {
+    for (const key of ['VIDEO_VAULT_PORT', 'HOST', 'STATIC_DIRECTORY', 'VIDEO_UPLOAD_LIMIT_BYTES', 'THUMBNAIL_UPLOAD_LIMIT_BYTES', 'SESSION_TTL_SECONDS', 'VIDEO_VAULT_INSECURE_LOCAL_COOKIES']) {
       if (environment[key] === undefined) delete process.env[key];
       else process.env[key] = environment[key];
     }
@@ -181,8 +181,8 @@ describe('startServer', () => {
     await expect(startServer({ port: 0 })).rejects.toBe(error);
   });
 
-  test('validates the configured JWT lifetime', async () => {
-    process.env.JWT_TTL_SECONDS = '0';
+  test('validates the configured session lifetime', async () => {
+    process.env.SESSION_TTL_SECONDS = '0';
 
     await expect(startServer({ port: 0 })).rejects.toThrow(RangeError);
     expect(resetDb).toHaveBeenCalledTimes(1);
@@ -221,5 +221,9 @@ describe('startServer', () => {
     await expect(startServer({ staticDirectory: directory })).rejects.toThrow('Invalid VIDEO_VAULT_PORT');
     expect(loadDb).not.toHaveBeenCalled();
     expect(prepareFrontend).not.toHaveBeenCalled();
+  });
+  test('rejects non-loopback binds when development cookies are explicitly enabled', async () => {
+    process.env.VIDEO_VAULT_INSECURE_LOCAL_COOKIES = 'true';
+    await expect(startServer({ port: 0, host: '0.0.0.0' })).rejects.toThrow('loopback');
   });
 });

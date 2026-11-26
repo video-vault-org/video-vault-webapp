@@ -42,8 +42,10 @@ const wrap = function (data, k) {
 
 const encrypt = function (data, context, identity) {
   const key = randomBytes(32),
-    parts = [wrap(key, master)],
     count = Math.max(1, Math.ceil(data.length / 34816));
+  /** @type {Buffer[]} */
+  const parts = [wrap(key, master)];
+
   for (let i = 0; i < count; i++) {
     const iv = randomBytes(12),
       cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -71,11 +73,20 @@ for (const username of ['admin', 'reader']) {
 
 const sample = await readFile(join(root, 'frontend/e2e/fixtures/sample.mp4')),
   thumbnail = await readFile(join(root, 'logo.png'));
-for (const [id, title, description, date, people] of [
+/** @type {Array<[string, string, string, string, string[]]>} */
+const videoFixtures = [
   ['v1', 'Ein Sommer am See', 'Ein stiller Morgen, warmes Licht und das Wasser vor uns. Erinnerungen an einen gemeinsamen Sommer.', '2026-08-12', ['Familie', 'Freunde']],
   ['v2', 'Unterwegs in den Bergen', 'Zwischen Gipfeln und Wolken: unser Wochenende im Grünen.', '2026-07-24', ['Freunde']],
   ['v3', 'Ein Abend im Garten', 'Gutes Essen, lange Gespräche und ein ganz besonderer Abend.', '2026-06-09', ['Familie']]
-]) {
+];
+
+/** @type {Array<['video' | 'thumbnail', Buffer]>} */
+const fileFixtures = [
+  ['video', sample],
+  ['thumbnail', thumbnail]
+];
+
+for (const [id, title, description, date, people] of videoFixtures) {
   const item = {
     deleted: false,
     videoId: id,
@@ -87,14 +98,11 @@ for (const [id, title, description, date, people] of [
     videoMimeType: 'video/mp4',
     thumbnailMimeType: 'image/png'
   };
-  item.hmac = createHmac('sha256', authKey)
+  const hmac = createHmac('sha256', authKey)
     .update(canonical({ ...item, title: item.title.length, description: item.description.length }))
     .digest('base64');
-  await db.postVideo({ ...item, recorded: new Date(item.recorded), lastModified: new Date(item.lastModified) });
-  for (const [kind, raw] of [
-    ['video', sample],
-    ['thumbnail', thumbnail]
-  ]) {
+  await db.postVideo({ ...item, hmac, recorded: new Date(item.recorded), lastModified: new Date(item.lastModified) });
+  for (const [kind, raw] of fileFixtures) {
     const path = join(directory, `${id}.${kind}`);
     await writeFile(path, encrypt(raw, kind, `${id}.${kind}`));
     await adapter.save(path, `${id}.${kind}`);
@@ -109,12 +117,13 @@ for (const name of ['logo.png', 'icon-32.png', 'icon-192.png', 'icon-512.png']) 
   await cp(join(imageDirectory, `default.${name === 'logo.png' ? 'icon-32.png' : name}`), join(imageDirectory, `fm.${name}`));
 }
 await prepareFrontend({ staticDirectory, imageDirectory, prefix: 'default', title: 'Our private archive' });
-const auth = new AuthService(db, { keyDirectory: join(directory, 'jwtkeys') });
+const auth = new AuthService(db);
 await auth.initialize();
 const app = createApp(
   { auth, users, videos: new VideoService(new StorageWrapper(adapter, { temporaryDirectory: directory }), db), comments: new CommentService(db) },
   {
     instanceSalt: salt,
+    insecureLocalCookies: true,
     staticDirectory,
     temporaryDirectory: directory,
     appConfig: { title: 'Our private archive' },
@@ -133,13 +142,16 @@ const app = createApp(
     logger: false
   }
 );
+
 // This endpoint exists only in this isolated test fixture and never in the production application.
 app.post('/__test/images/:prefix', async (request) => {
-  const { prefix } = request.params;
+  const { prefix } = /** @type {{ prefix: string }} */ (request.params);
   if (!['default', 'fm'].includes(prefix)) throw new Error('Unknown test image set');
   return { version: await prepareFrontend({ staticDirectory, imageDirectory, prefix, title: 'Our private archive' }) };
 });
+
 await app.listen({ host: '127.0.0.1', port: Number(process.env.FRONTEND_TEST_PORT ?? 4217) });
+
 for (const signal of ['SIGINT', 'SIGTERM'])
   process.once(signal, async () => {
     await app.close();

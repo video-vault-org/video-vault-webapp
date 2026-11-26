@@ -38,7 +38,7 @@ describe('compiled Fastify request and response schemas', () => {
     users = new UserService(db);
     videos = new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db);
     comments = new CommentService(db);
-    jest.spyOn(auth, 'authenticate').mockResolvedValue(account);
+    jest.spyOn(auth, 'findSession').mockResolvedValue({ user: account, expiresAt: Date.now() + 3600_000, csrfToken: 'c'.repeat(43) });
     app = createApp({ auth, users, videos, comments }, { instanceSalt: 'ab'.repeat(32), logger: false });
   });
 
@@ -47,13 +47,13 @@ describe('compiled Fastify request and response schemas', () => {
     jest.restoreAllMocks();
   });
 
-  const headers = { authorization: 'Bearer token' };
+  const headers = { cookie: '__Host-videovault-session=token', 'x-csrf-token': 'c'.repeat(43) };
 
   test.each([{ username: 'alice', loginHash: 123 }, { username: 'alice', loginHash: 'hash', admin: true }, { username: '', loginHash: 'hash' }, { username: 'ab', loginHash: 'hash' }, { username: 'alice' }])(
     'rejects invalid login bodies without calling the service (%j)',
     async (payload) => {
       const login = jest.spyOn(auth, 'login');
-      const response = await app.inject({ method: 'POST', url: '/login', payload });
+      const response = await app.inject({ method: 'POST', url: '/login', headers, payload });
       expect(response.statusCode).toBe(400);
       expect(response.json()).toEqual({ error: 'Invalid request' });
       expect(login).not.toHaveBeenCalled();
@@ -168,9 +168,9 @@ describe('compiled Fastify request and response schemas', () => {
   });
 
   test('authentication and authorization run before body validation', async () => {
-    jest.mocked(auth.authenticate).mockResolvedValueOnce(null);
+    jest.mocked(auth.findSession).mockResolvedValueOnce(null);
     expect((await app.inject({ method: 'POST', url: '/api/user/add', headers, payload: { invalid: true } })).statusCode).toBe(401);
-    jest.mocked(auth.authenticate).mockResolvedValueOnce({ ...account, admin: false });
+    jest.mocked(auth.findSession).mockResolvedValueOnce({ user: { ...account, admin: false }, expiresAt: Date.now() + 3600_000, csrfToken: 'c'.repeat(43) });
     expect((await app.inject({ method: 'POST', url: '/api/user/add', headers, payload: { invalid: true } })).statusCode).toBe(403);
   });
 

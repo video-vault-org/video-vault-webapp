@@ -1,3 +1,4 @@
+import { sessionContract } from './sessionContract';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { InMemoryDatabaseAdapter } from '@/db/adapters/InMemoryDatabaseAdapter';
 import { Comment } from '@/domain/Comment';
@@ -475,4 +476,5 @@ describe('InMemoryDatabaseAdapter', () => {
       expect(await db.findOneAttemptsCountByUsername({ username: 'missing' })).toBeNull();
     });
   });
+  sessionContract(() => db);
 });

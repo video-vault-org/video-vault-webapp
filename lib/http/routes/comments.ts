@@ -25,7 +25,7 @@ const commentRoutes = function (app: FastifyInstance, comments: CommentService, 
     return item;
   };
 
-  /** POST /api/comment/submit — Any authenticated user. Author comes from JWT; edited and deleted begin as false. */
+  /** POST /api/comment/submit — Any authenticated user. Author comes from the authenticated session; edited and deleted begin as false. */
   router.post(
     '/comment/submit',
     { schema: { body: object({ commentId: id, videoId: id, content: Type.String({ maxLength: 1_000_000 }), created: date, lastModified: date, hmac: text }), response: { 201: commentDto, ...errorResponses } } },

@@ -41,7 +41,7 @@ describe('verified frontend and strict CSP', () => {
   });
 
   test('HTTP serves only verified assets and sets restrictive page headers', async () => {
-    const services = { auth: { authenticate: jest.fn(), authorize: jest.fn() }, users: {}, videos: {}, comments: {} } as unknown as Parameters<typeof createApp>[0];
+    const services = { auth: { findSession: jest.fn(), authorize: jest.fn() }, users: {}, videos: {}, comments: {} } as unknown as Parameters<typeof createApp>[0];
     const app = createApp(services, { staticDirectory: directory, temporaryDirectory: directory, instanceSalt: 'ab'.repeat(32), logger: false });
     try {
       await app.ready();

@@ -1,3 +1,4 @@
+import { sessionContract } from './sessionContract';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Pool } from 'pg';
@@ -80,7 +81,7 @@ describe('PostgresqlDatabaseAdapter', () => {
     if (!admin) {
       return;
     }
-    await admin.query('TRUNCATE users, videos, comments, login_attempts');
+    await admin.query('TRUNCATE users, videos, comments, login_attempts, sessions, session_versions');
     db = new PostgresqlDatabaseAdapter(config);
     await db.open();
   });
@@ -570,4 +571,5 @@ describe('PostgresqlDatabaseAdapter', () => {
       expect(await db.findOneAttemptsCountByUsername({ username: 'missing' })).toBeNull();
     });
   });
+  sessionContract(() => db);
 });

@@ -1,3 +1,4 @@
+import { Session } from '@/domain/Session';
 import { User } from '@/domain/User';
 import { UserDisplayName } from '@/domain/UserDisplayName';
 import { Video } from '@/domain/Video';
@@ -24,6 +25,21 @@ interface DatabaseAdapter {
    * Creates the required tables, indexes, primary keys, etc.
    */
   initialize(): Promise<void>;
+
+  /** Stores a session whose sessionId is an SHA-256 digest, never the browser credential. */
+  createSession(session: Session): Promise<void>;
+
+  /** Finds a session by credential digest. Expiry must also be checked by AuthService. */
+  findSessionById({ sessionId }: { sessionId: string }): Promise<Session | null>;
+
+  /** Revokes one session immediately. Missing sessions are ignored. */
+  deleteSessionById({ sessionId }: { sessionId: string }): Promise<void>;
+
+  /** Strongly reads the user's revocation version; an absent record has version ''. */
+  findSessionVersionByUserId({ userId }: { userId: string }): Promise<string>;
+
+  /** Atomically replaces the revocation version, invalidating all previously issued sessions. */
+  changeSessionVersionByUserId({ userId, version }: { userId: string; version: string }): Promise<void>;
 
   /**
    * Creates a new user

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError, bootstrap, clearToken, json, TOKEN, tokenValid } from './lib/api';
+import { ApiError, bootstrap, clearSession, json, SESSION, sessionInfo, sessionValid, logout as logoutSession } from './lib/api';
 import { createKeys, decryptText, loginHash, passwordAttributes, unlock, verify } from './lib/crypto';
 import { get, removePrefix, emptyCatalog, mergeCatalog, saveCatalog, type Catalog } from './lib/cache';
 import { excerpt, filterVideos, formatValue, sortVideos } from './lib/catalog';
@@ -74,11 +74,10 @@ const Login = function ({
             void task.run(async () => {
               let user = cached;
               if (!user) {
-                const result = await json<{ token: string }>('/login', {
+                await json('/login', {
                   username,
                   loginHash: await loginHash(password, username, config.instanceSalt)
                 });
-                localStorage.setItem(TOKEN, result.token);
                 user = await json<User>('/api/user/me');
               }
               if (user.userKey === '') {
@@ -141,7 +140,7 @@ const Login = function ({
                   : t('Anmelden', 'Sign in')}
           </button>
           {cached && (
-            <button type="button" className="link-button" onClick={() => clearToken()}>
+            <button type="button" className="link-button" onClick={() => void task.run(() => logoutSession())}>
               {t('Mit anderem Konto anmelden', 'Use another account')}
             </button>
           )}
@@ -500,8 +499,8 @@ const Application = function () {
     [passwordWarning, setPasswordWarning] = useState(false),
     [workerWarning, setWorkerWarning] = useState(false),
     [invitation, setInvitation] = useState(readInvitation);
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN);
+  const resetSession = useCallback(() => {
+    localStorage.removeItem(SESSION);
     setSession(undefined);
     setCached(undefined);
     setForced(false);
@@ -510,10 +509,10 @@ const Application = function () {
   }, []);
 
   useEffect(() => {
-    window.addEventListener('vault:unauthorized', logout);
+    window.addEventListener('vault:unauthorized', resetSession);
 
-    return () => window.removeEventListener('vault:unauthorized', logout);
-  }, [logout]);
+    return () => window.removeEventListener('vault:unauthorized', resetSession);
+  }, [resetSession]);
 
   const start = async function () {
     await task.run(async () => {
@@ -522,21 +521,20 @@ const Application = function () {
       setConfig(b);
       document.title = b.app.title;
       document.documentElement.lang = language;
-      const token = localStorage.getItem(TOKEN);
       if (invitation) {
-        logout();
-        return;
-      }
-      if (!token || !tokenValid(token)) {
-        logout();
+        const info = await sessionInfo();
+        if (info.authenticated) await logoutSession();
+        resetSession();
         return;
       }
       let user: User;
       try {
+        const info = await sessionInfo();
+        if (!info.authenticated) { resetSession(); return; }
         user = await json<User>('/api/user/me');
         localStorage.setItem(cachedUserKey, JSON.stringify(user));
       } catch (e) {
-        if (!(e instanceof TypeError)) throw e;
+        if (!(e instanceof TypeError) || !sessionValid()) throw e;
         const saved = localStorage.getItem(cachedUserKey);
         if (!saved) throw e;
         user = JSON.parse(saved);
@@ -554,12 +552,12 @@ const Application = function () {
     const workerWarning = () => setWorkerWarning(true);
 
     const storage = (event: StorageEvent) => {
-      if (event.key === TOKEN) {
+      if (event.key === SESSION) {
         setSession(undefined);
         setCached(undefined);
         clearMedia();
         if (event.newValue)
-          void json<User>('/api/user/me')
+          void sessionInfo().then((info) => info.authenticated ? json<User>('/api/user/me') : undefined)
             .then(setCached)
             .catch(() => {});
       }
@@ -611,7 +609,10 @@ const Application = function () {
           >
             {language === 'de' ? 'EN' : 'DE'}
           </button>
-          {session && <button onClick={logout}>{t('Abmelden', 'Sign out')}</button>}
+          {session && <>
+            <button disabled={task.pending} onClick={() => void task.run(() => logoutSession())}>{t('Abmelden', 'Sign out')}</button>
+            <button disabled={task.pending} onClick={() => void task.run(() => logoutSession(true))}>{t('Überall abmelden', 'Sign out everywhere')}</button>
+          </>}
         </nav>
       </header>
       {passwordWarning && (
@@ -667,7 +668,7 @@ const Application = function () {
               setConfig(fresh);
               document.title = fresh.app.title;
             }}
-            logout={logout}
+            logout={() => clearSession()}
           />
         )
       ) : (
@@ -702,8 +703,8 @@ const Application = function () {
                     )
                   )
                 ) {
+                  await logoutSession();
                   await removePrefix(`${config?.instanceSalt}:${session.user.userId}:`);
-                  logout();
                 }
               })
             }

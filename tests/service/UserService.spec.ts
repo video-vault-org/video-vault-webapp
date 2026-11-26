@@ -85,6 +85,19 @@ describe('UserService', () => {
     });
   });
 
+  test('revokes all sessions before deleting an account, and stops on a revocation error', async () => {
+    await db.createUser(user);
+    const revoke = jest.spyOn(db, 'changeSessionVersionByUserId');
+    const remove = jest.spyOn(db, 'deleteUserByUserId');
+    const failure = new Error('Unavailable');
+    revoke.mockRejectedValueOnce(failure);
+    await expect(service.deleteUser({ userId })).rejects.toBe(failure);
+    expect(remove).not.toHaveBeenCalled();
+    await service.deleteUser({ userId });
+    expect(await db.findSessionVersionByUserId({ userId })).not.toBe('');
+    expect(revoke.mock.invocationCallOrder[1]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+  });
+
   describe('deleteUser', () => {
     test('marks comments as deleted before deleting the user', async () => {
       const mark = jest.spyOn(db, 'markCommentsAsDeletedByUserId').mockResolvedValue(undefined);

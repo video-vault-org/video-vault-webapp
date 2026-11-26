@@ -1,60 +1,93 @@
 import type { Bootstrap } from './types';
 
-const TOKEN = 'videovault.token',
-  BOOTSTRAP = 'videovault.bootstrap';
+interface SessionInfo {
+  authenticated: boolean;
+  csrfToken: string;
+  expiresAt: number | null;
+}
+
+const SESSION = 'videovault.session';
+const BOOTSTRAP = 'videovault.bootstrap';
+let csrfToken = '';
+let pendingSession: Promise<SessionInfo> | undefined;
+
 class ApiError extends Error {
   constructor(public status: number) {
     super(String(status));
   }
 }
 
-const clearToken = function () {
-  localStorage.removeItem(TOKEN);
+/** Stores only public expiry metadata. The authentication cookie remains inaccessible to JavaScript. */
+const rememberSession = function (info: SessionInfo): void {
+  csrfToken = info.csrfToken;
+  if (info.authenticated && info.expiresAt) localStorage.setItem(SESSION, JSON.stringify({ expiresAt: info.expiresAt }));
+  else localStorage.removeItem(SESSION);
+};
+
+const clearSession = function (): void {
+  csrfToken = '';
+  localStorage.removeItem(SESSION);
   window.dispatchEvent(new Event('vault:unauthorized'));
 };
 
-const request = async function (path: string, init: RequestInit = {}): Promise<Response> {
-  const token = localStorage.getItem(TOKEN);
-  if (path.startsWith('/api/') && !token) {
-    clearToken();
-    throw new ApiError(401);
+const sessionInfo = async function (): Promise<SessionInfo> {
+  pendingSession ??= fetch('/session', { credentials: 'same-origin', cache: 'no-store', redirect: 'error' }).then(async (response) => {
+    if (!response.ok) throw new ApiError(response.status);
+    const info: SessionInfo = await response.json();
+    rememberSession(info);
+    return info;
+  }).finally(() => { pendingSession = undefined; });
+  return pendingSession;
+};
+
+const sessionValid = function (): boolean {
+  try {
+    const value = JSON.parse(localStorage.getItem(SESSION) ?? 'null');
+    return typeof value?.expiresAt === 'number' && value.expiresAt > Date.now();
+  } catch {
+    return false;
   }
+};
+
+const request = async function (path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (token && path.startsWith('/api/')) headers.set('Authorization', `Bearer ${token}`);
-  const result = await fetch(path, { ...init, headers, cache: 'no-store', credentials: 'omit', redirect: 'error' });
-  if (result.status === 401) clearToken();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes((init.method ?? 'GET').toUpperCase())) {
+    if (path === '/login' || !csrfToken) await sessionInfo();
+    headers.set('X-CSRF-Token', csrfToken);
+  }
+  const result = await fetch(path, { ...init, headers, cache: 'no-store', credentials: 'same-origin', redirect: 'error' });
+  if (result.status === 401) clearSession();
   if (!result.ok) throw new ApiError(result.status);
   return result;
 };
 
-const json = async function <T>(
-  path: string,
-  body?: unknown,
-  method = body === undefined ? 'GET' : 'POST'
-): Promise<T> {
-  const response = await request(path, {
-    method,
-    ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
-  });
-  return response.status === 204 ? (undefined as T) : response.json();
+const json = async function <T>(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+  const response = await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }) });
+  const result = response.status === 204 ? undefined : await response.json();
+  if (path === '/login') rememberSession(result);
+  return result as T;
+};
+
+const logout = async function (everywhere = false): Promise<void> {
+  try {
+    await json(everywhere ? '/api/logout-everywhere' : '/api/logout', undefined, 'POST');
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 401)) throw error;
+  }
+  clearSession();
 };
 
 const upload = async function (path: string, data: FormData, onProgress: (progress: number) => void): Promise<void> {
-  const token = localStorage.getItem(TOKEN);
-  if (!token) {
-    clearToken();
-    throw new ApiError(401);
-  }
+  if (!csrfToken) await sessionInfo();
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', path);
-    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
-    };
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+    xhr.upload.onprogress = (event) => { if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total); };
     xhr.upload.onload = () => onProgress(1);
     xhr.onload = () => {
-      if (xhr.status === 401) clearToken();
+      if (xhr.status === 401) clearSession();
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new ApiError(xhr.status));
     };
@@ -136,13 +169,4 @@ const validate = function (value: unknown): Bootstrap {
   return b;
 };
 
-const tokenValid = function (token: string): boolean {
-  try {
-    const data = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return typeof data.exp === 'number' && data.exp * 1000 > Date.now();
-  } catch {
-    return false;
-  }
-};
-
-export { TOKEN, BOOTSTRAP, ApiError, clearToken, request, json, upload, bootstrap, tokenValid };
+export { SESSION, BOOTSTRAP, ApiError, clearSession, request, json, upload, bootstrap, sessionInfo, sessionValid, logout };

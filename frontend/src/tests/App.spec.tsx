@@ -3,7 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { config, video } from './fixtures';
-import { BOOTSTRAP, TOKEN } from '../lib/api';
+import { BOOTSTRAP, SESSION, clearSession } from '../lib/api';
 import * as cache from '../lib/cache';
 import { createKeys, passwordAttributes, unlock, verify, decryptText } from '../lib/crypto';
 
@@ -34,19 +34,24 @@ const user = {
   editor: false,
   moderator: false
 };
-const token = `e30.${btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }))}.sig`;
+const expiresAt = Date.now() + 3600_000;
+let authenticated: boolean;
 let calls: string[];
 
 beforeEach(async () => {
   await cache.removePrefix('');
   calls = [];
+  clearSession();
+  authenticated = false;
   vi.clearAllMocks();
 
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const path = String(input);
     calls.push(path);
     if (path === '/bootstrap') return new Response(JSON.stringify(config));
-    if (path === '/login') return new Response(JSON.stringify({ token }));
+    if (path === '/session') return new Response(JSON.stringify({ authenticated, csrfToken: 'csrf', expiresAt: authenticated ? expiresAt : null }));
+    if (path === '/login') { authenticated = true; return new Response(JSON.stringify({ authenticated: true, csrfToken: 'csrf', expiresAt })); }
+    if (path === '/api/logout' || path === '/api/logout-everywhere') { authenticated = false; return new Response(null, { status: 204 }); }
     if (path === '/api/user/me') return new Response(JSON.stringify(user));
     if (path.startsWith('/api/video/'))
       return new Response(JSON.stringify([{ ...video, plainTitle: undefined, plainDescription: undefined }]));
@@ -67,7 +72,7 @@ const login = async function () {
 test('logs in, loads since=0, stores ciphertext only and grays out forbidden actions', async () => {
   const actor = await login();
   expect(screen.getByText('1 Video · verschlüsselt gespeichert')).toBeVisible();
-  expect(localStorage.getItem(TOKEN)).toBe(token);
+  expect(JSON.parse(localStorage.getItem(SESSION)!)).toEqual({ expiresAt });
   expect(screen.getByRole('banner')).toContainElement(screen.getByRole('combobox', { name: 'Design' }));
   expect(screen.getByRole('banner').querySelector('img')).toHaveAttribute('src', '/logo.png');
   expect(screen.getByRole('contentinfo').querySelector('img')).toHaveAttribute('src', '/videovault-logo.png');
@@ -158,8 +163,9 @@ test('searches decrypted content and switches all navigation language', async ()
   expect(screen.getByRole('link', { name: /Security architecture/ })).toBeVisible();
 });
 
-test('uses cached bootstrap and requests local password to unlock an existing JWT session', async () => {
-  localStorage.setItem(TOKEN, token);
+test('uses cached bootstrap and requests local password to unlock an existing cookie session', async () => {
+  authenticated = true;
+  localStorage.setItem(SESSION, JSON.stringify({ expiresAt }));
   localStorage.setItem(BOOTSTRAP, JSON.stringify(config));
   render(<App />);
   expect(await screen.findByRole('heading', { name: 'Archiv entsperren' })).toBeVisible();
@@ -177,7 +183,7 @@ test('a 401 discards the token and returns to the login form', async () => {
   vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 401 }));
   await actor.click(screen.getByRole('button', { name: /Aktualisieren/ }));
   expect(await screen.findByRole('button', { name: 'Anmelden' })).toBeVisible();
-  expect(localStorage.getItem(TOKEN)).toBeNull();
+  expect(localStorage.getItem(SESSION)).toBeNull();
 });
 
 test('invitation links are scrubbed and require a password change before the catalog is shown', async () => {
@@ -234,4 +240,13 @@ test('worker failure messages acknowledge HTTP localhost support in both languag
   expect(screen.getByRole('status')).toHaveTextContent('HTTP auf localhost wird unterstützt.');
   await actor.click(screen.getByRole('button', { name: 'Sprache wechseln' }));
   expect(screen.getByRole('status')).toHaveTextContent('HTTP on localhost is supported.');
+});
+
+
+test.each([['Abmelden', '/api/logout'], ['Überall abmelden', '/api/logout-everywhere']])('revokes sessions through %s before showing login', async (label, path) => {
+  const actor = await login();
+  await actor.click(screen.getByRole('button', { name: label }));
+  await screen.findByRole('button', { name: 'Anmelden' });
+  expect(calls).toContain(path);
+  expect(localStorage.getItem(SESSION)).toBeNull();
 });

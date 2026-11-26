@@ -2,7 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import { uploadFiles } from '../lib/uploadFiles';
 import { encryptedFileSize } from '../lib/crypto';
-import { TOKEN } from '../lib/api';
+import { clearSession } from '../lib/api';
 
 interface WorkerStub {
   onmessage?: (event: { data: unknown }) => void;
@@ -18,7 +18,7 @@ const uploadId = '6c023fc2-7297-4f5f-8ca0-cdb6da5d1492';
 const session = `/api/video/upload/v/${uploadId}`;
 
 beforeEach(() => {
-  localStorage.setItem(TOKEN, 'token');
+  clearSession();
   workers = [];
   failWorker = false;
   vi.stubGlobal(
@@ -46,6 +46,7 @@ beforeEach(() => {
     }
   );
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    if (String(input) === '/session') return new Response(JSON.stringify({ authenticated: true, csrfToken: 'csrf', expiresAt: Date.now() + 3600_000 }));
     if (String(input).endsWith('/start'))
       return new Response(JSON.stringify({ uploadId, maxPartBytes: 4 * 1024 ** 2 }), { status: 201 });
     if (init?.method === 'PUT')
@@ -79,7 +80,7 @@ test('preflights before worker creation and counts server acknowledgements rathe
   const running = uploadFiles(input);
   await waitFor(() => expect(acknowledge).toBeDefined());
   expect(progress).toHaveBeenLastCalledWith({ encrypted: 1, uploaded: 0 });
-  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith('/start'))?.[1]?.body))).toEqual({
     files: [{ kind: 'video', size: encryptedFileSize(5) }]
   });
   acknowledge!(new Response(JSON.stringify({ received: encryptedFileSize(5) })));

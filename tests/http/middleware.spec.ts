@@ -25,15 +25,14 @@ describe('Fastify hooks and errors', () => {
 
   test('missing credentials do not call the authentication service', async () => {
     const app = createHttpServer({ logger: false });
-    const authenticate = jest.fn();
+    const findSession = jest.fn();
 
-    app.get('/', { onRequest: authentication({ authenticate }) }, async () => null);
+    app.get('/', { onRequest: authentication({ findSession }, { credential: () => '', clear: jest.fn() }) }, async () => null);
 
     try {
       const response = await app.inject('/');
       expect(response.statusCode).toBe(401);
-      expect(response.headers['www-authenticate']).toBe('Bearer');
-      expect(authenticate).not.toHaveBeenCalled();
+      expect(findSession).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }

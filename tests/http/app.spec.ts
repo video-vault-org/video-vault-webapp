@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import request from 'supertest';
 import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -103,7 +104,7 @@ describe('Fastify backend', () => {
     moderator: name === 'moderator'
   });
 
-  const headers = (role: Role = 'reader') => ({ Authorization: `Bearer ${tokens[role]}` });
+  const headers = (role: Role = 'reader') => ({ Cookie: `__Host-videovault-session=${tokens[role]}`, 'X-CSRF-Token': auth.csrfToken(tokens[role]) });
 
   test('initializes the current admin keys once, accepts an empty profile and rejects malformed envelopes', async () => {
     await db.changeUsersPasswordByUserId({ userId: 'admin', loginHash: storedHash, userKey: '', passwordKeySalt: '' });
@@ -121,7 +122,7 @@ describe('Fastify backend', () => {
   beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), 'video-vault-http-'));
     storedHash = await hashPassword(loginHash);
-    auth = new AuthService(db, { keyDirectory: join(root, 'jwtkeys') });
+    auth = new AuthService(db);
     await auth.initialize();
     for (const name of ['reader', 'admin', 'editor', 'moderator', 'editor2', 'target'] as const) {
       await db.createUser(makeUser(name));
@@ -131,7 +132,10 @@ describe('Fastify backend', () => {
 
   beforeEach(async () => {
     await db.initialize();
-    for (const name of ['reader', 'admin', 'editor', 'moderator', 'editor2', 'target'] as const) await db.createUser(makeUser(name));
+    for (const name of ['reader', 'admin', 'editor', 'moderator', 'editor2', 'target'] as const) {
+      await db.createUser(makeUser(name));
+      await db.createSession({ sessionId: createHash('sha256').update(tokens[name]).digest('hex'), userId: name, version: '', expiresAt: Date.now() + 3600_000 });
+    }
     directory = await mkdtemp(join(root, 'case-'));
     temporaryDirectory = join(directory, 'tmp');
     staticDirectory = join(directory, 'public');
@@ -216,10 +220,15 @@ describe('Fastify backend', () => {
     expect(await db.findOneVideoByVideoId({ videoId: 'missing' })).toBeNull();
   });
 
-  test('login is public, returns a usable JWT and never returns credentials', async () => {
-    const result = await request(app.server).post('/login').send({ username: 'reader', loginHash }).expect(200);
-    expect(Object.keys(result.body)).toEqual(['token']);
-    const me = await request(app.server).get('/api/user/me').set('Authorization', `Bearer ${result.body.token}`).expect(200);
+  test('login is public, sets a usable session cookie and never returns credentials', async () => {
+    const result = await request(app.server).post('/login').set(headers()).send({ username: 'reader', loginHash }).expect(200);
+    expect(Object.keys(result.body).sort()).toEqual(['authenticated', 'csrfToken', 'expiresAt']);
+    expect(result.headers['set-cookie'][0]).toContain('HttpOnly; SameSite=Strict');
+    expect(result.headers['set-cookie'][0]).toContain('Secure');
+    const me = await request(app.server)
+      .get('/api/user/me')
+      .set('Cookie', (result.headers['set-cookie'] as unknown as string[]).map((value: string) => value.split(';')[0]).join('; '))
+      .expect(200);
     expect(me.body.userId).toBe('reader');
     expect(me.body).not.toHaveProperty('loginHash');
     expect(me.headers['cache-control']).toBe('no-store');
@@ -242,23 +251,26 @@ describe('Fastify backend', () => {
     expect(updated).toEqual({ ...original, username, loginHash: expect.stringMatching(/^\$scrypt\$/) });
     expect(await verifyPassword(newLoginHash, updated.loginHash)).toBe(true);
     expect(await verifyPassword(loginHash, updated.loginHash)).toBe(false);
-    await request(app.server).post('/login').send({ username: original.username, loginHash }).expect(401);
-    await request(app.server).post('/login').send({ username, loginHash }).expect(401);
-    const result = await request(app.server).post('/login').send({ username, loginHash: newLoginHash }).expect(200);
-    const me = await request(app.server).get('/api/user/me').set('Authorization', `Bearer ${result.body.token}`).expect(200);
+    await request(app.server).post('/login').set(headers()).send({ username: original.username, loginHash }).expect(401);
+    await request(app.server).post('/login').set(headers()).send({ username, loginHash }).expect(401);
+    const result = await request(app.server).post('/login').set(headers()).send({ username, loginHash: newLoginHash }).expect(200);
+    const me = await request(app.server)
+      .get('/api/user/me')
+      .set('Cookie', (result.headers['set-cookie'] as unknown as string[]).map((value: string) => value.split(';')[0]).join('; '))
+      .expect(200);
     expect(me.body).toMatchObject({ userId, username, userKey: original.userKey, passwordKeySalt: original.passwordKeySalt });
     expect(me.body).not.toHaveProperty('loginHash');
   });
 
   test('login rejects invalid credentials and active locks with the same response', async () => {
     const wrong = Buffer.from('wrong').toString('base64');
-    for (let index = 0; index < 5; index++) await request(app.server).post('/login').send({ username: 'reader', loginHash: wrong }).expect(401);
-    await request(app.server).post('/login').send({ username: 'reader', loginHash }).expect(401);
+    for (let index = 0; index < 5; index++) await request(app.server).post('/login').set(headers()).send({ username: 'reader', loginHash: wrong }).expect(401);
+    await request(app.server).post('/login').set(headers()).send({ username: 'reader', loginHash }).expect(401);
     expect(await db.findOneAttemptsCountByUsername({ username: 'reader' })).toMatchObject({ attempts: 5 });
   });
 
   test.each(['Basic abc', 'Bearer invalid', 'Bearer', 'Bearer a b'])('rejects invalid Authorization %s', async (value) => {
-    await request(app.server).get('/api/user/me').set('Authorization', value).expect(401).expect('WWW-Authenticate', 'Bearer');
+    await request(app.server).get('/api/user/me').set('Authorization', value).expect(401);
   });
 
   test('never includes loginHash in individual or array user responses, including newly created users', async () => {
@@ -286,7 +298,7 @@ describe('Fastify backend', () => {
     expect(await db.findOneUserByUserId({ userId: 'reader' })).toEqual(previous);
   });
 
-  test('rejects a stolen JWT with a wrong old proof and preserves all password attributes', async () => {
+  test('rejects a stolen session with a wrong old proof and preserves all password attributes', async () => {
     const previous = structuredClone(await db.findOneUserByUserId({ userId: 'reader' }));
     const update = { loginHash: 'new-proof', passwordKeySalt: 'new-salt', userKey: 'new-key' };
     await request(app.server)
@@ -425,7 +437,7 @@ describe('Fastify backend', () => {
     await request(app.server).get('/api/user/me').set(headers()).expect(401);
   });
 
-  test('role changes take effect on existing JWTs', async () => {
+  test('role changes take effect on existing sessions', async () => {
     await request(app.server).get('/api/video/all').set(headers()).expect(403);
     await request(app.server).patch('/api/user/change/editor/reader').set(headers('admin')).send({ editor: true, oldLoginHash: loginHash }).expect(204);
     await request(app.server).get('/api/video/all').set(headers()).expect(200);
@@ -916,15 +928,16 @@ describe('Fastify backend', () => {
   });
 
   test('returns sanitized errors for malformed JSON, oversized requests, conflicts and server failures', async () => {
-    await request(app.server).post('/login').set('Content-Type', 'application/json').send('{').expect(400, { error: 'Invalid request' });
+    await request(app.server).post('/login').set(headers()).set('Content-Type', 'application/json').send('{').expect(400, { error: 'Invalid request' });
     await request(app.server)
       .post('/login')
+      .set(headers())
       .send({ username: 'x', loginHash: 'x'.repeat(1024 * 1024) })
       .expect(413);
     await request(app.server).patch('/api/user/change/username/target').set(headers()).send({ loginHash, oldLoginHash: loginHash }).expect(409);
     jest.spyOn(users, 'findAllUsers').mockRejectedValueOnce(new Error(`secret ${storedHash}`));
     await request(app.server).get('/api/user/all').set(headers('admin')).expect(500, { error: 'Internal server error' });
-    jest.spyOn(auth, 'authenticate').mockRejectedValueOnce(new Error('DB unavailable'));
+    jest.spyOn(auth, 'findSession').mockRejectedValueOnce(new Error('DB unavailable'));
     await request(app.server).get('/api/user/me').set(headers()).expect(500, { error: 'Internal server error' });
   });
 

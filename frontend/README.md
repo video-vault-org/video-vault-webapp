@@ -17,9 +17,9 @@ npm start
 
 The root build compiles the backend, builds `frontend/dist`, and copies it to `public`. Existing unrelated public files are preserved; generated assets are replaced. No CDN is used for application dependencies, fonts, crypto or MediaInfo's WASM.
 
-For UI development use `npm --prefix frontend run dev` alongside the backend on port 3210 (the default). For a different backend port, set `BACKEND_URL`, e.g. `BACKEND_URL=http://localhost:4000 npm --prefix frontend run dev`. Vite proxies `/api`, `/login`, `/bootstrap` and the fixed footer image `/videovault-logo.png`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
+For UI development use `npm --prefix frontend run dev` alongside the backend on port 3210 (the default), started with `HOST=127.0.0.1 VIDEO_VAULT_INSECURE_LOCAL_COOKIES=true npm start` outside production mode. For a different backend port, set `BACKEND_URL`, e.g. `BACKEND_URL=http://localhost:4000 npm --prefix frontend run dev`. Vite proxies `/api`, `/login`, `/session`, `/bootstrap` and the fixed footer image `/videovault-logo.png`. The service worker is production-only: use the full build/backend for testing playback, downloads and offline reloads. Deploy with HTTPS; localhost is supported for development.
 
-The production service worker is a self-contained classic script, including its range parser. It does not require module-service-worker support (which Firefox 139 lacks). Plain `http://localhost:3210` and HTTP loopback addresses are supported without a certificate; browsers treat them as secure contexts. Other network hosts require HTTPS for service workers and Web Crypto. No browser security checks are bypassed. Registration failures are reported in the browser console as well as in the UI.
+The production service worker is a self-contained classic script, including its range parser. It does not require module-service-worker support (which Firefox 139 lacks). For local HTTP cookies, explicitly enable the development exception above. The service worker and Web Crypto support `http://localhost:3210` and HTTP loopback addresses without a certificate; browsers treat them as secure contexts. Other network hosts require HTTPS for service workers and Web Crypto. No browser security checks are bypassed. Registration failures are reported in the browser console as well as in the UI.
 
 ## Server port
 
@@ -49,11 +49,11 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-An installed Chromium can be selected using `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome`. Set `PLAYWRIGHT_BROWSER=firefox` to test with Playwright Firefox; an appropriate patched Firefox binary can be selected with `PLAYWRIGHT_FIREFOX_EXECUTABLE`. The browser tests use only an in-memory database and a temporary directory. Their deliberately public test credentials are **not** installed in the application's database. Production configuration, `.salt`, storage and JWT keys are untouched. External password lookup is stubbed in tests.
+An installed Chromium can be selected using `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome`. Set `PLAYWRIGHT_BROWSER=firefox` to test with Playwright Firefox; an appropriate patched Firefox binary can be selected with `PLAYWRIGHT_FIREFOX_EXECUTABLE`. The browser tests use only an in-memory database and a temporary directory. Their deliberately public test credentials are **not** installed in the application's database. Production configuration, `.salt`, storage are untouched. External password lookup is stubbed in tests.
 
 ## Storage and security
 
-- JWT, bootstrap, language and the user profile (wrapped keys only) are kept in localStorage. Every reload asks for the password to unlock locally. No plaintext password or unlocked master key is persisted.
+- The session credential exists only in a host-only HttpOnly Secure cookie. localStorage keeps only public session expiry metadata, bootstrap, language and the user profile (wrapped keys only). CSRF tokens stay in memory; all writes include them as a header. Every reload asks for the password to unlock locally. No plaintext password or unlocked master key is persisted.
 - IndexedDB stores raw encrypted video records, a synchronization watermark, and encrypted fetched thumbnails per instance/user. Titles and descriptions are decrypted in memory after HMAC verification. Ordinary metadata and recorded are not encrypted.
 - Initial sync uses `/api/video/0`; subsequent sync uses the maximum received `lastModified`. Permanent, unverified video tombstones arrive in the same delta response and remove offline entries and cached encrypted thumbnails. Their timestamps advance the watermark; no separate ID catalog request is needed. The timestamp protocol is not a transactional change log and assumes correctly increasing client timestamps.
 - Filtering and sorting operate locally. Arrays compare lexicographically in stored order using each field's type; missing/empty values sort last. Text compares case-insensitively after NFC normalization, with ID as a deterministic tiebreaker.

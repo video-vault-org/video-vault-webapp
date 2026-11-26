@@ -14,7 +14,7 @@ import { AuthService } from '@/service/AuthService';
 
 describe('authenticated media range and offline catalog endpoints', () => {
   let app: FastifyInstance, directory: string, db: InMemoryDatabaseAdapter;
-  const headers = { authorization: 'Bearer reader' };
+  const headers = { cookie: '__Host-videovault-session=reader', 'x-csrf-token': 'c'.repeat(43) };
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'vault-media-'));
@@ -25,7 +25,9 @@ describe('authenticated media range and offline catalog endpoints', () => {
     await storage.save(join(directory, 'seed'), 'v1.video');
     await db.postVideo({ deleted: false, videoId: 'v1', title: 'encrypted', description: 'encrypted', meta: {}, recorded: new Date(0), lastModified: new Date(1), hmac: 'hmac', videoMimeType: 'video/mp4', thumbnailMimeType: 'image/png' });
     const auth = {
-      authenticate: jest.fn(async ({ token }: { token: string }) => (['reader', 'editor'].includes(token) ? { userId: token, admin: false, editor: token === 'editor', moderator: false } : null)),
+      findSession: jest.fn(async ({ sessionId }: { sessionId: string }) =>
+        ['reader', 'editor'].includes(sessionId) ? { user: { userId: sessionId, admin: false, editor: sessionId === 'editor', moderator: false }, expiresAt: Date.now() + 3600_000, csrfToken: 'c'.repeat(43) } : null
+      ),
       authorize: jest.fn((user: { editor: boolean }) => (user.editor ? ['editor'] : []))
     } as unknown as AuthService;
     app = createApp(
@@ -43,7 +45,7 @@ describe('authenticated media range and offline catalog endpoints', () => {
   test('sync returns permanent unverified tombstones without needing a full catalog scan', async () => {
     const full = jest.spyOn(db, 'findAllVideos').mockRejectedValue(new Error('Full scans are not allowed'));
     const lastModified = '2026-11-01T00:00:00.000Z';
-    const editor = { authorization: 'Bearer editor' };
+    const editor = { cookie: '__Host-videovault-session=editor', 'x-csrf-token': 'c'.repeat(43) };
     expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers, payload: { lastModified } })).statusCode).toBe(403);
     expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers: editor, payload: {} })).statusCode).toBe(400);
     expect((await app.inject({ method: 'DELETE', url: '/api/video/delete/v1', headers: editor, payload: { lastModified } })).statusCode).toBe(204);
@@ -58,7 +60,7 @@ describe('authenticated media range and offline catalog endpoints', () => {
   test('deleted video IDs cannot be read, changed, commented on or reused', async () => {
     await db.postComment({ commentId: 'c1', videoId: 'v1', userId: 'reader', content: 'encrypted', created: new Date(1), lastModified: new Date(1), edited: false, deleted: false, hmac: 'hmac' });
     await db.deleteVideoByVideoId({ videoId: 'v1', lastModified: new Date(2) });
-    const editor = { authorization: 'Bearer editor' };
+    const editor = { cookie: '__Host-videovault-session=editor', 'x-csrf-token': 'c'.repeat(43) };
     for (const url of ['/api/video/file/v1', '/api/video/thumbnail/v1', '/api/video/find/v1', '/api/comments/v1']) {
       expect((await app.inject({ url, headers: editor })).statusCode).toBe(404);
     }

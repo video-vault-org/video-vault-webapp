@@ -1,3 +1,4 @@
+import { sessionContract } from './sessionContract';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { MongoDBContainer, StartedMongoDBContainer } from '@testcontainers/mongodb';
 import * as os from 'node:os';
@@ -86,7 +87,7 @@ describe('MongoDatabaseAdapter', () => {
     if (!admin) {
       return;
     }
-    for (const name of ['users', 'videos', 'comments', 'login_attempts']) {
+    for (const name of ['users', 'videos', 'comments', 'login_attempts', 'sessions', 'session_versions']) {
       await admin.db().collection(name).deleteMany({});
     }
   });
@@ -580,4 +581,5 @@ describe('MongoDatabaseAdapter', () => {
       expect(await db.findOneAttemptsCountByUsername({ username: 'missing' })).toBeNull();
     });
   });
+  sessionContract(() => db);
 });

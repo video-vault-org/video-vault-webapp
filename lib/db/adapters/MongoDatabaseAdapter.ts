@@ -1,3 +1,4 @@
+import { Session } from '@/domain/Session';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import * as os from 'node:os';
 import mongoose from 'mongoose';
@@ -48,6 +49,8 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
   public async initialize(): Promise<void> {
     await this.write(async () => {
       const db = await this.database();
+      await db.collection<Session>('sessions').createIndexes([{ key: { sessionId: 1 }, unique: true }, { key: { expiresAt: 1 } }]);
+      await db.collection('session_versions').createIndexes([{ key: { userId: 1 }, unique: true }]);
       await db.collection<User>('users').createIndexes([
         { key: { userId: 1 }, unique: true },
         { key: { username: 1 }, unique: true }
@@ -56,6 +59,28 @@ class MongoDatabaseAdapter implements DatabaseAdapter {
       await db.collection<Comment>('comments').createIndexes([{ key: { commentId: 1 }, unique: true }, { key: { videoId: 1, created: -1, commentId: 1 } }, { key: { userId: 1 } }]);
       await db.collection<AttemptsCount>('login_attempts').createIndexes([{ key: { username: 1 }, unique: true }]);
     });
+  }
+
+  public async createSession(session: Session): Promise<void> {
+    const collection = (await this.database()).collection<Session>('sessions');
+    await collection.deleteMany({ expiresAt: { $lte: Date.now() } });
+    await collection.insertOne({ ...session });
+  }
+
+  public async findSessionById({ sessionId }: { sessionId: string }): Promise<Session | null> {
+    return (await this.database()).collection<Session>('sessions').findOne<Session>({ sessionId }, withoutId);
+  }
+
+  public async deleteSessionById({ sessionId }: { sessionId: string }): Promise<void> {
+    await (await this.database()).collection<Session>('sessions').deleteOne({ sessionId });
+  }
+
+  public async findSessionVersionByUserId({ userId }: { userId: string }): Promise<string> {
+    return (await (await this.database()).collection<{ userId: string; version: string }>('session_versions').findOne({ userId }))?.version ?? '';
+  }
+
+  public async changeSessionVersionByUserId({ userId, version }: { userId: string; version: string }): Promise<void> {
+    await (await this.database()).collection('session_versions').updateOne({ userId }, { $set: { version } }, { upsert: true });
   }
 
   public async createUser(user: User): Promise<void> {

@@ -1,5 +1,5 @@
 import { onRequestAsyncHookHandler, FastifyRequest } from 'fastify';
-import { AuthService } from '@/service/AuthService';
+import { AuthService, AuthenticatedSession } from '@/service/AuthService';
 import { User } from '@/domain/User';
 import { HttpError } from './errors';
 
@@ -7,19 +7,21 @@ declare module 'fastify' {
   interface FastifyRequest {
     user: User | null;
     failure: Error | null;
+    authSession: AuthenticatedSession | null;
+    sessionId: string;
   }
 }
 
-/** Authenticates the Bearer JWT before body parsing and stores the current database user on request.user. */
-const authentication = function (auth: Pick<AuthService, 'authenticate'>): onRequestAsyncHookHandler {
+/** Authenticates an opaque cookie credential before body parsing and loads the current database user. */
+const authentication = function (auth: Pick<AuthService, 'findSession'>, cookies: { credential: (request: FastifyRequest) => string; clear: (reply: import('fastify').FastifyReply) => void }): onRequestAsyncHookHandler {
   return async (request, reply) => {
-    const token = request.headers.authorization?.replace(/^bearer /i, '') ?? '';
-    const user = token ? await auth.authenticate({ token }) : null;
-    if (!user) {
-      reply.header('WWW-Authenticate', 'Bearer');
+    request.sessionId = cookies.credential(request);
+    request.authSession = request.sessionId ? await auth.findSession({ sessionId: request.sessionId }) : null;
+    if (!request.authSession) {
+      if (request.sessionId) cookies.clear(reply);
       throw new HttpError(401, 'Authentication required');
     }
-    request.user = user;
+    request.user = request.authSession.user;
   };
 };
 

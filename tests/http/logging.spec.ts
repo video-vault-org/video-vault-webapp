@@ -237,19 +237,30 @@ describe('Fastify native Pino logging', () => {
     jest.spyOn(auth, 'login').mockResolvedValue(null);
     const app = createApp({ auth, users: new UserService(db), videos: new VideoService(new StorageWrapper(new InMemoryStorageAdapter()), db), comments: new CommentService(db) }, { instanceSalt: 'ab'.repeat(32), logger: captured.options });
     try {
+      const challenge = await app.inject('/session');
+      const csrfHeaders = { cookie: (challenge.headers['set-cookie'] as string[]).map((value) => value.split(';')[0]).join('; '), 'x-csrf-token': challenge.json().csrfToken };
       expect(
-        (await app.inject({ method: 'POST', url: '/login?token=query-secret', headers: { authorization: 'Bearer header-secret', cookie: 'session=cookie-secret' }, payload: { username: 'private-user', loginHash: 'body-secret' } })).statusCode
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/login?token=query-secret',
+            headers: { ...csrfHeaders, authorization: 'Bearer header-secret', cookie: `${csrfHeaders.cookie}; unrelated=cookie-secret` },
+            payload: { username: 'private-user', loginHash: 'body-secret' }
+          })
+        ).statusCode
       ).toBe(401);
-      expect((await app.inject({ method: 'POST', url: '/login', payload: { username: 'private-user', loginHash: 'invalid-secret', unexpected: 'validation-secret' } })).statusCode).toBe(400);
+      expect((await app.inject({ method: 'POST', url: '/login', headers: csrfHeaders, payload: { username: 'private-user', loginHash: 'invalid-secret', unexpected: 'validation-secret' } })).statusCode).toBe(400);
       jest.mocked(auth.login).mockResolvedValue('response-token-secret');
-      expect((await app.inject({ method: 'POST', url: '/login', payload: { username: 'private-user', loginHash: 'body-secret' } })).statusCode).toBe(200);
+      jest.spyOn(auth, 'findSession').mockResolvedValue({ user: { userId: 'u' } as never, expiresAt: Date.now() + 3600_000, csrfToken: 'csrf-response-secret' });
+      expect((await app.inject({ method: 'POST', url: '/login', headers: csrfHeaders, payload: { username: 'private-user', loginHash: 'body-secret' } })).statusCode).toBe(200);
       expect(
         captured
           .records()
           .filter(({ reqId }) => reqId)
           .map(({ level }) => level)
-      ).toEqual([30, 40, 30, 40, 30, 30]);
-      for (const secret of ['query-secret', 'header-secret', 'cookie-secret', 'body-secret', 'private-user', 'invalid-secret', 'validation-secret', 'response-token-secret']) expect(captured.output()).not.toContain(secret);
+      ).toEqual([30, 30, 30, 40, 30, 40, 30, 30]);
+      for (const secret of ['query-secret', 'header-secret', 'cookie-secret', 'body-secret', 'private-user', 'invalid-secret', 'validation-secret', 'response-token-secret', 'csrf-response-secret', csrfHeaders['x-csrf-token']])
+        expect(captured.output()).not.toContain(secret);
     } finally {
       await app.close();
       jest.restoreAllMocks();

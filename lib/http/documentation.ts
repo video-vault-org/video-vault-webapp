@@ -9,6 +9,9 @@ import { DEFAULT_APP_TITLE } from '@/app/config/AppConfig';
 const summaries: Record<string, string> = {
   'GET /bootstrap': 'Get public application and metadata settings and the instance salt',
   'POST /login': 'Log in',
+  'GET /session': 'Get session status and CSRF token',
+  'POST /api/logout': 'Sign out this session',
+  'POST /api/logout-everywhere': 'Sign out all your sessions',
   'POST /api/user/initialize-keys': 'Initialize your archive keys once',
   'POST /api/user/add': 'Create a user',
   'GET /api/user/me': 'Get your account',
@@ -56,7 +59,15 @@ const summaries: Record<string, string> = {
  * Must run before API route plugins. Documentation reuses runtime schemas; documentation-only multipart schemas never validate stream bodies.
  * Required roles are read from the authorization hooks, so the documentation follows the actual access rules.
  */
-const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_APP_TITLE, maxVideoBytes = 2 * 1024 ** 3, maxThumbnailBytes = 20 * 1024 ** 2 }: { title?: string; maxVideoBytes?: number; maxThumbnailBytes?: number } = {}): void {
+const registerDocumentation = function (
+  app: FastifyInstance,
+  {
+    title = DEFAULT_APP_TITLE,
+    maxVideoBytes = 2 * 1024 ** 3,
+    maxThumbnailBytes = 20 * 1024 ** 2,
+    sessionCookieName = '__Host-videovault-session'
+  }: { title?: string; maxVideoBytes?: number; maxThumbnailBytes?: number; sessionCookieName?: string } = {}
+): void {
   app.register(swagger, {
     openapi: {
       openapi: '3.0.3',
@@ -64,16 +75,16 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
         title: `${title} API`,
         version: '0.0.1',
         description:
-          'Encrypted video collection API. Load /bootstrap for the public instance salt before deriving the Base64 loginHash. Login expects that loginHash, not a plaintext password. Use the returned JWT in Authorize. Admin, editor and moderator roles are independent.'
+          'Encrypted video collection API. Load /bootstrap for the public instance salt before deriving the Base64 loginHash. Login expects that loginHash, not a plaintext password. Cookies are HttpOnly, Secure and SameSite=Strict. GET /session returns the CSRF token required in X-CSRF-Token for every write, including login. Credentials are never returned in JSON. In this UI, run GET /session, put csrfToken into Authorize (csrf), then login; replace it with the csrfToken returned by login. The browser manages the HttpOnly cookie automatically. Admin, editor and moderator roles are independent.'
       },
       tags: [{ name: 'Authentication' }, { name: 'Users' }, { name: 'Videos' }, { name: 'Comments' }],
-      components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } }
+      components: { securitySchemes: { cookieAuth: { type: 'apiKey', in: 'cookie', name: sessionCookieName }, csrf: { type: 'apiKey', in: 'header', name: 'X-CSRF-Token' } } }
     },
 
     transform: ({ schema, url, route }) => {
       const login = url === '/login';
       const bootstrap = url === '/bootstrap';
-      const publicRoute = login || bootstrap;
+      const publicRoute = login || bootstrap || url === '/session';
       if (!publicRoute && !url.startsWith('/api/')) return { schema: { ...schema, hide: true }, url };
       const method = Array.isArray(route.method) ? route.method[0] : route.method;
       const hooks = route.onRequest ? (Array.isArray(route.onRequest) ? route.onRequest : [route.onRequest]) : [];
@@ -82,10 +93,12 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
       let description = bootstrap
         ? 'Public. Returns protocol version 1, the configured application title, frontend metadata settings and the stable public instance salt as 64 hexadecimal characters. Cache-Control: no-store. No authentication required.'
         : login
-          ? 'Public. Supply the client-derived loginHash as Base64.'
+          ? 'Public. Supply the client-derived loginHash as Base64 and the pre-login CSRF token from GET /session. The browser stores the HttpOnly cookie.'
           : roles.length
             ? `Requires role: ${roles.join(' or ')}.`
             : 'Requires an authenticated user.';
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) description += ' Requires a session-bound X-CSRF-Token header; cross-origin requests are rejected.';
+      if (url === '/session') description = 'Public. Returns authenticated, expiresAt and a session-bound or pre-login CSRF token. Cache-Control: no-store. Never returns the session credential.';
       if (roles.includes('admin') && !['GET', 'HEAD', 'OPTIONS'].includes(method))
         description += ' Requires oldLoginHash derived from the acting admin’s current password in the JSON body. Verification shares login failure counters and lock durations.';
       if (url === '/api/user/initialize-keys')
@@ -105,7 +118,7 @@ const registerDocumentation = function (app: FastifyInstance, { title = DEFAULT_
         summary: summaries[`${method} ${url}`] ?? `${method} ${url}`,
         description,
         tags: [tag],
-        security: publicRoute ? [] : [{ bearerAuth: [] }],
+        security: publicRoute ? (login ? [{ csrf: [] }] : []) : [{ cookieAuth: [], ...(!['GET', 'HEAD', 'OPTIONS'].includes(method) ? { csrf: [] } : {}) }],
         operationId: `${method.toLowerCase()}_${url.replace(/[:*]/g, '').split('/').filter(Boolean).join('_')}`
       };
       if (url === '/api/video/upload/:videoId') {

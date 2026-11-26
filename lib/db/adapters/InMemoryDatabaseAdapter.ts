@@ -1,3 +1,4 @@
+import { Session } from '@/domain/Session';
 import { DatabaseConflictError } from '@/db/errors/DatabaseConflictError';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 import { User } from '@/domain/User';
@@ -7,6 +8,8 @@ import { Comment } from '@/domain/Comment';
 import { AttemptsCount } from '@/domain/AttemptsCount';
 
 class InMemoryDatabaseAdapter implements DatabaseAdapter {
+  private sessions = new Map<string, Session>();
+  private sessionVersions = new Map<string, string>();
   private users: User[] = [];
   private videos: Video[] = [];
   private comments: Comment[] = [];
@@ -26,10 +29,34 @@ class InMemoryDatabaseAdapter implements DatabaseAdapter {
   }
 
   public async initialize(): Promise<void> {
+    this.sessions.clear();
+    this.sessionVersions.clear();
     this.users = [];
     this.videos = [];
     this.comments = [];
     this.attempts = [];
+  }
+
+  public async createSession(session: Session): Promise<void> {
+    for (const [id, value] of this.sessions) if (value.expiresAt <= Date.now()) this.sessions.delete(id);
+    this.sessions.set(session.sessionId, { ...session });
+  }
+
+  public async findSessionById({ sessionId }: { sessionId: string }): Promise<Session | null> {
+    const session = this.sessions.get(sessionId);
+    return session ? { ...session } : null;
+  }
+
+  public async deleteSessionById({ sessionId }: { sessionId: string }): Promise<void> {
+    this.sessions.delete(sessionId);
+  }
+
+  public async findSessionVersionByUserId({ userId }: { userId: string }): Promise<string> {
+    return this.sessionVersions.get(userId) ?? '';
+  }
+
+  public async changeSessionVersionByUserId({ userId, version }: { userId: string; version: string }): Promise<void> {
+    this.sessionVersions.set(userId, version);
   }
 
   public async createUser(user: User): Promise<void> {

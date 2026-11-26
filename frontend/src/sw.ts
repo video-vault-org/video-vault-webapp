@@ -123,7 +123,7 @@ sw.addEventListener('fetch', (event) => {
     event.respondWith(media(event));
     return;
   }
-  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname === '/login' || url.pathname === '/bootstrap') return;
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname === '/session' || url.pathname === '/login' || url.pathname === '/bootstrap') return;
   event.respondWith(
     (async () => {
       const cache = await caches.open(cacheName),
