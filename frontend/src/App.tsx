@@ -651,7 +651,6 @@ const Application = function () {
               forced
               initialCurrentPassword={invitationPassword}
               done={async () => {
-                await updated();
                 setForced(false);
                 setInvitationPassword('');
               }}

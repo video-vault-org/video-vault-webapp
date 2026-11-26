@@ -100,7 +100,7 @@ describe('AuthService', () => {
         const second = (await service.login({ username, loginHash }))!;
         expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
         expect(second).not.toBe(first);
-        expect(create.mock.calls[0][0]).toEqual({ sessionId: createHash('sha256').update(first).digest('hex'), userId, version: '', expiresAt: start.getTime() + 3600_000 });
+        expect(create.mock.calls[0][0]).toEqual({ sessionId: createHash('sha256').update(first).digest('hex'), userId, version: expect.stringMatching(/^[a-f0-9]{64}$/), expiresAt: start.getTime() + 3600_000 });
         expect(await service.authenticate({ sessionId: first })).toEqual(user);
         expect(await service.findSession({ sessionId: first })).toEqual({ user, expiresAt: start.getTime() + 3600_000, csrfToken: service.csrfToken(first) });
         expect(service.csrfToken(first)).not.toBe(first);
@@ -278,6 +278,43 @@ describe('AuthService', () => {
       await new UserService(db).deleteUser({ userId });
       await db.createUser(user);
       expect(await service.authenticate({ sessionId })).toBeNull();
+    });
+
+    test.each(['password', 'username'] as const)('%s changes revoke every existing session of only the changed user', async (kind) => {
+      const users = new UserService(db);
+      await db.createUser({ ...user, userId: 'other', username: 'other' });
+      const first = (await service.login({ username, loginHash }))!;
+      const second = (await service.login({ username, loginHash }))!;
+      const other = (await service.login({ username: 'other', loginHash }))!;
+      if (kind === 'password') await users.changeUsersPassword({ userId, loginHash: wrongHash, passwordKeySalt: 'new-salt', userKey: 'new-key' });
+      else await users.changeUsersUsername({ userId, username: 'renamed', loginHash: wrongHash });
+      expect(await service.authenticate({ sessionId: first })).toBeNull();
+      expect(await service.authenticate({ sessionId: second })).toBeNull();
+      expect(await service.authenticate({ sessionId: other })).toMatchObject({ userId: 'other' });
+      const fresh = await service.login({ username: kind === 'username' ? 'renamed' : username, loginHash: wrongHash });
+      expect(await service.authenticate({ sessionId: fresh! })).toMatchObject({ userId });
+    });
+
+    test.each(['password', 'username'] as const)('rejects sessions issued by a login verified before a concurrent %s change', async (kind) => {
+      const read = db.findSessionVersionByUserId.bind(db);
+      jest.spyOn(db, 'findSessionVersionByUserId').mockImplementationOnce(async (parameters) => {
+        const users = new UserService(db);
+        if (kind === 'password') await users.changeUsersPassword({ userId, loginHash: wrongHash, passwordKeySalt: 'new-salt', userKey: 'new-key' });
+        else await users.changeUsersUsername({ userId, username: 'renamed', loginHash: wrongHash });
+        return read(parameters);
+      });
+      const stale = (await service.login({ username, loginHash }))!;
+      expect(await service.authenticate({ sessionId: stale })).toBeNull();
+      expect(await service.authenticate({ sessionId: (await service.login({ username: kind === 'username' ? 'renamed' : username, loginHash: wrongHash }))! })).toMatchObject({ userId });
+    });
+
+    test('failed credential updates leave existing sessions valid', async () => {
+      const sessionId = (await service.login({ username, loginHash }))!;
+      await db.createUser({ ...user, userId: 'other', username: 'other' });
+      await expect(new UserService(db).changeUsersUsername({ userId, username: 'other', loginHash: wrongHash })).rejects.toThrow();
+      jest.spyOn(db, 'changeUsersPasswordByUserId').mockRejectedValueOnce(new Error('Unavailable'));
+      await expect(new UserService(db).changeUsersPassword({ userId, loginHash: wrongHash, passwordKeySalt: 'new', userKey: 'new' })).rejects.toThrow('Unavailable');
+      expect(await service.authenticate({ sessionId })).toEqual(user);
     });
 
     test('loads current roles and rejects deleted users, random credentials and malformed values', async () => {

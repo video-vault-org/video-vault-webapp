@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Account, PasswordChange, UserManagement } from '../components/Accounts';
 import { LanguageProvider } from '../lib/ui';
-import { json } from '../lib/api';
+import { json, SESSION } from '../lib/api';
 import { pwned } from '../lib/password';
 import { loginHash, passwordAttributes } from '../lib/crypto';
 import { ApiError } from '../lib/api';
@@ -71,6 +71,7 @@ test('rejects a breached password and never saves new attributes', async () => {
 
 test('allows HIBP outages with a visible warning and saves all password attributes together', async () => {
   vi.mocked(pwned).mockResolvedValue('unavailable');
+  localStorage.setItem(SESSION, JSON.stringify({ expiresAt: Date.now() + 3600_000 }));
   const { done } = await fill('NewPassword123!');
   expect(await screen.findByRole('status')).toHaveTextContent('trotzdem zugelassen');
   expect(passwordAttributes).toHaveBeenCalledWith('NewPassword123!', 'reader', config.instanceSalt, keys);
@@ -81,6 +82,7 @@ test('allows HIBP outages with a visible warning and saves all password attribut
   );
   expect(loginHash).toHaveBeenCalledWith('OldPassword123!', user.username, config.instanceSalt);
   expect(done).toHaveBeenCalledOnce();
+  expect(localStorage.getItem(SESSION)).toBeNull();
 });
 
 test('requires the current password and never submits a plaintext password', async () => {
@@ -114,13 +116,15 @@ test('uses the invitation temporary password in the required current-password fi
 
 test('sends both the current and renamed username proofs when changing the own username', async () => {
   const actor = userEvent.setup();
+  const updated = vi.fn();
+  localStorage.setItem(SESSION, JSON.stringify({ expiresAt: Date.now() + 3600_000 }));
   render(
     <Account
       user={{ ...user, displayName: 'Reader' }}
       keys={keys}
       config={config}
       close={vi.fn()}
-      updated={vi.fn()}
+      updated={updated}
       logout={vi.fn()}
     />
   );
@@ -138,6 +142,8 @@ test('sends both the current and renamed username proofs when changing the own u
     { loginHash: 'old-proof', oldLoginHash: 'old-proof' },
     'PATCH'
   );
+  expect(updated).not.toHaveBeenCalled();
+  expect(localStorage.getItem(SESSION)).toBeNull();
 });
 
 const openManagement = async function () {

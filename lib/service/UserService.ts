@@ -51,6 +51,7 @@ class UserService {
 
   /**
    * Hashes the client's new loginHash with scrypt and atomically updates it together with the username.
+   * Changing these credentials invalidates every existing session of the target user, including their current session.
    * @param userId The ID of the user to update.
    * @param username The new username used by the client when deriving its new loginHash.
    * @param loginHash The new Base64 loginHash derived from the password and instanceSalt + new username.
@@ -62,6 +63,7 @@ class UserService {
 
   /**
    * Hashes the client's new loginHash with scrypt and updates the password attributes together.
+   * Changing the stored password proof invalidates every existing session of the target user.
    * @param userId The ID of the user to update.
    * @param loginHash The new Base64 loginHash from the client, not a stored scrypt string.
    * @param passwordKeySalt The new password key salt.

@@ -110,7 +110,9 @@ const createApp = function (
   app.addHook('onSend', async (request, reply, payload) => {
     const path = request.routeOptions.url;
     const target = (request.params as { userId?: string })?.userId;
-    if (request.method === 'DELETE' && reply.statusCode === 204 && (path === '/api/user/delete' || (path === '/api/user/delete/:userId' && target === request.user?.userId))) cookies.clear(reply);
+    const deletion = request.method === 'DELETE' && (path === '/api/user/delete' || path === '/api/user/delete/:userId');
+    const credentialsChanged = request.method === 'PATCH' && /^\/api\/user\/change\/(password|username)(\/|$)/.test(path ?? '');
+    if (reply.statusCode === 204 && (deletion || credentialsChanged) && (target === undefined || target === request.user?.userId)) cookies.clear(reply);
     return payload;
   });
 

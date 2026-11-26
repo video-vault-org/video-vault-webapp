@@ -50,7 +50,7 @@ class AuthService {
       if (!user) return null;
       const sessionId = randomBytes(32).toString('base64url');
       const version = await this.db.findSessionVersionByUserId({ userId: user.userId });
-      await this.db.createSession({ sessionId: this.digest(sessionId), userId: user.userId, version, expiresAt: Date.now() + this.sessionLifetimeSeconds * 1000 });
+      await this.db.createSession({ sessionId: this.digest(sessionId), userId: user.userId, version: this.sessionVersion(user, version), expiresAt: Date.now() + this.sessionLifetimeSeconds * 1000 });
       await this.db.clearAttemptsCountByUsername({ username });
       return sessionId;
     });
@@ -74,18 +74,18 @@ class AuthService {
     return (await this.findSession({ sessionId }))?.user ?? null;
   }
 
-  /** Validates expiry and the strongly read revocation version, then loads current roles from the user record. */
+  /** Validates expiry, revocation version and current credentials; credential changes invalidate every old session atomically with the user update. */
   public async findSession({ sessionId }: { sessionId: string }): Promise<AuthenticatedSession | null> {
     this.requireInitialized();
     if (!/^[A-Za-z0-9_-]{43}$/.test(sessionId)) return null;
     const session = await this.db.findSessionById({ sessionId: this.digest(sessionId) });
     if (!session) return null;
-    if (session.expiresAt <= Date.now() || session.version !== (await this.db.findSessionVersionByUserId({ userId: session.userId }))) {
+    if (session.expiresAt <= Date.now()) {
       await this.logout({ sessionId });
       return null;
     }
     const user = await this.db.findOneUserByUserId({ userId: session.userId });
-    if (!user) {
+    if (!user || session.version !== this.sessionVersion(user, await this.db.findSessionVersionByUserId({ userId: session.userId }))) {
       await this.logout({ sessionId });
       return null;
     }
@@ -116,6 +116,13 @@ class AuthService {
     return roles;
   }
 
+  /** Binds sessions to the exact account credentials as well as the explicit logout-everywhere version. */
+  private sessionVersion(user: User, version: string): string {
+    return createHash('sha256')
+      .update(JSON.stringify([user.userId, user.username, user.loginHash, version]))
+      .digest('hex');
+  }
+
   private digest(sessionId: string): string {
     return createHash('sha256').update(sessionId).digest('hex');
   }
@@ -144,7 +151,9 @@ class AuthService {
       await this.db.changeAttemptsLastAttemptByUsername({ username, lastAttempt: now });
       return null;
     }
-    const user = await this.db.findOneUserByUsername({ username });
+    const found = await this.db.findOneUserByUsername({ username });
+    // Keep exactly the credentials being verified, even if an in-memory record changes while scrypt runs.
+    const user = found ? { ...found } : null;
     const matches = await verifyPassword(loginHash, user?.loginHash ?? this.dummyPasswordHash);
     if (!user || !matches || (userId !== undefined && user.userId !== userId)) {
       await this.db.increaseAttemptsCountByUsername({ username, lastAttempt: new Date() });

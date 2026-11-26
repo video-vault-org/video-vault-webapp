@@ -62,7 +62,7 @@ const userRoutes = function (app: FastifyInstance, users: UserService, auth: Aut
     return reply.code(204).send(null);
   });
 
-  /** PATCH /api/user/change/username/:userId/:username — Admins only. Changes another user's username and loginHash together; requires loginHash derived for the new username and oldLoginHash from the acting admin, regardless of the target account. */
+  /** PATCH /api/user/change/username/:userId/:username — Admins only. Changes another user's username and loginHash together and ends all their sessions; requires loginHash derived for the new username and oldLoginHash from the acting admin, regardless of the target account. */
   router.patch('/change/username/:userId/:username', { onRequest: admin, schema: { params: object({ userId: id, username }), body: object({ loginHash: text, oldLoginHash: text }), response: noContent } }, async (request, reply) => {
     await requireUser(request.params.userId);
     await requireCurrentPassword(currentUser(request).userId, request.body.oldLoginHash);
@@ -70,7 +70,7 @@ const userRoutes = function (app: FastifyInstance, users: UserService, auth: Aut
     return reply.code(204).send(null);
   });
 
-  /** PATCH /api/user/change/username/:username — Any authenticated user. Changes their own username and loginHash together; requires loginHash derived for the new username and oldLoginHash for current-password verification. */
+  /** PATCH /api/user/change/username/:username — Any authenticated user. Changes their own username and loginHash together and ends all their sessions; requires loginHash derived for the new username and oldLoginHash for current-password verification. */
   router.patch('/change/username/:username', { schema: { params: object({ username }), body: object({ loginHash: text, oldLoginHash: text }), response: noContent } }, async (request, reply) => {
     await requireCurrentPassword(currentUser(request).userId, request.body.oldLoginHash);
     await users.changeUsersUsername({ userId: currentUser(request).userId, username: request.params.username, loginHash: request.body.loginHash });
@@ -95,7 +95,7 @@ const userRoutes = function (app: FastifyInstance, users: UserService, auth: Aut
     }
   );
 
-  /** PATCH /api/user/change/password/:userId — Admins only. Changes password attributes; oldLoginHash from the acting admin is required, regardless of the target account. */
+  /** PATCH /api/user/change/password/:userId — Admins only. Changes password attributes and ends all target-user sessions; oldLoginHash from the acting admin is required, regardless of the target account. */
   router.patch('/change/password/:userId', { onRequest: admin, schema: { params: userParams, body: object({ ...passwordProperties, oldLoginHash: text }), response: noContent } }, async (request, reply) => {
     await requireUser(request.params.userId);
     const { oldLoginHash, ...attributes } = request.body;
@@ -104,7 +104,7 @@ const userRoutes = function (app: FastifyInstance, users: UserService, auth: Aut
     return reply.code(204).send(null);
   });
 
-  /** PATCH /api/user/change/password — Any authenticated user. Requires oldLoginHash, verified with login lock handling before changing password attributes. */
+  /** PATCH /api/user/change/password — Any authenticated user. Requires oldLoginHash, verified with login lock handling before changing password attributes and ending all own sessions. */
   router.patch('/change/password', { schema: { body: object({ ...passwordProperties, oldLoginHash: text }), response: noContent } }, async (request, reply) => {
     const userId = currentUser(request).userId;
     const { oldLoginHash, ...attributes } = request.body;

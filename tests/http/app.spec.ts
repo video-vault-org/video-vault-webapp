@@ -91,6 +91,7 @@ describe('Fastify backend', () => {
   let staticDirectory: string;
   let storedHash: string;
   const tokens = {} as Record<Role, string>;
+  const sessionVersions = {} as Record<Role, string>;
 
   const makeUser = (name: Role): User => ({
     userId: name,
@@ -127,6 +128,7 @@ describe('Fastify backend', () => {
     for (const name of ['reader', 'admin', 'editor', 'moderator', 'editor2', 'target'] as const) {
       await db.createUser(makeUser(name));
       tokens[name] = (await auth.login({ username: name, loginHash }))!;
+      sessionVersions[name] = (await db.findSessionById({ sessionId: createHash('sha256').update(tokens[name]).digest('hex') }))!.version;
     }
   });
 
@@ -134,7 +136,7 @@ describe('Fastify backend', () => {
     await db.initialize();
     for (const name of ['reader', 'admin', 'editor', 'moderator', 'editor2', 'target'] as const) {
       await db.createUser(makeUser(name));
-      await db.createSession({ sessionId: createHash('sha256').update(tokens[name]).digest('hex'), userId: name, version: '', expiresAt: Date.now() + 3600_000 });
+      await db.createSession({ sessionId: createHash('sha256').update(tokens[name]).digest('hex'), userId: name, version: sessionVersions[name], expiresAt: Date.now() + 3600_000 });
     }
     directory = await mkdtemp(join(root, 'case-'));
     temporaryDirectory = join(directory, 'tmp');
@@ -251,9 +253,9 @@ describe('Fastify backend', () => {
     expect(updated).toEqual({ ...original, username, loginHash: expect.stringMatching(/^\$scrypt\$/) });
     expect(await verifyPassword(newLoginHash, updated.loginHash)).toBe(true);
     expect(await verifyPassword(loginHash, updated.loginHash)).toBe(false);
-    await request(app.server).post('/login').set(headers()).send({ username: original.username, loginHash }).expect(401);
-    await request(app.server).post('/login').set(headers()).send({ username, loginHash }).expect(401);
-    const result = await request(app.server).post('/login').set(headers()).send({ username, loginHash: newLoginHash }).expect(200);
+    await request(app.server).post('/login').set(headers('admin')).send({ username: original.username, loginHash }).expect(401);
+    await request(app.server).post('/login').set(headers('admin')).send({ username, loginHash }).expect(401);
+    const result = await request(app.server).post('/login').set(headers('admin')).send({ username, loginHash: newLoginHash }).expect(200);
     const me = await request(app.server)
       .get('/api/user/me')
       .set('Cookie', (result.headers['set-cookie'] as unknown as string[]).map((value: string) => value.split(';')[0]).join('; '))
@@ -362,6 +364,7 @@ describe('Fastify backend', () => {
   ] as const)('requires the acting admin password for %s, never the target password', async (url, body) => {
     const adminProof = 'different-admin-proof';
     await db.changeUsersPasswordByUserId({ userId: 'admin', loginHash: await hashPassword(adminProof), passwordKeySalt: 'admin-salt', userKey: 'admin-key' });
+    tokens.admin = (await auth.login({ username: 'admin', loginHash: adminProof }))!;
     const previous = structuredClone(await db.findOneUserByUserId({ userId: 'target' }));
     const administrator = await db.findOneUserByUserId({ userId: 'admin' });
     await request(app.server).patch(url).set(headers('admin')).send(body).expect(400);

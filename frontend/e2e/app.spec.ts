@@ -262,9 +262,8 @@ test('creates an invitation, changes the invited password and can log in with th
   await expect(invited.getByRole('alert')).toContainText('aktuelle Passwort ist falsch', { timeout: 15000 });
   await currentPassword.fill(temporaryPassword);
   await invited.getByRole('button', { name: 'Passwort speichern', exact: true }).click();
-  await expect(invited.getByRole('heading', { name: 'Ein Sommer am See', exact: true })).toBeVisible({ timeout: 30000 });
+  await expect(invited.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible({ timeout: 30000 });
   expect(new URL(invited.url()).hash).toBe('');
-  await invited.getByRole('button', { name: 'Abmelden', exact: true }).click();
   await invited.getByLabel('Benutzername', { exact: true }).fill('invited-reader');
   await invited.getByLabel('Passwort', { exact: true }).fill('NewVaultPassword123!');
   await invited.getByRole('button', { name: 'Anmelden', exact: true }).click();
@@ -281,6 +280,8 @@ test('creates an invitation, changes the invited password and can log in with th
   const resetLink = dialog.getByRole('textbox', { name: 'Einladungs- oder Reset-Link' });
   await expect(resetLink).toBeVisible();
   const resetAddress = await resetLink.inputValue();
+  await invited.getByRole('button', { name: /Aktualisieren/ }).click();
+  await expect(invited.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
   await invited.goto('about:blank');
   await invited.goto(resetAddress);
   await invited.getByRole('button', { name: 'Einladung / Reset öffnen', exact: true }).click();

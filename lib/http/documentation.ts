@@ -101,6 +101,7 @@ const registerDocumentation = function (
       if (url === '/session') description = 'Public. Returns authenticated, expiresAt and a session-bound or pre-login CSRF token. Cache-Control: no-store. Never returns the session credential.';
       if (roles.includes('admin') && !['GET', 'HEAD', 'OPTIONS'].includes(method))
         description += ' Requires oldLoginHash derived from the acting admin’s current password in the JSON body. Verification shares login failure counters and lock durations.';
+      if (/^\/api\/user\/change\/(password|username)(\/|$)/.test(url)) description += ' A successful change invalidates every existing session of the target user, including their current session. Sign in again with the new credentials.';
       if (url === '/api/user/initialize-keys')
         description += ' Stores the first wrapped archive keys and password-key salt for the current admin only. Requires an empty userKey; concurrent or repeated initialization returns 409. The login proof is unchanged.';
       if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';

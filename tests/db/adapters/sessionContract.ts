@@ -1,3 +1,5 @@
+import { AuthService } from '@/service/AuthService';
+import { UserService } from '@/service/UserService';
 import { DatabaseAdapter } from '@/db/adapters/DatabaseAdapter';
 
 /** Shared persistence contract, executed against each real adapter. */
@@ -15,6 +17,25 @@ const sessionContract = function (database: () => DatabaseAdapter): void {
     expect(await db.findSessionById({ sessionId: first.sessionId })).toBeNull();
     expect(await db.findSessionById({ sessionId: second.sessionId })).toEqual(second);
   });
+
+  test('credential changes invalidate existing sessions through the real adapter', async () => {
+    const db = database();
+    const users = new UserService(db);
+    const userId = 'credential-user';
+    await users.createUser({ userId, username: 'credential-user', displayName: 'Credentials', loginHash: 'old-proof', passwordKeySalt: 'salt', userKey: 'wrapped', admin: false, editor: false, moderator: false });
+    const auth = new AuthService(db);
+    await auth.initialize();
+    const first = (await auth.login({ username: 'credential-user', loginHash: 'old-proof' }))!;
+    const second = (await auth.login({ username: 'credential-user', loginHash: 'old-proof' }))!;
+    await users.changeUsersPassword({ userId, loginHash: 'new-proof', passwordKeySalt: 'new', userKey: 'new' });
+    expect(await auth.authenticate({ sessionId: first })).toBeNull();
+    expect(await auth.authenticate({ sessionId: second })).toBeNull();
+    const third = (await auth.login({ username: 'credential-user', loginHash: 'new-proof' }))!;
+    expect(await auth.authenticate({ sessionId: third })).toMatchObject({ userId });
+    await users.changeUsersUsername({ userId, username: 'renamed-user', loginHash: 'renamed-proof' });
+    expect(await auth.authenticate({ sessionId: third })).toBeNull();
+    expect(await auth.authenticate({ sessionId: (await auth.login({ username: 'renamed-user', loginHash: 'renamed-proof' }))! })).toMatchObject({ userId });
+  }, 30_000);
 
   test('atomically replaces persistent per-user revocation versions without affecting other users', async () => {
     const db = database();

@@ -2,6 +2,7 @@
 interface Session {
   sessionId: string;
   userId: string;
+  /** Hash binding the user's current credentials and explicit revocation version. */
   version: string;
   expiresAt: number;
 }

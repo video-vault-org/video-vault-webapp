@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, json } from '../lib/api';
+import { ApiError, clearSession, json } from '../lib/api';
 import { loginHash, passwordAttributes, unlock } from '../lib/crypto';
 import { inviteLink, passwordProblems, pwned, temporaryPassword } from '../lib/password';
 import type { Bootstrap, Keys, User } from '../lib/types';
@@ -64,6 +64,7 @@ const PasswordChange = function ({
           setCurrentPassword('');
           setPassword('');
           setRepeat('');
+          clearSession();
           await done();
         });
       }}
@@ -75,8 +76,8 @@ const PasswordChange = function ({
       </h3>
       <p className="muted">
         {t(
-          'Mindestens 12 Zeichen; mindestens drei Kategorien: Großbuchstaben, Kleinbuchstaben, Zahlen, Sonderzeichen.',
-          'At least 12 characters; at least three categories: uppercase, lowercase, numbers, special characters.'
+          'Mindestens 12 Zeichen; mindestens drei Kategorien: Großbuchstaben, Kleinbuchstaben, Zahlen, Sonderzeichen. Nach der Änderung werden alle deine Sitzungen beendet. Bitte anschließend neu anmelden.',
+          'At least 12 characters; at least three categories: uppercase, lowercase, numbers, special characters. Changing your password ends all your sessions. Please sign in again afterwards.'
         )}
       </p>
       <Field label={t('Aktuelles Passwort', 'Current password')}>
@@ -183,8 +184,7 @@ const Account = function ({
               throw error;
             }
             setPassword('');
-            await updated();
-            setDone(true);
+            clearSession();
           });
         }}
       >
@@ -205,6 +205,12 @@ const Account = function ({
             onChange={(e) => setPassword(e.target.value)}
           />
         </Field>
+        <p className="muted">
+          {t(
+            'Nach der Änderung werden alle deine Sitzungen beendet. Bitte mit dem neuen Benutzernamen neu anmelden.',
+            'Changing your username ends all your sessions. Please sign in again with the new username.'
+          )}
+        </p>
         <button disabled={task.pending}>{t('Benutzername speichern', 'Save username')}</button>
       </form>
       <PasswordChange
@@ -212,8 +218,7 @@ const Account = function ({
         keys={keys}
         config={config}
         done={async () => {
-          await updated();
-          setDone(true);
+          close();
         }}
       />
       <hr />

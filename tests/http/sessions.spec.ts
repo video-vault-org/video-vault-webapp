@@ -17,6 +17,7 @@ const cookies = function (response: LightMyRequestResponse): string {
 };
 
 describe('persistent cookie sessions and CSRF', () => {
+  jest.setTimeout(30_000);
   let app: FastifyInstance, auth: AuthService, db: InMemoryDatabaseAdapter, users: UserService, directory: string, loginHash: string;
 
   beforeAll(async () => {
@@ -133,6 +134,35 @@ describe('persistent cookie sessions and CSRF', () => {
     expect(deleted.statusCode).toBe(204);
     expect(String(deleted.headers['set-cookie'])).toContain('Max-Age=0');
     expect((await app.inject({ url: '/api/user/me', headers: second })).statusCode).toBe(401);
+  });
+
+  test.each([
+    ['/api/user/change/password', { loginHash: 'new-proof', passwordKeySalt: 'new', userKey: 'new' }, 'u'],
+    ['/api/user/change/password/u', { loginHash: 'new-proof', passwordKeySalt: 'new', userKey: 'new' }, 'u'],
+    ['/api/user/change/username/renamed', { loginHash: 'new-proof' }, 'u'],
+    ['/api/user/change/username/u/renamed', { loginHash: 'new-proof' }, 'u'],
+    ['/api/user/change/password/target', { loginHash: 'new-proof', passwordKeySalt: 'new', userKey: 'new' }, 'target'],
+    ['/api/user/change/username/target/renamed', { loginHash: 'new-proof' }, 'target']
+  ] as const)('%s revokes all target sessions and keeps unrelated sessions valid', async (url, attributes, userId) => {
+    await db.createUser({ userId: 'target', username: 'target', displayName: 'Target', loginHash, userKey: 'wrapped', passwordKeySalt: 'salt', admin: false, editor: false, moderator: false });
+    const actor = await login();
+    const targetFirst = (await auth.login({ username: userId === 'u' ? 'alice' : 'target', loginHash: 'proof' }))!;
+    const targetSecond = (await auth.login({ username: userId === 'u' ? 'alice' : 'target', loginHash: 'proof' }))!;
+    const unrelated = (await auth.login({ username: userId === 'u' ? 'target' : 'alice', loginHash: 'proof' }))!;
+    const response = await app.inject({ method: 'PATCH', url, headers: actor, payload: { ...attributes, oldLoginHash: 'proof' } });
+    expect(response.statusCode).toBe(204);
+    expect(await auth.authenticate({ sessionId: targetFirst })).toBeNull();
+    expect(await auth.authenticate({ sessionId: targetSecond })).toBeNull();
+    expect(await auth.authenticate({ sessionId: unrelated })).not.toBeNull();
+    if (userId === 'u') {
+      expect(String(response.headers['set-cookie'])).toContain('Max-Age=0');
+      expect((await app.inject({ url: '/api/user/me', headers: actor })).statusCode).toBe(401);
+    } else {
+      expect(response.headers['set-cookie']).toBeUndefined();
+      expect((await app.inject({ url: '/api/user/me', headers: actor })).statusCode).toBe(200);
+    }
+    const newUsername = url.includes('/username/') ? 'renamed' : userId === 'u' ? 'alice' : 'target';
+    expect(await auth.authenticate({ sessionId: (await auth.login({ username: newUsername, loginHash: 'new-proof' }))! })).toMatchObject({ userId });
   });
 
   test('does not accept Authorization bearer credentials or a CSRF token as a cookie credential', async () => {
