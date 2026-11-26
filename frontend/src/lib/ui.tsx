@@ -42,7 +42,7 @@ const useLanguage = () => useContext(LanguageContext);
 const errorText = (error: unknown, t: T) =>
   error instanceof ApiError
     ? error.status === 401
-      ? t('Anmeldung erforderlich oder abgelaufen.', 'Sign-in required or expired.')
+      ? t('Abgelaufene Anmeldung, falsche Zugangsdaten oder aktive Sperre.', 'Expired login, invalid credentials or active lock.')
       : error.status === 403
         ? t('Keine Berechtigung.', 'Permission denied.')
         : error.status === 409
