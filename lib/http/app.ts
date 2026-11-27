@@ -46,7 +46,13 @@ const createHttpServer = function ({
   app.setErrorHandler(handleErrors);
 
   app.addHook('onRequest', async (request, reply) => {
-    reply.header('X-Request-ID', request.id).header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer').header('X-Frame-Options', 'DENY').header('Content-Security-Policy', `${basePolicy}; script-src 'none'`);
+    reply
+      .header('X-Request-ID', request.id)
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Referrer-Policy', 'no-referrer')
+      .header('X-Frame-Options', 'DENY')
+      .header('X-Robots-Tag', 'noindex, nofollow, noimageindex')
+      .header('Content-Security-Policy', `${basePolicy}; script-src 'none'`);
   });
 
   return app;

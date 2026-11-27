@@ -70,6 +70,34 @@ describe('verified frontend and strict CSP', () => {
     await expect(loadFrontendSecurity(directory, html)).rejects.toThrow(/integrity check failed/);
   });
 
+  test('excludes pages, assets, API responses and errors from search indexing, including HEAD responses', async () => {
+    await writeFile(join(directory, 'static.txt'), 'Public file');
+    const services = { auth: { findSession: jest.fn(), authorize: jest.fn() }, users: {}, videos: {}, comments: {} } as unknown as Parameters<typeof createApp>[0];
+    const app = createApp(services, { staticDirectory: directory, temporaryDirectory: directory, instanceSalt: 'ab'.repeat(32), logger: false });
+    try {
+      await app.ready();
+      for (const [url, status] of [
+        ['/', 200],
+        ['/index.html', 200],
+        ['/assets/app.js', 200],
+        ['/static.txt', 200],
+        ['/sw.js', 200],
+        ['/bootstrap', 200],
+        ['/docs/', 200],
+        ['/docs/json', 200],
+        ['/api/user/me', 401],
+        ['/missing', 404]
+      ] as const) {
+        for (const method of ['GET', 'HEAD'] as const) {
+          const response = await app.inject({ method, url });
+          expect({ method, url, status: response.statusCode, robots: response.headers['x-robots-tag'] }).toEqual({ method, url, status, robots: 'noindex, nofollow, noimageindex' });
+        }
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   test('rejects executable pages without their manifest or SRI entry', async () => {
     // noinspection HtmlUnknownTarget
     await expect(loadFrontendSecurity(directory, '<script src="/assets/app.js"></script>')).rejects.toThrow('entry HTML');
