@@ -295,8 +295,12 @@ const Vault = function ({
             {t('Benutzerverwaltung', 'User management')}
           </button>
           <span className="nav-spacer" />
-          <button onClick={() => void task.run(refreshConfig)} disabled={task.pending || offline}>
-            {t('Anzeige-Konfiguration neu laden', 'Reload display settings')}
+          <button
+            onClick={() => void task.run(refreshConfig)}
+            disabled={task.pending || offline}
+            title={t('Aktuelle Einstellungen für Titel, Logos, Meta-Felder, Filter und Sortierung vom Server laden', 'Load the latest settings for the title, logos, metadata fields, filters and sorting from the server')}
+          >
+            {t('Anzeige-Einstellungen aktualisieren', 'Refresh display settings')}
           </button>
         </nav>
         <section className="filter-bar" aria-label={t('Suche und Filter', 'Search and filters')}>

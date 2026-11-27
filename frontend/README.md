@@ -64,4 +64,4 @@ An installed Chromium can be selected using `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/pat
 - Argon2id uses `argon2-browser`'s bundled WASM (v19, 19456 KiB, two passes, one lane, 32 bytes), matching the CLI. Web Crypto provides AES-KW, AES-GCM and HMAC-SHA-256. See the root security architecture for the binary format and trust boundaries.
 - MediaInfo runs locally. Container, codec, profile, level, bit-depth, chroma and audio warnings provide an estimate, not a universal browser-support guarantee. HandBrake recommendations are shown when appropriate.
 
-A changed bootstrap configuration can be loaded using “Reload display settings”; otherwise the existing local bootstrap cache is retained. If the instance salt has deliberately been replaced, clear this origin's site data before signing in.
+A changed bootstrap configuration can be loaded using “Refresh display settings”; otherwise the existing local bootstrap cache is retained. If the instance salt has deliberately been replaced, clear this origin's site data before signing in.
