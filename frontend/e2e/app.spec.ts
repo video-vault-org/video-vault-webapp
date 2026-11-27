@@ -466,3 +466,23 @@ test('HttpOnly sessions support independent logout and logout everywhere across 
     await other.close();
   }
 });
+
+
+test('deleting your own account requires the current password and ends the session', async ({ page }) => {
+  await login(page, 'deletion-reader');
+  await page.getByRole('button', { name: 'Mein Konto', exact: true }).click();
+  const account = page.getByRole('dialog', { name: 'Mein Konto', exact: true });
+  const password = account.getByLabel('Aktuelles Passwort zum Löschen des Kontos', { exact: true });
+  await expect(password).toHaveAttribute('type', 'password');
+  await expect(password).toHaveAttribute('required', '');
+  await password.fill('WrongPassword123!');
+  page.once('dialog', (dialog) => dialog.accept());
+  await account.getByRole('button', { name: 'Konto löschen', exact: true }).click();
+  await expect(account.getByRole('alert')).toContainText('aktuelle Passwort ist falsch');
+  expect((await page.request.get('/api/user/me')).status()).toBe(200);
+  await password.fill('VaultTesting123!');
+  page.once('dialog', (dialog) => dialog.accept());
+  await account.getByRole('button', { name: 'Konto löschen', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
+  expect((await page.request.get('/api/user/me')).status()).toBe(401);
+});

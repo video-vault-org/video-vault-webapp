@@ -127,10 +127,44 @@ describe('persistent cookie sessions and CSRF', () => {
     expect((await app.inject({ url: '/api/user/me', headers: { cookie: cookies(replacement) } })).statusCode).toBe(401);
   });
 
+  test.each([
+    [undefined, 400],
+    [{}, 400],
+    [{ oldLoginHash: '' }, 400],
+    [{ oldLoginHash: 123 }, 400],
+    [{ oldLoginHash: 'x'.repeat(4097) }, 400],
+    [{ oldLoginHash: 'proof', userId: 'other' }, 400],
+    [{ oldLoginHash: 'wrong-proof' }, 403]
+  ] as const)('self-deletion rejects invalid current-password proof %j without changing the account or comments', async (payload, status) => {
+    const headers = await login();
+    const remove = jest.spyOn(users, 'deleteUser');
+    await db.postComment({ commentId: 'own-comment', userId: 'u', videoId: 'v', content: 'Keep this comment', created: new Date(), lastModified: new Date(), edited: false, deleted: false, hmac: 'hmac' });
+    const response = await app.inject({ method: 'DELETE', url: '/api/user/delete', headers, payload });
+    expect(response.statusCode).toBe(status);
+    expect(remove).not.toHaveBeenCalled();
+    expect(await db.findOneUserByUserId({ userId: 'u' })).not.toBeNull();
+    expect(await db.findOneCommentByCommentId({ commentId: 'own-comment' })).toMatchObject({ content: 'Keep this comment', deleted: false });
+    expect((await app.inject({ url: '/api/user/me', headers })).statusCode).toBe(200);
+    const attempts = await db.findOneAttemptsCountByUsername({ username: 'alice' });
+    if (status === 403) expect(attempts).toMatchObject({ attempts: 1 });
+    else expect(attempts).toBeNull();
+  });
+
+  test('self-deletion respects the shared login lock even with the correct password proof', async () => {
+    const headers = await login();
+    const remove = jest.spyOn(users, 'deleteUser');
+    for (let index = 0; index < 5; index++) await db.increaseAttemptsCountByUsername({ username: 'alice', lastAttempt: new Date() });
+    const response = await app.inject({ method: 'DELETE', url: '/api/user/delete', headers, payload: { oldLoginHash: 'proof' } });
+    expect(response.statusCode).toBe(403);
+    expect(remove).not.toHaveBeenCalled();
+    expect(await db.findOneAttemptsCountByUsername({ username: 'alice' })).toMatchObject({ attempts: 5 });
+    expect(await db.findOneUserByUserId({ userId: 'u' })).not.toBeNull();
+  });
+
   test('self-deletion clears the cookie immediately and invalidates all sessions', async () => {
     const first = await login(),
       second = await login();
-    const deleted = await app.inject({ method: 'DELETE', url: '/api/user/delete', headers: first });
+    const deleted = await app.inject({ method: 'DELETE', url: '/api/user/delete', headers: first, payload: { oldLoginHash: 'proof' } });
     expect(deleted.statusCode).toBe(204);
     expect(String(deleted.headers['set-cookie'])).toContain('Max-Age=0');
     expect((await app.inject({ url: '/api/user/me', headers: second })).statusCode).toBe(401);

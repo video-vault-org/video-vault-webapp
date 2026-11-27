@@ -149,6 +149,16 @@ describe('Swagger UI and OpenAPI documentation', () => {
     expect((await app.inject({ url: '/api/user/all', headers: { cookie: '__Host-videovault-session=editor-token', 'x-csrf-token': 'c'.repeat(43) } })).statusCode).toBe(403);
   });
 
+  test('documents the required current-password proof for deleting your own account', async () => {
+    const document = (await app.inject('/docs/json')).json();
+    const route = document.paths['/api/user/delete'].delete;
+    const body = dereference(document, route.requestBody.content['application/json'].schema);
+    expect(body.required).toEqual(['oldLoginHash']);
+    expect(body.additionalProperties).toBe(false);
+    expect(route.description).toContain('your current password');
+    expect(route.description).toContain('login failure counters and lock durations');
+  });
+
   test('documents request/response schemas, pagination limits and empty 204 responses', async () => {
     const document = (await app.inject('/docs/json')).json();
     const account = dereference(document, document.paths['/api/user/me'].get.responses['200'].content['application/json'].schema);

@@ -145,9 +145,11 @@ const userRoutes = function (app: FastifyInstance, users: UserService, auth: Aut
     return reply.code(204).send(null);
   });
 
-  /** DELETE /api/user/delete — Any authenticated user. Clears their comments, then deletes their own account. */
-  router.delete('/delete', { schema: { response: noContent } }, async (request, reply) => {
-    await users.deleteUser({ userId: currentUser(request).userId });
+  /** DELETE /api/user/delete — Any authenticated user. Requires their current oldLoginHash, checked with login lock handling before clearing comments, revoking sessions and deleting the account. */
+  router.delete('/delete', { schema: { body: object({ oldLoginHash: text }), response: noContent } }, async (request, reply) => {
+    const userId = currentUser(request).userId;
+    await requireCurrentPassword(userId, request.body.oldLoginHash);
+    await users.deleteUser({ userId });
     return reply.code(204).send(null);
   });
 };

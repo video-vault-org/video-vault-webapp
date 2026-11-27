@@ -271,3 +271,60 @@ test('protects deleting another user with the acting admin proof', async () => {
   await screen.findByRole('button', { name: /Target/ });
   expect(json).toHaveBeenCalledWith('/api/user/delete/target', { oldLoginHash: 'old-proof' }, 'DELETE');
 });
+
+
+const openOwnAccount = function () {
+  const logout = vi.fn();
+  render(
+    <LanguageProvider>
+      <Account user={{ ...user, displayName: 'Reader' }} keys={keys} config={config} close={vi.fn()} updated={vi.fn()} logout={logout} />
+    </LanguageProvider>
+  );
+  return { actor: userEvent.setup(), logout, password: screen.getByLabelText('Aktuelles Passwort zum Löschen des Kontos') };
+};
+
+test('requires a masked current-password field before deleting your own account', async () => {
+  const { actor, password, logout } = openOwnAccount();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  expect(password).toBeRequired();
+  expect(password).toHaveAttribute('type', 'password');
+  expect(password).toHaveAttribute('autocomplete', 'current-password');
+  await actor.click(screen.getByRole('button', { name: 'Konto löschen' }));
+  expect(confirm).not.toHaveBeenCalled();
+  expect(json).not.toHaveBeenCalled();
+  expect(logout).not.toHaveBeenCalled();
+});
+
+test('deletes your account with the derived current proof and logs out only after success', async () => {
+  const { actor, password, logout } = openOwnAccount();
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  await actor.type(password, 'CurrentPassword123!');
+  await actor.click(screen.getByRole('button', { name: 'Konto löschen' }));
+  expect(loginHash).toHaveBeenCalledWith('CurrentPassword123!', user.username, config.instanceSalt);
+  expect(json).toHaveBeenCalledWith('/api/user/delete', { oldLoginHash: 'old-proof' }, 'DELETE');
+  expect(JSON.stringify(vi.mocked(json).mock.calls)).not.toContain('CurrentPassword123!');
+  expect(logout).toHaveBeenCalledOnce();
+  expect(password).toHaveValue('');
+});
+
+test('canceling own-account deletion sends no request or password proof', async () => {
+  const { actor, password, logout } = openOwnAccount();
+  vi.spyOn(window, 'confirm').mockReturnValue(false);
+  await actor.type(password, 'CurrentPassword123!');
+  await actor.click(screen.getByRole('button', { name: 'Konto löschen' }));
+  expect(loginHash).not.toHaveBeenCalled();
+  expect(json).not.toHaveBeenCalled();
+  expect(logout).not.toHaveBeenCalled();
+});
+
+test.each([403, 500])('failed own-account deletion (HTTP %i) keeps the user signed in', async (status) => {
+  const { actor, password, logout } = openOwnAccount();
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  vi.mocked(json).mockRejectedValue(new ApiError(status));
+  await actor.type(password, 'WrongPassword123!');
+  await actor.click(screen.getByRole('button', { name: 'Konto löschen' }));
+  const error = await screen.findByRole('alert');
+  if (status === 403) expect(error).toHaveTextContent('aktuelle Passwort ist falsch');
+  expect(logout).not.toHaveBeenCalled();
+  expect(password).toHaveValue('WrongPassword123!');
+});

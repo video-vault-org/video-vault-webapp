@@ -27,7 +27,7 @@ const summaries: Record<string, string> = {
   'PATCH /api/user/change/editor/:userId': 'Change the editor role',
   'PATCH /api/user/change/moderator/:userId': 'Change the moderator role',
   'DELETE /api/user/delete/:userId': 'Delete a user and clear their comments',
-  'DELETE /api/user/delete': 'Delete your account and clear your comments',
+  'DELETE /api/user/delete': 'Delete your account after verifying your current password',
   'POST /api/video/upload/:videoId': 'Upload temporary video and thumbnail files',
   'POST /api/video/upload/:videoId/start': 'Reserve a bounded packet upload and check encrypted sizes',
   'PUT /api/video/upload/:videoId/:uploadId/:kind': 'Store and acknowledge one encrypted upload packet',
@@ -102,6 +102,8 @@ const registerDocumentation = function (
       if (roles.includes('admin') && !['GET', 'HEAD', 'OPTIONS'].includes(method))
         description += ' Requires oldLoginHash derived from the acting admin’s current password in the JSON body. Verification shares login failure counters and lock durations.';
       if (/^\/api\/user\/change\/(password|username)(\/|$)/.test(url)) description += ' A successful change invalidates every existing session of the target user, including their current session. Sign in again with the new credentials.';
+      if (url === '/api/user/delete')
+        description += ' Requires oldLoginHash derived from your current password in the JSON body. Verification shares login failure counters and lock durations. A successful deletion clears your comments and revokes all your sessions.';
       if (url === '/api/user/initialize-keys')
         description += ' Stores the first wrapped archive keys and password-key salt for the current admin only. Requires an empty userKey; concurrent or repeated initialization returns 409. The login proof is unchanged.';
       if (url.includes('/own/')) description += ' Only comments belonging to the current user can be changed.';

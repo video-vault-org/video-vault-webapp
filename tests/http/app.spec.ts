@@ -54,7 +54,7 @@ const protectedRoutes = [
   ['patch', '/api/user/change/displayname/Changed', 'any', undefined, 204],
   ['patch', '/api/user/change/username/renamed', 'any', { loginHash, oldLoginHash: loginHash }, 204],
   ['patch', '/api/user/change/password', 'any', { ...password, oldLoginHash: loginHash }, 204],
-  ['delete', '/api/user/delete', 'any', undefined, 204],
+  ['delete', '/api/user/delete', 'any', { oldLoginHash: loginHash }, 204],
   ['post', '/api/video/upload/new-video', 'editor', undefined, 400],
   ['post', '/api/video/submit', 'editor', { ...video, videoId: 'new-video' }, 404],
   ['get', '/api/video/all', 'editor', undefined, 200],
@@ -435,7 +435,7 @@ describe('Fastify backend', () => {
   });
 
   test('deleting an account clears its comments and invalidates its token', async () => {
-    await request(app.server).delete('/api/user/delete').set(headers()).expect(204);
+    await request(app.server).delete('/api/user/delete').set(headers()).send({ oldLoginHash: loginHash }).expect(204);
     expect(await db.findOneCommentByCommentId({ commentId: 'c1' })).toMatchObject({ deleted: true, content: '' });
     await request(app.server).get('/api/user/me').set(headers()).expect(401);
   });

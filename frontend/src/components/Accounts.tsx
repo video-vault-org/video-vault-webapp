@@ -145,6 +145,7 @@ const Account = function ({
     [name, setName] = useState(user.displayName),
     [username, setUsername] = useState(user.username),
     [password, setPassword] = useState(''),
+    [deletePassword, setDeletePassword] = useState(''),
     [done, setDone] = useState(false);
   return (
     <Dialog title={t('Mein Konto', 'My account')} close={close}>
@@ -222,26 +223,47 @@ const Account = function ({
         }}
       />
       <hr />
-      <button
-        className="danger"
-        disabled={task.pending}
-        onClick={() => {
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
           if (
-            confirm(
+            !confirm(
               t(
                 'Eigenes Konto löschen und alle eigenen Kommentare als gelöscht markieren?',
                 'Delete your account and mark all your comments as deleted?'
               )
             )
           )
-            void task.run(async () => {
-              await json('/api/user/delete', undefined, 'DELETE');
-              logout();
-            });
+            return;
+          void task.run(async () => {
+            const oldLoginHash = await loginHash(deletePassword, user.username, config.instanceSalt);
+            try {
+              await json('/api/user/delete', { oldLoginHash }, 'DELETE');
+            } catch (error) {
+              if (error instanceof ApiError && error.status === 403) throw new Error('current-password');
+              throw error;
+            }
+            setDeletePassword('');
+            logout();
+          });
         }}
       >
-        {t('Konto löschen', 'Delete account')}
-      </button>
+        <Field
+          label={t('Aktuelles Passwort zum Löschen des Kontos', 'Current password to delete your account')}
+        >
+          <input
+            type="password"
+            required
+            maxLength={4096}
+            autoComplete="current-password"
+            value={deletePassword}
+            onChange={(event) => setDeletePassword(event.target.value)}
+          />
+        </Field>
+        <button type="submit" className="danger" disabled={task.pending}>
+          {t('Konto löschen', 'Delete account')}
+        </button>
+      </form>
     </Dialog>
   );
 };

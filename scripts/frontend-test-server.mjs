@@ -55,13 +55,13 @@ const encrypt = function (data, context, identity) {
   return Buffer.concat(parts);
 };
 
-for (const username of ['admin', 'reader']) {
+for (const username of ['admin', 'reader', 'deletion-reader']) {
   const passwordKeySalt = randomBytes(32),
     passwordKey = await deriveKey(password, passwordKeySalt);
   await users.createUser({
     userId: username,
     username,
-    displayName: username === 'admin' ? 'Alex Morgan' : 'Sam Reader',
+    displayName: username === 'admin' ? 'Alex Morgan' : username === 'reader' ? 'Sam Reader' : 'Deletion Test User',
     loginHash: (await deriveKey(password, salt + username)).toString('base64'),
     passwordKeySalt: passwordKeySalt.toString('base64'),
     userKey: Buffer.concat([wrap(master, passwordKey), wrap(authKey, passwordKey)]).toString('base64'),
